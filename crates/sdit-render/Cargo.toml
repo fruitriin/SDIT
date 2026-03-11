@@ -1,0 +1,14 @@
+[package]
+name = "sdit-render"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+sdit-core   = { path = "../sdit-core" }
+wgpu        = { workspace = true }
+cosmic-text = { workspace = true }
+log         = { workspace = true }
+thiserror   = { workspace = true }

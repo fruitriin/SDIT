@@ -1,0 +1,19 @@
+[submodule "refs/alacritty"]
+	path = refs/alacritty
+	url = https://github.com/alacritty/alacritty.git
+	branch = master
+
+[submodule "refs/ghostty"]
+	path = refs/ghostty
+	url = https://github.com/ghostty-org/ghostty.git
+	branch = main
+
+[submodule "refs/wezterm"]
+	path = refs/wezterm
+	url = https://github.com/wezterm/wezterm.git
+	branch = main
+
+[submodule "refs/zellij"]
+	path = refs/zellij
+	url = https://github.com/zellij-org/zellij.git
+	branch = main

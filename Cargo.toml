@@ -1,0 +1,38 @@
+[workspace]
+members = [
+    "crates/sdit",
+    "crates/sdit-core",
+    "crates/sdit-session",
+    "crates/sdit-render",
+    "crates/sdit-config",
+]
+resolver = "2"
+
+[workspace.package]
+version     = "0.1.0"
+edition     = "2021"
+authors     = ["SDIT Contributors"]
+license     = "GPL-3.0-or-later"
+rust-version = "1.78"
+
+[workspace.dependencies]
+# PTY・ターミナルコア
+vte         = "0.13"
+pty-process = "0.4"
+
+# GUI・レンダリング
+winit = "0.30"
+wgpu  = "0.20"
+
+# フォント
+cosmic-text = "0.12"
+
+# 設定
+serde      = { version = "1", features = ["derive"] }
+toml       = "0.8"
+
+# ユーティリティ
+log        = "0.4"
+env_logger = "0.11"
+thiserror  = "1"
+anyhow     = "1"
