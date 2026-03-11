@@ -101,10 +101,7 @@ impl SditApp {
         let term_state = Arc::new(Mutex::new(TerminalState { terminal, processor }));
 
         // ----- PTY 起動 -----
-        let pty_size = PtySize::new(
-            rows.try_into().unwrap_or(24),
-            cols.try_into().unwrap_or(80),
-        );
+        let pty_size = PtySize::new(rows.try_into().unwrap_or(24), cols.try_into().unwrap_or(80));
         let mut pty_config = PtyConfig::default();
         pty_config.env.insert("TERM".to_owned(), "xterm-256color".to_owned());
 
@@ -118,8 +115,7 @@ impl SditApp {
 
         // ----- PTY リーダースレッドを起動 -----
         let (pty_write_tx, pty_write_rx) = mpsc::sync_channel::<Vec<u8>>(64);
-        let pty_thread =
-            spawn_pty_reader(pty, Arc::clone(&term_state), event_proxy, pty_write_rx);
+        let pty_thread = spawn_pty_reader(pty, Arc::clone(&term_state), event_proxy, pty_write_rx);
 
         // ----- テクスチャアトラス -----
         let mut atlas = Atlas::new(&gpu.device, 512);
@@ -131,7 +127,8 @@ impl SditApp {
 
         let state_lock = term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let grid = state_lock.terminal.grid();
-        let mut cell_pipeline = CellPipeline::new(&gpu.device, gpu.surface_config.format, &atlas, rows * cols);
+        let mut cell_pipeline =
+            CellPipeline::new(&gpu.device, gpu.surface_config.format, &atlas, rows * cols);
         cell_pipeline.update_from_grid(
             &gpu.queue,
             grid,
@@ -273,7 +270,12 @@ impl ApplicationHandler<SditEvent> for SditApp {
                     let mode = self
                         .term_state
                         .as_ref()
-                        .map(|ts| ts.lock().unwrap_or_else(std::sync::PoisonError::into_inner).terminal.mode())
+                        .map(|ts| {
+                            ts.lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                                .terminal
+                                .mode()
+                        })
                         .unwrap_or_default();
                     if let Some(bytes) = key_to_bytes(&key_event.logical_key, self.modifiers, mode)
                     {
@@ -290,8 +292,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         Ok(()) => {}
                         Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
                             if let Some(gpu) = &mut self.gpu {
-                                let (w, h) =
-                                    (gpu.surface_config.width, gpu.surface_config.height);
+                                let (w, h) = (gpu.surface_config.width, gpu.surface_config.height);
                                 gpu.resize(w, h);
                             }
                         }
@@ -355,7 +356,9 @@ fn spawn_pty_reader(
                     }
                     Ok(n) => {
                         {
-                            let mut state = term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                            let mut state = term_state
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
                             let bytes = &buf[..n];
                             // processor と terminal を個別に借用するために
                             // フィールドを明示的に分離して借用する。
@@ -425,16 +428,32 @@ fn key_to_bytes(
                 NamedKey::Tab => b"\t",
                 NamedKey::Escape => b"\x1b",
                 NamedKey::ArrowUp => {
-                    if app_cursor { b"\x1bOA" } else { b"\x1b[A" }
+                    if app_cursor {
+                        b"\x1bOA"
+                    } else {
+                        b"\x1b[A"
+                    }
                 }
                 NamedKey::ArrowDown => {
-                    if app_cursor { b"\x1bOB" } else { b"\x1b[B" }
+                    if app_cursor {
+                        b"\x1bOB"
+                    } else {
+                        b"\x1b[B"
+                    }
                 }
                 NamedKey::ArrowRight => {
-                    if app_cursor { b"\x1bOC" } else { b"\x1b[C" }
+                    if app_cursor {
+                        b"\x1bOC"
+                    } else {
+                        b"\x1b[C"
+                    }
                 }
                 NamedKey::ArrowLeft => {
-                    if app_cursor { b"\x1bOD" } else { b"\x1b[D" }
+                    if app_cursor {
+                        b"\x1bOD"
+                    } else {
+                        b"\x1b[D"
+                    }
                 }
                 NamedKey::Home => b"\x1b[H",
                 NamedKey::End => b"\x1b[F",
@@ -464,8 +483,7 @@ fn calc_grid_size(
     cell_height: f32,
 ) -> (usize, usize) {
     let cols = if cell_width > 0.0 { (surface_width / cell_width).floor() as usize } else { 80 };
-    let rows =
-        if cell_height > 0.0 { (surface_height / cell_height).floor() as usize } else { 24 };
+    let rows = if cell_height > 0.0 { (surface_height / cell_height).floor() as usize } else { 24 };
     (cols.max(1), rows.max(1))
 }
 

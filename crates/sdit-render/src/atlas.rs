@@ -110,11 +110,14 @@ impl Atlas {
     ///
     /// `data.len()` は `region.width * region.height` と等しくなければならない。
     pub fn write(&mut self, region: AtlasRegion, data: &[u8]) {
-        debug_assert_eq!(
-            data.len(),
-            (region.width * region.height) as usize,
-            "atlas::write: data length mismatch"
-        );
+        let expected = (region.width * region.height) as usize;
+        if data.len() != expected {
+            log::error!(
+                "atlas::write: data length mismatch (expected {expected}, got {})",
+                data.len()
+            );
+            return;
+        }
         for row in 0..region.height {
             let dst_start = ((region.y + row) * self.size + region.x) as usize;
             let src_start = (row * region.width) as usize;

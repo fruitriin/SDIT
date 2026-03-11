@@ -350,16 +350,22 @@ impl CellPipeline {
         }
     }
 
+    /// GPU バッファサイズ上限: 64MB（異常なグリッドサイズへの防御）。
+    const MAX_BUFFER_BYTES: usize = 64 * 1024 * 1024;
+
     /// 頂点バッファの容量が `needed` 未満なら再確保する。
     pub fn ensure_capacity(&mut self, device: &wgpu::Device, needed: usize) {
         if needed <= self.vertex_buffer_capacity {
             return;
         }
         // 必要量の 2 倍に拡張してリアロケーションを減らす。
-        let new_capacity = needed * 2;
+        let cell_size = std::mem::size_of::<CellVertex>();
+        let max_cells = Self::MAX_BUFFER_BYTES / cell_size;
+        let new_capacity = needed.saturating_mul(2).min(max_cells).max(needed);
+        let buffer_size = new_capacity.saturating_mul(cell_size);
         self.vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("cell vertex buffer"),
-            size: (new_capacity * std::mem::size_of::<CellVertex>()) as u64,
+            size: buffer_size as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });

@@ -8,8 +8,12 @@
 
 ## 問題の記録
 
-（反映済み項目は削除済み — セキュリティレビュー結果は `docs/plans/phase1-core-mvp.md` に記録）
+- savanna-smell-detector 導入済み（`--min-severity 3` で 17件検出）
+  - Conditional Test Logic: PTY テストの `if !is_tty()` スキップパターン（CI環境対応、構造的に必要）
+  - Sleepy Test: PTY read のタイムアウト待機（ブロッキング IO に起因、代替手段要検討）
+  - Missing Assertion: `test_pty_spawn_shell`, `test_pty_resize` にアサーション追加が必要
+  - **次のアクション**: Phase 3 開始時に修正可能なものを対応し、テストチェーンに `--min-severity 4 --fail-on-smell` を組み込む
 
 ## 改善アクション
 
-（反映済み項目は削除済み — 未対応セキュリティ項目は `docs/plans/phase2-first-sdi-window.md` に引継ぎ）
+- Phase 2 セキュリティ Low 6件は `docs/plans/phase2-first-sdi-window.md` に記録済み（Phase 3以降で対応）
