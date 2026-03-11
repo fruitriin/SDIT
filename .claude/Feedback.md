@@ -8,10 +8,7 @@
 
 ## オーナーフィードバック
 
-- どこかのフェーズの隙間で見た目のブラッシュアッププランを作成したい
-  - フォント周り　特に日本語の一級サポート
-  - カラーコントラスト
-- 統合テストでカラーコントラストのテスト、他の環境では起きないような文字化けが起きていないかをチェックするステップを足したい
+（なし）
 
 ## 問題の記録
 
@@ -29,3 +26,5 @@
 - Phase 2.5 セキュリティ Low L-1〜L-4 は `docs/plans/phase2.5-integration-testing.md` に記録済み
 - Phase 2.6 セキュリティ Low L-1〜L-3 / Info I-1〜I-3 は `docs/plans/phase2.6-security-fixes.md` に記録済み
 - Phase 4 セキュリティ Medium M-1〜M-3 修正済み、Low/Info は `docs/plans/phase4-session-sidebar.md` に記録済み
+- Phase 5 オーナーフィードバック（日本語フォント・カラーコントラスト・統合テスト）→ Phase 5.2/5.3/5.5 で対応済み
+- Phase 5 セキュリティ Medium M-1〜M-3 修正済み、Low/Info は `docs/plans/phase5-config-polish.md` に記録済み
