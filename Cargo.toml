@@ -50,6 +50,9 @@ toml       = "0.8"
 # システム
 rustix        = { version = "0.38", features = ["termios", "process"] }
 
+# パス解決
+dirs = "5"
+
 # ユーティリティ
 bitflags      = "2"
 unicode-width = "0.2"

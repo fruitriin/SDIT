@@ -82,6 +82,8 @@ struct SditApp {
     session_mgr: SessionManager,
     /// フォントコンテキスト（全ウィンドウで共有）。
     font_ctx: FontContext,
+    /// 解決済みカラーテーブル。
+    colors: sdit_config::color::ResolvedColors,
     /// winit modifier キーの状態。
     modifiers: ModifiersState,
     /// winit イベントループへのプロキシ。
@@ -97,12 +99,17 @@ struct SditApp {
 }
 
 impl SditApp {
-    fn new(event_proxy: winit::event_loop::EventLoopProxy<SditEvent>, smoke_test: bool) -> Self {
+    fn new(
+        event_proxy: winit::event_loop::EventLoopProxy<SditEvent>,
+        smoke_test: bool,
+        config: &sdit_config::Config,
+    ) -> Self {
         Self {
             windows: HashMap::new(),
             session_to_window: HashMap::new(),
             session_mgr: SessionManager::new(),
-            font_ctx: FontContext::new(14.0, 1.2),
+            font_ctx: FontContext::from_config(&config.font),
+            colors: sdit_config::color::ResolvedColors::from_theme(&config.colors.theme),
             modifiers: ModifiersState::empty(),
             event_proxy,
             smoke_test,
@@ -517,6 +524,7 @@ impl SditApp {
                 surface_size,
                 &mut self.font_ctx,
                 &mut ws.atlas,
+                &self.colors,
             );
             let sidebar_rows = (surface_size[1] / metrics.cell_height).floor().max(1.0) as usize;
             ws.sidebar_pipeline.ensure_capacity(&ws.gpu.device, sidebar_cells.len());
@@ -744,7 +752,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 } else {
                     vec![&ws.cell_pipeline]
                 };
-                match ws.gpu.render_frame(&pipelines) {
+                match ws.gpu.render_frame(&pipelines, self.colors.background) {
                     Ok(()) => {}
                     Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
                         if let Some(ws) = self.windows.get_mut(&id) {
@@ -1073,6 +1081,7 @@ fn calc_grid_size(
 /// サイドバー用の `CellVertex` 列を生成する。
 ///
 /// 各セッションに1行を割り当て、アクティブセッションをハイライトする。
+#[allow(clippy::too_many_arguments)]
 fn build_sidebar_cells(
     sessions: &[SessionId],
     active_index: usize,
@@ -1081,16 +1090,16 @@ fn build_sidebar_cells(
     surface_size: [f32; 2],
     font_ctx: &mut FontContext,
     atlas: &mut Atlas,
+    colors: &sdit_config::color::ResolvedColors,
 ) -> Vec<CellVertex> {
     let width = sidebar.width_cells;
     let total_rows = (surface_size[1] / metrics.cell_height).floor().max(1.0) as usize;
     let atlas_size = atlas.size() as f32;
 
-    // Catppuccin Mocha カラー
-    let sidebar_bg = [0x31 as f32 / 255.0, 0x32 as f32 / 255.0, 0x44 as f32 / 255.0, 1.0]; // Surface0
-    let active_bg = [0x45 as f32 / 255.0, 0x47 as f32 / 255.0, 0x5a as f32 / 255.0, 1.0]; // Surface1
-    let fg_color = [0xcd as f32 / 255.0, 0xd6 as f32 / 255.0, 0xf4 as f32 / 255.0, 1.0]; // Text
-    let dim_fg = [0x6c as f32 / 255.0, 0x70 as f32 / 255.0, 0x86 as f32 / 255.0, 1.0]; // Overlay0
+    let sidebar_bg = colors.sidebar_bg;
+    let active_bg = colors.sidebar_active_bg;
+    let fg_color = colors.sidebar_fg;
+    let dim_fg = colors.sidebar_dim_fg;
 
     let mut cells = Vec::with_capacity(total_rows * width);
 
@@ -1135,6 +1144,7 @@ fn build_sidebar_cells(
                 uv,
                 glyph_offset,
                 glyph_size,
+                cell_width_scale: 1.0,
             });
         }
     }
@@ -1243,9 +1253,10 @@ fn main() {
     let smoke_test =
         cfg!(debug_assertions) && std::env::var("SDIT_SMOKE_TEST").as_deref() == Ok("1");
 
-    log::info!("SDIT starting");
+    let config = sdit_config::Config::load(&sdit_config::Config::default_path());
+    log::info!("SDIT starting (font: {} {}px)", config.font.family, config.font.size);
     let event_loop = EventLoop::<SditEvent>::with_user_event().build().unwrap();
     let proxy = event_loop.create_proxy();
-    let mut app = SditApp::new(proxy, smoke_test);
+    let mut app = SditApp::new(proxy, smoke_test, &config);
     event_loop.run_app(&mut app).unwrap();
 }

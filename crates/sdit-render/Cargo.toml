@@ -11,6 +11,7 @@ workspace = true
 
 [dependencies]
 sdit-core   = { path = "../sdit-core" }
+sdit-config = { path = "../sdit-config" }
 wgpu        = { workspace = true }
 winit       = { workspace = true }
 cosmic-text = { workspace = true }

@@ -14,3 +14,6 @@ sdit-core = { path = "../sdit-core" }
 rustix    = { workspace = true }
 log       = { workspace = true }
 thiserror = { workspace = true }
+serde     = { workspace = true }
+toml      = { workspace = true }
+dirs      = { workspace = true }

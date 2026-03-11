@@ -39,6 +39,8 @@ struct CellInput {
     @location(4) glyph_offset: vec2<f32>,
     /// グリフサイズ (width, height) — ピクセル
     @location(5) glyph_size: vec2<f32>,
+    /// セル幅の倍率（通常 1.0、全角文字 2.0）
+    @location(6) cell_width_scale: f32,
 }
 
 // ── Vertex output ─────────────────────────────────────────────────────────
@@ -89,8 +91,10 @@ fn vs_main(
     // セル左上のピクセル座標。
     let cell_px = instance.grid_pos * u.cell_size;
 
-    // セル内ローカル座標（ピクセル）。
-    let local = corner * u.cell_size;
+    // セル内ローカル座標（ピクセル）。全角文字は横方向2セル分に拡張。
+    let safe_scale = clamp(instance.cell_width_scale, 1.0, 2.0);
+    let scaled_cell = vec2<f32>(u.cell_size.x * safe_scale, u.cell_size.y);
+    let local = corner * scaled_cell;
 
     // スクリーン座標（Y は下向きが正）。origin_x でサイドバー分オフセット。
     let screen = cell_px + local + vec2<f32>(u.origin_x, 0.0);

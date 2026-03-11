@@ -687,4 +687,45 @@ mod tests {
         // Line 1 should now be "Line1" again.
         assert_eq!(term.grid()[Point::new(Line(1), Column(0))].c, 'L');
     }
+
+    // CJK: 全角文字が2セル幅で配置される
+    #[test]
+    fn cjk_wide_char() {
+        let (mut proc, mut term) = make_proc_term(24, 80);
+        // 日本語の "あ" は全角（幅2）
+        proc.advance(&mut term, "あ".as_bytes());
+        let cell0 = &term.grid()[Point::new(Line(0), Column(0))];
+        assert_eq!(cell0.c, 'あ');
+        assert!(cell0.flags.contains(CellFlags::WIDE_CHAR));
+
+        let cell1 = &term.grid()[Point::new(Line(0), Column(1))];
+        assert!(cell1.flags.contains(CellFlags::WIDE_CHAR_SPACER));
+
+        // カーソルは列2に進んでいる
+        assert_eq!(term.grid().cursor.point.column, Column(2));
+    }
+
+    // CJK: 行末で全角文字がはみ出す場合のラップ
+    #[test]
+    fn cjk_wrap_at_line_end() {
+        let (mut proc, mut term) = make_proc_term(24, 10);
+        // 列0〜8に9文字書いて、列9に全角文字を書く（はみ出すのでラップ）
+        proc.advance(&mut term, b"123456789");
+        proc.advance(&mut term, "あ".as_bytes());
+
+        // "あ" は次の行の先頭に配置される
+        let cell = &term.grid()[Point::new(Line(1), Column(0))];
+        assert_eq!(cell.c, 'あ');
+        assert!(cell.flags.contains(CellFlags::WIDE_CHAR));
+    }
+
+    // CJK: unicode_width による幅判定
+    #[test]
+    fn cjk_unicode_width() {
+        use unicode_width::UnicodeWidthChar;
+        assert_eq!(UnicodeWidthChar::width('あ'), Some(2));
+        assert_eq!(UnicodeWidthChar::width('漢'), Some(2));
+        assert_eq!(UnicodeWidthChar::width('A'), Some(1));
+        assert_eq!(UnicodeWidthChar::width('ｱ'), Some(1)); // 半角カタカナ
+    }
 }

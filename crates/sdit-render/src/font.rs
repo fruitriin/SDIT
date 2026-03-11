@@ -7,7 +7,10 @@
 
 use std::collections::HashMap;
 
-use cosmic_text::{Attrs, Buffer, FontSystem, Metrics, Placement, Shaping, SwashCache, fontdb};
+use cosmic_text::{
+    Attrs, Buffer, Family, FontSystem, Metrics, Placement, Shaping, SwashCache, fontdb,
+};
+use sdit_config::font::FontConfig;
 
 use crate::atlas::{Atlas, AtlasRegion};
 
@@ -51,6 +54,8 @@ pub struct FontContext {
     glyph_cache: HashMap<GlyphCacheKey, GlyphEntry>,
     metrics: CellMetrics,
     font_size: f32,
+    /// シェーピング時に使うフォントファミリ名。
+    font_family: String,
 }
 
 impl FontContext {
@@ -59,14 +64,23 @@ impl FontContext {
     /// `font_size`: フォントサイズ（ピクセル）
     /// `line_height_factor`: 行の高さの倍率（例: 1.2）
     pub fn new(font_size: f32, line_height_factor: f32) -> Self {
+        Self::from_config(&FontConfig {
+            size: font_size,
+            line_height: line_height_factor,
+            ..FontConfig::default()
+        })
+    }
+
+    /// `FontConfig` からフォントコンテキストを作成する。
+    pub fn from_config(config: &FontConfig) -> Self {
         let mut font_system = FontSystem::new();
-        let line_height = font_size * line_height_factor;
+        let font_size = config.clamped_size();
+        let line_height = font_size * config.clamped_line_height();
 
         // モノスペースフォントの em 幅からセル幅を計算する。
         let cell_width = compute_cell_width(&mut font_system, font_size);
 
         // ベースラインはフォントサイズの 80% 程度を目安にする（近似値）。
-        // より正確な値は Buffer の shaping 結果から得られるが、初期実装では固定値を使う。
         let baseline = font_size * 0.8;
 
         let metrics = CellMetrics { cell_width, cell_height: line_height, baseline, font_size };
@@ -77,6 +91,7 @@ impl FontContext {
             glyph_cache: HashMap::new(),
             metrics,
             font_size,
+            font_family: config.family.clone(),
         }
     }
 
@@ -100,7 +115,8 @@ impl FontContext {
         let mut buf = Buffer::new(&mut self.font_system, metrics);
         let mut s = [0u8; 4];
         let text = c.encode_utf8(&mut s);
-        buf.set_text(&mut self.font_system, text, Attrs::new(), Shaping::Advanced);
+        let attrs = Attrs::new().family(Family::Name(&self.font_family));
+        buf.set_text(&mut self.font_system, text, attrs, Shaping::Advanced);
         buf.shape_until_scroll(&mut self.font_system, false);
 
         // グリフ情報を取り出す。

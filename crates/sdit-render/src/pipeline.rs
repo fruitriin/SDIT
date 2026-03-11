@@ -9,7 +9,7 @@ use std::sync::Arc;
 use anyhow::{Context as _, Result};
 use bytemuck::{Pod, Zeroable};
 use sdit_core::grid::Grid;
-use sdit_core::grid::{Cell, Color, Dimensions, NamedColor};
+use sdit_core::grid::{Cell, CellFlags, Color, Dimensions, NamedColor};
 use sdit_core::index::{Column, Line, Point};
 use winit::window::Window;
 
@@ -89,7 +89,11 @@ impl GpuContext<'_> {
     ///
     /// `pipelines` 内の各パイプラインを順番に描画する。
     /// サイドバー + ターミナルの2パス描画に対応。
-    pub fn render_frame(&self, pipelines: &[&CellPipeline]) -> Result<(), wgpu::SurfaceError> {
+    pub fn render_frame(
+        &self,
+        pipelines: &[&CellPipeline],
+        clear_color: [f32; 4],
+    ) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -105,11 +109,10 @@ impl GpuContext<'_> {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            // Catppuccin Mocha base: #1e1e2e
-                            r: f64::from(0x1e_u8) / 255.0,
-                            g: f64::from(0x1e_u8) / 255.0,
-                            b: f64::from(0x2e_u8) / 255.0,
-                            a: 1.0,
+                            r: f64::from(clear_color[0]),
+                            g: f64::from(clear_color[1]),
+                            b: f64::from(clear_color[2]),
+                            a: f64::from(clear_color[3]),
                         }),
                         store: wgpu::StoreOp::Store,
                     },
@@ -156,6 +159,8 @@ pub struct CellVertex {
     pub glyph_offset: [f32; 2],
     /// グリフサイズ (width, height) in pixels
     pub glyph_size: [f32; 2],
+    /// セル幅の倍率。通常 1.0、全角文字は 2.0。
+    pub cell_width_scale: f32,
 }
 
 impl CellVertex {
@@ -172,6 +177,7 @@ impl CellVertex {
                 wgpu::VertexAttribute { shader_location: 3, offset: 40, format: F::Float32x4 },
                 wgpu::VertexAttribute { shader_location: 4, offset: 56, format: F::Float32x2 },
                 wgpu::VertexAttribute { shader_location: 5, offset: 64, format: F::Float32x2 },
+                wgpu::VertexAttribute { shader_location: 6, offset: 72, format: F::Float32 },
             ],
         }
     }
@@ -420,8 +426,23 @@ impl CellPipeline {
                 let point = Point::new(Line(row as i32), Column(col));
                 let cell = &grid[point];
 
+                // WIDE_CHAR_SPACER（全角文字の右半分）は背景のみ描画。
+                if cell.flags.contains(CellFlags::WIDE_CHAR_SPACER) {
+                    vertices.push(CellVertex {
+                        bg: color_to_rgba(cell.bg),
+                        fg: [0.0; 4],
+                        grid_pos: [col as f32, row as f32],
+                        uv: [0.0; 4],
+                        glyph_offset: [0.0; 2],
+                        glyph_size: [0.0; 2],
+                        cell_width_scale: 1.0,
+                    });
+                    continue;
+                }
+
                 let bg = color_to_rgba(cell.bg);
                 let fg = color_to_rgba(cell.fg);
+                let is_wide = cell.flags.contains(CellFlags::WIDE_CHAR);
 
                 // グリフをラスタライズしてアトラスに配置。
                 let (uv, glyph_offset, glyph_size) =
@@ -441,6 +462,8 @@ impl CellPipeline {
                         ([0.0_f32; 4], [0.0_f32; 2], [0.0_f32; 2])
                     };
 
+                // WIDE_CHAR は2セル幅で描画。
+                let cell_width_scale = if is_wide { 2.0 } else { 1.0 };
                 vertices.push(CellVertex {
                     bg,
                     fg,
@@ -448,6 +471,7 @@ impl CellPipeline {
                     uv,
                     glyph_offset,
                     glyph_size,
+                    cell_width_scale,
                 });
             }
         }
