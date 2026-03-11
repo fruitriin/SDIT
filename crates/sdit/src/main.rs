@@ -60,10 +60,12 @@ struct SditApp {
     modifiers: winit::keyboard::ModifiersState,
     /// winit イベントループへのプロキシ（PTY リーダースレッドに渡す）。
     event_proxy: winit::event_loop::EventLoopProxy<SditEvent>,
+    /// `SDIT_SMOKE_TEST=1` のとき true。1フレーム描画後に `event_loop.exit()` を呼ぶ。
+    smoke_test: bool,
 }
 
 impl SditApp {
-    fn new(event_proxy: winit::event_loop::EventLoopProxy<SditEvent>) -> Self {
+    fn new(event_proxy: winit::event_loop::EventLoopProxy<SditEvent>, smoke_test: bool) -> Self {
         Self {
             window: None,
             gpu: None,
@@ -75,6 +77,7 @@ impl SditApp {
             pty_thread: None,
             modifiers: winit::keyboard::ModifiersState::empty(),
             event_proxy,
+            smoke_test,
         }
     }
 
@@ -299,6 +302,11 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         Err(e) => log::error!("Render error: {e}"),
                     }
                 }
+                // SDIT_SMOKE_TEST=1: 1フレーム描画完了後に正常終了する。
+                if self.smoke_test {
+                    log::info!("smoke_test: 1 frame rendered, exiting");
+                    event_loop.exit();
+                }
             }
 
             _ => {}
@@ -488,14 +496,114 @@ fn calc_grid_size(
 }
 
 // ---------------------------------------------------------------------------
+// ヘッドレスモード
+// ---------------------------------------------------------------------------
+
+/// Grid の全行を走査して `needle` を含む行があれば `true` を返す。
+fn grid_contains(terminal: &Terminal, needle: &str) -> bool {
+    use sdit_core::index::{Column, Line, Point};
+    let rows = terminal.grid().screen_lines();
+    let cols = terminal.grid().columns();
+    (0..rows).any(|r| {
+        #[allow(clippy::cast_possible_wrap)]
+        let line = Line(r as i32);
+        let mut row = String::new();
+        for c in 0..cols {
+            row.push(terminal.grid()[Point::new(line, Column(c))].c);
+        }
+        row.contains(needle)
+    })
+}
+
+/// `--headless` モード: PTY を spawn して出力を Terminal に流し、
+/// `SDIT_HEADLESS_OK` が Grid に現れたら exit(0)、タイムアウトで exit(1)。
+fn run_headless() -> ! {
+    let size = PtySize::new(24, 80);
+    let config = PtyConfig {
+        shell: Some("/bin/sh".to_owned()),
+        args: vec!["-c".to_owned(), "echo SDIT_HEADLESS_OK".to_owned()],
+        working_directory: None,
+        env: std::collections::HashMap::new(),
+    };
+
+    let mut pty = match Pty::spawn(&config, size) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("headless: PTY spawn failed: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let mut terminal = Terminal::new(24, 80, 1000);
+    let mut processor = Processor::new();
+
+    let timeout = std::time::Duration::from_secs(5);
+    let deadline = std::time::Instant::now() + timeout;
+    let mut buf = [0u8; 4096];
+
+    loop {
+        if grid_contains(&terminal, "SDIT_HEADLESS_OK") {
+            std::process::exit(0);
+        }
+
+        if std::time::Instant::now() >= deadline {
+            eprintln!("headless: timeout waiting for SDIT_HEADLESS_OK");
+            std::process::exit(1);
+        }
+
+        match pty.read(&mut buf) {
+            Ok(0) => {
+                // EOF: 子プロセス終了後も Grid を最終確認。
+                if grid_contains(&terminal, "SDIT_HEADLESS_OK") {
+                    std::process::exit(0);
+                } else {
+                    eprintln!("headless: EOF reached without finding SDIT_HEADLESS_OK");
+                    std::process::exit(1);
+                }
+            }
+            Ok(n) => {
+                processor.advance(&mut terminal, &buf[..n]);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            Err(e) if e.raw_os_error() == Some(5) => {
+                // EIO: PTY が閉じられた（子プロセス終了）。Grid を最終確認。
+                if grid_contains(&terminal, "SDIT_HEADLESS_OK") {
+                    std::process::exit(0);
+                } else {
+                    eprintln!("headless: EIO without finding SDIT_HEADLESS_OK");
+                    std::process::exit(1);
+                }
+            }
+            Err(e) => {
+                eprintln!("headless: PTY read error: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // エントリーポイント
 // ---------------------------------------------------------------------------
 
 fn main() {
     env_logger::init();
+
+    // --headless: winit/wgpu を使わず PTY → Terminal の動作確認のみ行う。
+    if std::env::args().any(|a| a == "--headless") {
+        log::info!("SDIT starting in headless mode");
+        run_headless();
+    }
+
+    // SDIT_SMOKE_TEST=1: 1フレーム描画後に正常終了する（debug ビルドのみ有効）。
+    let smoke_test =
+        cfg!(debug_assertions) && std::env::var("SDIT_SMOKE_TEST").as_deref() == Ok("1");
+
     log::info!("SDIT starting");
     let event_loop = EventLoop::<SditEvent>::with_user_event().build().unwrap();
     let proxy = event_loop.create_proxy();
-    let mut app = SditApp::new(proxy);
+    let mut app = SditApp::new(proxy, smoke_test);
     event_loop.run_app(&mut app).unwrap();
 }

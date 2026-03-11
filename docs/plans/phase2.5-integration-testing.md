@@ -44,46 +44,46 @@ tools/test-utils/
 
 ### Layer 1: ヘッドレステスト（GUI 不要・全 CI で実行可能）
 
-- [ ] `--headless` モードを `main.rs` に追加
+- [x] `--headless` モードを `main.rs` に追加
   - PTY spawn → `echo SDIT_HEADLESS_OK` → Grid 確認 → exit(0)
   - タイムアウト（5秒）で exit(1)
   - winit/wgpu を一切初期化しない
-- [ ] `crates/sdit/tests/smoke_headless.rs` を作成
+- [x] `crates/sdit/tests/smoke_headless.rs` を作成
   - `CARGO_BIN_EXE_sdit` でバイナリパス取得
   - `--headless` で起動、exit code 0 を確認
   - stderr にパニック・エラーがないことを確認
-- [ ] macOS 26 PTY ioctl 互換性の退行テスト
+- [x] macOS 26 PTY ioctl 互換性の退行テスト
   - `Pty::spawn()` → `resize()` の順序が正しいことを検証
 
 ### Layer 2: GUI スモークテスト（ディスプレイ環境で実行）
 
-- [ ] `SDIT_SMOKE_TEST=1` モードを `main.rs` に追加
+- [x] `SDIT_SMOKE_TEST=1` モードを `main.rs` に追加
   - PTY 起動 + 1フレーム描画後に `event_loop.exit()`
   - exit code 0 で正常終了
-- [ ] `crates/sdit/tests/smoke_gui.rs` を作成（`#[ignore]`）
+- [x] `crates/sdit/tests/smoke_gui.rs` を作成（`#[ignore]`）
   - `CARGO_BIN_EXE_sdit` + `SDIT_SMOKE_TEST=1` で起動
   - 15秒タイムアウト、exit code 0 を確認
 
 ### Layer 3: GUI 操作テスト（ユーティリティスクリプト経由）
 
-- [ ] `tools/test-utils/` にユーティリティスクリプトを作成
+- [x] `tools/test-utils/` にユーティリティスクリプトを作成
   - `window-info`: Swift — AXUIElement でウィンドウ属性（タイトル、位置、サイズ、フォーカス）を JSON 出力
   - `capture-window`: Swift — ScreenCaptureKit でウィンドウを PNG キャプチャ
   - `send-keys`: osascript — 指定プロセスにキーストローク送信
-- [ ] 権限設定手順を README.md に記載
+- [x] 権限設定手順を README.md に記載
   - Screen Recording 権限の付与方法
   - 再起動が必要な旨の注意書き
   - `tccutil` によるリセット手順
-- [ ] `crates/sdit/tests/gui_interaction.rs` を作成（`#[ignore]`）
+- [x] `crates/sdit/tests/gui_interaction.rs` を作成（`#[ignore]`）
   - バイナリ起動 → window-info でウィンドウ存在確認
   - send-keys でキー入力 → capture-window でスクリーンショット
   - スクリーンショットが空でないことを確認（画像サイズ > 閾値）
 
 ### 共通
 
-- [ ] Lint・ビルド確認
-- [ ] セキュリティレビュー
-- [ ] knowhow 記録（macOS 26 PTY 互換性、GUI テスト権限モデル）
+- [x] Lint・ビルド確認
+- [x] セキュリティレビュー
+- [x] knowhow 記録（macOS 26 PTY 互換性、GUI テスト権限モデル）
 
 ## 実装優先度
 
@@ -96,6 +96,20 @@ tools/test-utils/
 - `crates/sdit-core/` (PTY テスト強化)
 - `tools/test-utils/` (新規: GUI テストユーティリティ)
 
+## セキュリティレビュー結果
+
+| 重要度 | ID | 内容 | 対処 |
+|---|---|---|---|
+| High | H-1 | send-keys.sh AppleScript インジェクション | **修正済み**: エスケープ処理追加 |
+| Medium | M-1 | capture-window.swift パストラバーサル | 記録: テスト用途のため許容、Phase 3以降で対処検討 |
+| Medium | M-2 | SDIT_SMOKE_TEST 環境変数の本番影響 | **修正済み**: `cfg!(debug_assertions)` でガード |
+| Medium | M-3 | プロセス名完全一致バイパス | 記録: テスト用途のため許容 |
+| Low | L-1 | EIO マジックナンバー(5) | 記録: Phase 3 で libc::EIO に変更検討 |
+| Low | L-2 | PoisonError の silencing | 記録: Phase 3 で安全な終了処理検討 |
+| Low | L-3 | smoke_headless.rs の二重 wait | 記録: テスト自体は動作、Phase 3 で改善 |
+| Low | L-4 | tmp/ のテスト成果物残留 | 記録: .gitignore 済み、クリーンアップ追加検討 |
+
 ## 参照
 - `crates/sdit-core/tests/headless_pipeline.rs` (既存統合テストパターン)
 - `docs/knowhow/pty-threading-model.md` (PTY スレッドモデル)
+- `docs/knowhow/integration-testing-patterns.md` (本フェーズの知見)

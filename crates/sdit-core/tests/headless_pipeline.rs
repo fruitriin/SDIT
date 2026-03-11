@@ -133,6 +133,40 @@ fn shell_command_pipeline() {
     let _ = pty.kill();
 }
 
+/// macOS 26 PTY ioctl 互換性の退行テスト。
+///
+/// macOS 26 では spawn 前に TIOCSWINSZ を呼ぶと ENOTTY になる。
+/// `Pty::spawn()` の実装が「spawn 後に resize」の順序を守っていることを検証する。
+#[test]
+fn pty_spawn_then_resize() {
+    if !is_tty() {
+        eprintln!("skipping: not a TTY environment");
+        return;
+    }
+
+    let initial_size = PtySize::new(24, 80);
+    let config = PtyConfig {
+        shell: Some("/bin/sh".to_owned()),
+        args: vec![],
+        working_directory: None,
+        env: std::collections::HashMap::new(),
+    };
+
+    let mut pty = Pty::spawn(&config, initial_size).expect("spawn failed");
+
+    // spawn 後の resize は成功すべき（macOS 26 PTY 互換性の核心部分）。
+    let new_size = PtySize::new(30, 100);
+    pty.resize(new_size)
+        .expect("resize after spawn should succeed on all platforms including macOS 26");
+
+    // resize 後も PTY は正常に動作していることを確認する。
+    let status = pty.try_wait().expect("try_wait after resize should not error");
+    // シェルはまだ生きているはずなので None
+    assert!(status.is_none(), "shell should still be running after resize");
+
+    let _ = pty.kill();
+}
+
 #[test]
 fn cursor_position_after_escape_sequence() {
     if !is_tty() {

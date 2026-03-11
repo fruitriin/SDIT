@@ -8,6 +8,12 @@
 
 ## 問題の記録
 
+- test-utils 用の CLAUDE.md が必要かも。ソースのガイド、使い方など。test-utilsを使ったテストの方法をプロジェクトローカルSkill化するのもよさそう。
+- GUIテストは大まかなシナリオをmarkdownで管理して、サブエージェントにtest-utilsを使わせてテストさせるのが良さそう
+- gui上で文字が入力できない気がする。統合テストでこの辺りを追加したい。次に、 echo や lsが動作することを確認できれば素敵だと思う
+- ノウハウ作成のときにSkill化のパターンが有効か検討。このSkillは自己ブラッシュアップステップを含めるとよさそう。
+
+
 - savanna-smell-detector 導入済み（`--min-severity 3` で 17件検出）
   - Conditional Test Logic: PTY テストの `if !is_tty()` スキップパターン（CI環境対応、構造的に必要）
   - Sleepy Test: PTY read のタイムアウト待機（ブロッキング IO に起因、代替手段要検討）
@@ -17,3 +23,5 @@
 ## 改善アクション
 
 - Phase 2 セキュリティ Low 6件は `docs/plans/phase2-first-sdi-window.md` に記録済み（Phase 3以降で対応）
+- Phase 2.5 セキュリティ M-1,M-3,L-1〜L-4 は `docs/plans/phase2.5-integration-testing.md` に記録済み（Phase 3以降で対応）
+- 3エージェント並行実装パターンが有効だった（Layer 1+2 main.rs / Layer 1 テスト / Layer 3 ユーティリティ）。ただしエージェント間で main.rs の変更が競合する可能性があり、片方が先に書いた変更をもう片方が上書きするリスクがある。次回は main.rs 変更は1エージェントに集約するか、worktree 分離を使う

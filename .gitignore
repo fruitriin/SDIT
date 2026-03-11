@@ -16,6 +16,14 @@ Thumbs.db
 .env
 .env.*
 
+# Temporary files
+/tmp/
+
 # Claude Code (local settings)
 .claude/settings.local.json
 CLAUDE.local.md
+
+# Test output (GUI interaction tests) - compiled binaries and screenshots
+/tools/test-utils/window-info
+/tools/test-utils/capture-window
+tmp/
