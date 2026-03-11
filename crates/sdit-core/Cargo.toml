@@ -10,7 +10,12 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
-vte         = { workspace = true }
-pty-process = { workspace = true }
-log         = { workspace = true }
-thiserror   = { workspace = true }
+vte           = { workspace = true }
+pty-process   = { workspace = true }
+bitflags      = { workspace = true }
+unicode-width = { workspace = true }
+log           = { workspace = true }
+thiserror     = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }

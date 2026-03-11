@@ -27,7 +27,7 @@ pub fn csi_dispatch(term: &mut Terminal, params: &Params, intermediates: &[u8], 
         'A' => {
             let n = i32::try_from(first_param(params, 1)).unwrap_or(i32::MAX);
             let min_line = i32::try_from(term.scroll_region.start).unwrap_or(0);
-            let new_line = (term.grid.cursor.point.line.0 - n).max(min_line);
+            let new_line = term.grid.cursor.point.line.0.saturating_sub(n).max(min_line);
             term.grid.cursor.point.line = Line(new_line);
             term.grid.cursor.input_needs_wrap = false;
         }
@@ -36,7 +36,7 @@ pub fn csi_dispatch(term: &mut Terminal, params: &Params, intermediates: &[u8], 
             let n = i32::try_from(first_param(params, 1)).unwrap_or(i32::MAX);
             let max_line =
                 i32::try_from(term.grid.screen_lines()).unwrap_or(i32::MAX).saturating_sub(1);
-            let new_line = (term.grid.cursor.point.line.0 + n).min(max_line);
+            let new_line = term.grid.cursor.point.line.0.saturating_add(n).min(max_line);
             term.grid.cursor.point.line = Line(new_line);
             term.grid.cursor.input_needs_wrap = false;
         }
@@ -44,7 +44,7 @@ pub fn csi_dispatch(term: &mut Terminal, params: &Params, intermediates: &[u8], 
         'C' => {
             let n = first_param(params, 1);
             let max_col = term.grid.columns().saturating_sub(1);
-            let new_col = (term.grid.cursor.point.column.0 + n).min(max_col);
+            let new_col = term.grid.cursor.point.column.0.saturating_add(n).min(max_col);
             term.grid.cursor.point.column = Column(new_col);
             term.grid.cursor.input_needs_wrap = false;
         }
@@ -73,7 +73,7 @@ pub fn csi_dispatch(term: &mut Terminal, params: &Params, intermediates: &[u8], 
                 // Erase from cursor to end of screen
                 0 => {
                     term.erase_to_eol();
-                    let next_line = term.grid.cursor.point.line.0 as usize + 1;
+                    let next_line = term.grid.cursor.point.line.0.max(0) as usize + 1;
                     for ln in next_line..lines {
                         let ln_i32 = i32::try_from(ln).unwrap_or(i32::MAX);
                         let start = Point::new(Line(ln_i32), Column(0));
@@ -84,7 +84,7 @@ pub fn csi_dispatch(term: &mut Terminal, params: &Params, intermediates: &[u8], 
                 // Erase from start of screen to cursor
                 1 => {
                     term.erase_to_bol();
-                    let cur_line = term.grid.cursor.point.line.0 as usize;
+                    let cur_line = term.grid.cursor.point.line.0.max(0) as usize;
                     for ln in 0..cur_line {
                         let ln_i32 = i32::try_from(ln).unwrap_or(i32::MAX);
                         let start = Point::new(Line(ln_i32), Column(0));
@@ -121,7 +121,7 @@ pub fn csi_dispatch(term: &mut Terminal, params: &Params, intermediates: &[u8], 
         // IL — insert N lines at cursor
         'L' => {
             let n = first_param(params, 1);
-            let cur_line = term.grid.cursor.point.line.0 as usize;
+            let cur_line = term.grid.cursor.point.line.0.max(0) as usize;
             let region = cur_line..term.scroll_region.end;
             if cur_line < term.scroll_region.end {
                 term.grid.scroll_down(region, n);
@@ -131,7 +131,7 @@ pub fn csi_dispatch(term: &mut Terminal, params: &Params, intermediates: &[u8], 
         // DL — delete N lines at cursor
         'M' => {
             let n = first_param(params, 1);
-            let cur_line = term.grid.cursor.point.line.0 as usize;
+            let cur_line = term.grid.cursor.point.line.0.max(0) as usize;
             let region = cur_line..term.scroll_region.end;
             if cur_line < term.scroll_region.end {
                 term.grid.scroll_up(region, n);
@@ -219,7 +219,7 @@ pub fn esc_dispatch(term: &mut Terminal, intermediates: &[u8], byte: u8) {
         // RI — reverse index
         b'M' => {
             let top = term.scroll_region.start;
-            let cur_line = term.grid.cursor.point.line.0 as usize;
+            let cur_line = term.grid.cursor.point.line.0.max(0) as usize;
             if cur_line == top {
                 term.grid.scroll_down(term.scroll_region.clone(), 1);
             } else if cur_line > 0 {

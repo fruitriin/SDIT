@@ -100,7 +100,10 @@ pub struct Grid<T: GridCell> {
 impl<T: GridCell> Grid<T> {
     /// Create a new grid with `lines` rows, `columns` columns, and the given
     /// scrollback limit.
+    ///
+    /// `lines` must be at least 1; zero is clamped to 1.
     pub fn new(lines: usize, columns: usize, max_scroll_limit: usize) -> Self {
+        let lines = lines.max(1);
         Self {
             raw: Storage::new(lines, columns),
             cursor: Cursor::default(),
@@ -122,6 +125,9 @@ impl<T: GridCell> Grid<T> {
     /// Lines scrolled above `region.start` are pushed into scrollback history
     /// (only when `region.start == 0`).
     pub fn scroll_up(&mut self, region: Range<usize>, count: usize) {
+        if region.end <= region.start {
+            return;
+        }
         let count = count.min(region.end - region.start);
 
         if region.start == 0 {
@@ -170,6 +176,9 @@ impl<T: GridCell> Grid<T> {
     /// Lines are moved down; lines that would fall off the bottom are
     /// discarded.
     pub fn scroll_down(&mut self, region: Range<usize>, count: usize) {
+        if region.end <= region.start {
+            return;
+        }
         let count = count.min(region.end - region.start);
         let hist = self.history_size();
 

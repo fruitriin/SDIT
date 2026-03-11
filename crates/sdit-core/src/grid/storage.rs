@@ -91,7 +91,7 @@ impl<T: GridCell> Storage<T> {
     /// Excess rows become part of the scrollback cache; call `truncate()` to
     /// reclaim the memory if desired.
     pub fn shrink_visible(&mut self, lines_removed: usize) {
-        debug_assert!(lines_removed <= self.visible_lines);
+        let lines_removed = lines_removed.min(self.visible_lines);
         self.visible_lines -= lines_removed;
         self.len -= lines_removed;
     }
