@@ -8,11 +8,6 @@
 
 ## 問題の記録
 
-- test-utils 用の CLAUDE.md が必要かも。ソースのガイド、使い方など。test-utilsを使ったテストの方法をプロジェクトローカルSkill化するのもよさそう。(by オーナー)
-- GUIテストは大まかなシナリオをmarkdownで管理して、サブエージェントにtest-utilsを使わせてテストさせるのが良さそう(by オーナー)
-- ~~gui上で文字が入力できない気がする。~~ **修正済み**: PTY read/write デッドロック（ブロッキング read が write をブロック）を fd クローン＋スレッド分離で解消。統合テストでの echo/ls 確認は GUI テストシナリオ 001 で実施予定
-- ノウハウ作成のときにSkill化のパターンが有効か検討。このSkillは自己ブラッシュアップステップを含めるとよさそう。(by オーナー)
-
 
 - savanna-smell-detector 導入済み（`--min-severity 3` で 17件検出）
   - Conditional Test Logic: PTY テストの `if !is_tty()` スキップパターン（CI環境対応、構造的に必要）
