@@ -77,8 +77,6 @@ impl Pty {
         let shell = config.shell.as_deref().filter(|s| !s.is_empty()).unwrap_or("/bin/sh");
 
         let pty = pty_process::blocking::Pty::new()?;
-        pty.resize(pty_process::Size::new(size.rows, size.cols))?;
-
         let pts = pty.pts()?;
         let mut cmd = pty_process::blocking::Command::new(shell);
         cmd.args(&config.args);
@@ -87,6 +85,9 @@ impl Pty {
             cmd.current_dir(dir);
         }
         let child = cmd.spawn(&pts)?;
+
+        // macOS 26+ では spawn 前の TIOCSWINSZ が ENOTTY になるため、spawn 後に resize する
+        pty.resize(pty_process::Size::new(size.rows, size.cols))?;
 
         Ok(Self { pty, child })
     }
