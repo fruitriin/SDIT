@@ -245,7 +245,12 @@ mod tests {
         let config = make_pty_config("/bin/sh", &[]);
         let size = PtySize::new(24, 80);
         let mut pty = Pty::spawn(&config, size).expect("PTY spawn failed");
-        let _ = pty.kill();
+
+        // spawn 直後は子プロセスがまだ生存していること
+        let status = pty.try_wait().expect("try_wait failed");
+        assert!(status.is_none(), "child should still be running after spawn");
+
+        pty.kill().expect("kill failed");
     }
 
     #[test]
@@ -259,8 +264,14 @@ mod tests {
         let size = PtySize::new(24, 80);
         let mut pty = Pty::spawn(&config, size).expect("PTY spawn failed");
 
+        // resize が成功すること（エラーなし）
         pty.resize(PtySize::new(40, 120)).expect("resize failed");
-        let _ = pty.kill();
+
+        // resize 後も子プロセスが生存していること
+        let status = pty.try_wait().expect("try_wait failed");
+        assert!(status.is_none(), "child should still be running after resize");
+
+        pty.kill().expect("kill failed");
     }
 
     #[test]
