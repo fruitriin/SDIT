@@ -17,14 +17,8 @@
       "Bash(cargo metadata:*)",
       "Bash(cargo build:*)",
       "Bash(savanna-smell-detector:*)",
-      "Bash(~/.asdf/installs/rust/1.94.0/bin/savanna-smell-detector /Users/riin/workspace/SDIT/crates --fail-on-smell --min-severity 3)",
-      "Bash(cp /Users/riin/workspace/SDIT/.claude/Progress.md /Users/riin/workspace/SDIT/.claude/Progresses/2026-03-11-phase2-first-sdi-window.md)",
-      "Bash(cp /Users/riin/workspace/SDIT/.claude/templates/ProgressTemplate.md /Users/riin/workspace/SDIT/.claude/Progress.md)",
       "Bash(cargo tree:*)",
       "Bash(brew info:*)"
-    ],
-    "additionalDirectories": [
-      "/Users/riin/workspace/SDIT/.claude/Progresses"
     ]
   }
 }
