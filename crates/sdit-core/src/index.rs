@@ -14,6 +14,19 @@ use std::ops::{Add, AddAssign, Sub, SubAssign};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Line(pub i32);
 
+impl Line {
+    /// Convert to a viewport row index (`usize`), clamping negative values to 0.
+    ///
+    /// Viewport coordinates are always non-negative.  This method provides a
+    /// single, safe conversion point instead of scattering `.0.max(0) as usize`
+    /// across the codebase.
+    #[must_use]
+    #[inline]
+    pub fn as_viewport_idx(self) -> usize {
+        self.0.max(0) as usize
+    }
+}
+
 /// Column index (0-based).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Column(pub usize);
@@ -153,6 +166,15 @@ mod tests {
         assert_eq!((Line(i32::MAX) + 1).0, i32::MAX);
         // i32::MIN - 1 saturates at i32::MIN.
         assert_eq!((Line(i32::MIN) - 1).0, i32::MIN);
+    }
+
+    #[test]
+    fn line_as_viewport_idx() {
+        assert_eq!(Line(0).as_viewport_idx(), 0);
+        assert_eq!(Line(5).as_viewport_idx(), 5);
+        // Negative values clamp to 0.
+        assert_eq!(Line(-1).as_viewport_idx(), 0);
+        assert_eq!(Line(i32::MIN).as_viewport_idx(), 0);
     }
 
     #[test]

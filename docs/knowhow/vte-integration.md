@@ -25,18 +25,23 @@ Alacritty は独自の `Handler` trait で高レベル化しているが、SDIT 
 - 両方をサポートする必要がある
 
 ### セキュリティ上の教訓
-- `Line(i32)` の `as usize` キャストは `.max(0)` を付ける
+- `Line(i32)` → `usize` 変換は `Line::as_viewport_idx()` を使う（`.0.max(0) as usize` の統一化）
 - `scroll_up/down` は `region.end <= region.start` を早期リターン
 - `Grid::new` で `lines = 0` は `1` にクランプ（ゼロ除算防止）
 - `CUU/CUD` のカーソル移動は `saturating_sub/add` を使う
+
+### OSC パーサーの注意点
+- vte 0.13 は OSC パラメータのバッファを内部で ~1024 バイトに制限している
+- SDIT 側でも `MAX_TITLE_BYTES = 4096` の防御を入れている（vte 変更時の保険）
+- テストでは `Perform::osc_dispatch` を直接呼んで上限を検証する（vte 経由だとパーサーのバッファ制限が先に効く）
 
 ## テスト構成
 
 | テスト種別 | ファイル | テスト数 |
 |---|---|---|
 | ユニット（grid系） | `grid/{cell,row,storage,mod}.rs` | 32 |
-| ユニット（index） | `index.rs` | 5 |
+| ユニット（index） | `index.rs` | 6 |
 | ユニット（pty） | `pty/mod.rs` | 7 |
-| ユニット（terminal） | `terminal/mod.rs` | 13 |
+| ユニット（terminal） | `terminal/mod.rs` | 15 |
 | 統合テスト | `tests/headless_pipeline.rs` | 3 |
-| 合計 | — | 61（全通過） |
+| 合計 | — | 63（全通過） |

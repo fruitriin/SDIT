@@ -295,7 +295,7 @@ impl<T: GridCell> Grid<T> {
 
     /// Return a mutable reference to the cell at the current cursor position.
     pub fn cursor_cell(&mut self) -> &mut T {
-        let line = self.cursor.point.line.0 as usize;
+        let line = self.cursor.point.line.as_viewport_idx();
         let col = self.cursor.point.column;
         let hist = self.history_size();
         &mut self.raw[hist + line][col]
@@ -336,14 +336,14 @@ impl<T: GridCell> Index<Point> for Grid<T> {
     type Output = T;
 
     fn index(&self, point: Point) -> &T {
-        let row = self.history_size() + point.line.0 as usize;
+        let row = self.history_size() + point.line.as_viewport_idx();
         &self.raw[row][point.column]
     }
 }
 
 impl<T: GridCell> IndexMut<Point> for Grid<T> {
     fn index_mut(&mut self, point: Point) -> &mut T {
-        let row = self.history_size() + point.line.0 as usize;
+        let row = self.history_size() + point.line.as_viewport_idx();
         &mut self.raw[row][point.column]
     }
 }

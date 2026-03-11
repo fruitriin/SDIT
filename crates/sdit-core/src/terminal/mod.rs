@@ -139,7 +139,7 @@ impl Terminal {
     /// When the cursor is at the bottom of the scroll region, `scroll_up` is
     /// called; otherwise the cursor moves down one line.
     pub(super) fn linefeed(&mut self) {
-        let cur_line = self.grid.cursor.point.line.0 as usize;
+        let cur_line = self.grid.cursor.point.line.as_viewport_idx();
         if cur_line + 1 == self.scroll_region.end {
             self.grid.scroll_up(self.scroll_region.clone(), 1);
         } else if cur_line + 1 < self.grid.screen_lines() {
@@ -190,7 +190,7 @@ impl Terminal {
             if next_col >= cols {
                 pt.column = Column(0);
                 pt.line += 1;
-                if pt.line.0 as usize >= self.grid.screen_lines() {
+                if pt.line.as_viewport_idx() >= self.grid.screen_lines() {
                     break;
                 }
             } else {
@@ -416,7 +416,12 @@ impl Perform for Terminal {
     fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
         // OSC 0 or OSC 2: set window title.
         if params.len() >= 2 && (params[0] == b"0" || params[0] == b"2") {
-            if let Ok(title) = std::str::from_utf8(params[1]) {
+            // Limit title length to prevent memory exhaustion from malicious
+            // sequences (e.g. OSC 0;<multi-MB string>BEL).
+            const MAX_TITLE_BYTES: usize = 4096;
+            let raw = params[1];
+            let capped = if raw.len() > MAX_TITLE_BYTES { &raw[..MAX_TITLE_BYTES] } else { raw };
+            if let Ok(title) = std::str::from_utf8(capped) {
                 self.title = Some(title.to_owned());
             }
         }
@@ -618,6 +623,37 @@ mod tests {
         for col in 0..80 {
             assert_eq!(term.grid()[Point::new(Line(0), Column(col))].c, ' ', "col {col} not blank");
         }
+    }
+
+    // Additional: OSC title length limit (defense-in-depth)
+    #[test]
+    fn osc_title_capped() {
+        let (mut proc, mut term) = make_proc_term(24, 80);
+        // Build an OSC 0 sequence with a long title.
+        // Note: vte 0.13's internal buffer truncates OSC params at ~1024 bytes,
+        // so the title that reaches our handler is already capped by the parser.
+        // Our MAX_TITLE_BYTES (4096) is defense-in-depth for future vte changes.
+        let mut seq = Vec::new();
+        seq.extend_from_slice(b"\x1b]0;");
+        seq.extend(std::iter::repeat_n(b'A', 5000));
+        seq.push(0x07); // BEL
+        proc.advance(&mut term, &seq);
+        let title = term.title().expect("title should be set");
+        // The title must be bounded (vte caps at ~1024, our limit at 4096).
+        assert!(title.len() <= 4096);
+        assert!(!title.is_empty());
+    }
+
+    // Test our OSC handler directly to verify the 4096 cap logic.
+    #[test]
+    fn osc_title_direct_cap_at_4096() {
+        let mut term = Terminal::new(24, 80, 100);
+        // Simulate OSC dispatch with a payload exceeding 4096 bytes,
+        // bypassing vte's parser buffer limit.
+        let long_title: Vec<u8> = std::iter::repeat_n(b'B', 5000).collect();
+        term.osc_dispatch(&[b"0", &long_title], false);
+        let title = term.title().expect("title should be set");
+        assert_eq!(title.len(), 4096);
     }
 
     // Additional: scroll region (DECSTBM)

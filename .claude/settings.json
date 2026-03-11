@@ -10,7 +10,17 @@
       "Bash(cargo fmt:*)",
       "Bash(git commit:*)",
       "Bash(rustc --explain too_many_lines)",
-      "Bash(cargo test:*)"
+      "Bash(cargo test:*)",
+      "Bash(cargo doc:*)",
+      "Skill(slice)",
+      "Skill(slice:*)",
+      "Read(//Users/riin/.cargo/registry/src/**)",
+      "Bash(cargo metadata:*)",
+      "Bash(cargo build:*)",
+      "Edit(/Users/riin/workspace/SDIT/**)"
+    ],
+    "additionalDirectories": [
+      "/Users/riin/workspace/SDIT/.claude"
     ]
   }
 }
