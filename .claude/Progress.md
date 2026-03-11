@@ -31,6 +31,32 @@
 
 ---
 
-## タスク
+## タスク: Phase 1 — sdit-core MVP
 
-（現在タスクなし）
+### 1. Grid モジュール（依存なし）
+- [x] Cell 型（char, fg, bg, flags）+ GridCell trait
+- [x] Row<T> 型（Vec<T> ラッパー, occ フィールド）
+- [x] Storage<T> リングバッファ（zero offset, rotate, compute_index）
+- [x] Grid<T> 本体（cursor, display_offset, scroll_up/down, resize）
+- [x] Point/Line/Column インデックス型
+- [x] Grid ユニットテスト（45テスト全通過）
+
+### 2. VTE パーサー統合（Grid に依存）
+- [ ] vte::Perform を高レベル操作に変換する Processor
+- [ ] Terminal 構造体（Grid<Cell> 保持、モードフラグ、スクロール領域）
+- [ ] CSI/ESC/OSC ディスパッチ → Terminal メソッド呼び出し
+- [ ] Alternate screen buffer（grid/inactive_grid 切替）
+- [ ] Terminal ユニットテスト（エスケープシーケンス処理）
+
+### 3. PTY モジュール（依存なし、Grid と並行可）
+- [ ] Pty 構造体（pty-process ラッパー、子プロセス管理）
+- [ ] read/write API + リサイズ
+- [ ] PTY ユニットテスト
+
+### 4. 統合テスト
+- [ ] ヘッドレステスト: PTY → VTE → Grid パイプライン
+- [ ] cargo fmt --check && cargo clippy --all-targets && cargo test
+
+### 5. 完了処理
+- [ ] セキュリティレビュー（計画レビュー）
+- [ ] Plan 反映・Feedback 記録・knowhow 作成
