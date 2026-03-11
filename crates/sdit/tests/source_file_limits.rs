@@ -78,14 +78,14 @@ fn source_files_within_line_limits() {
 
     if !warnings.is_empty() {
         eprintln!(
-            "\n⚠ 以下のファイルが警告閾値({WARN_THRESHOLD}行)を超えています。分割を検討してください:\n{}",
+            "\n⚠ 以下のファイルが警告閾値({WARN_THRESHOLD}行)を超えています。\n  LLMがファイル全体をコンテキストに収めて正確に編集できるよう、モジュール分割を検討してください:\n{}",
             warnings.join("\n")
         );
     }
 
     assert!(
         errors.is_empty(),
-        "\n以下のファイルがエラー閾値({ERROR_THRESHOLD}行)を超えています。モジュール分割が必要です:\n{}\n",
+        "\n以下のファイルがエラー閾値({ERROR_THRESHOLD}行)を超えています。\nLLMがファイル全体をコンテキストに収められず正確な編集が困難になるため、モジュール分割が必要です:\n{}\n",
         errors.join("\n")
     );
 }
