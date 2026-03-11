@@ -4,7 +4,12 @@
       "Bash(git add:*)",
       "Bash(git submodule:*)",
       "Bash(mkdir -p /Users/riin/workspace/SDIT/.claude/Progresses)",
-      "Bash(cp /Users/riin/workspace/SDIT/.claude/Progress.md /Users/riin/workspace/SDIT/.claude/Progresses/2026-03-11-phase0-reference-reading.md)"
+      "Bash(cp /Users/riin/workspace/SDIT/.claude/Progress.md /Users/riin/workspace/SDIT/.claude/Progresses/2026-03-11-phase0-reference-reading.md)",
+      "Bash(rustc --version)",
+      "Bash(cargo --version)",
+      "Bash(cargo check:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo fmt:*)"
     ]
   }
 }
