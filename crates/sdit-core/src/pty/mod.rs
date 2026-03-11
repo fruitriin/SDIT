@@ -69,6 +69,20 @@ pub struct Pty {
 }
 
 impl Pty {
+    /// PTY の master fd をクローンして書き込み専用の `File` を返す。
+    ///
+    /// read スレッドと write スレッドを分離するために使用する。
+    /// クローンされた fd は同じ PTY master を指すため、
+    /// 一方で read、もう一方で write を同時に行える。
+    ///
+    /// # Errors
+    /// fd のクローンに失敗した場合にエラーを返す。
+    pub fn try_clone_writer(&self) -> Result<std::fs::File> {
+        use std::os::fd::AsFd;
+        let fd = self.pty.as_fd().try_clone_to_owned().map_err(PtyError::Io)?;
+        Ok(std::fs::File::from(fd))
+    }
+
     /// 新しい PTY を生成してシェルを起動する
     ///
     /// # Errors

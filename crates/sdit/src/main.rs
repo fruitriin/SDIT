@@ -1,4 +1,4 @@
-use std::io::{Read, Write as _};
+use std::io::Read;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -55,7 +55,10 @@ struct SditApp {
     pty_write_tx: Option<mpsc::SyncSender<Vec<u8>>>,
     /// PTY リーダースレッドのハンドル（Drop 時に join しない — フィールドに保持するだけ）。
     #[allow(clippy::used_underscore_binding)]
-    pty_thread: Option<JoinHandle<()>>,
+    _pty_reader_thread: Option<JoinHandle<()>>,
+    /// PTY ライタースレッドのハンドル。
+    #[allow(clippy::used_underscore_binding)]
+    _pty_writer_thread: Option<JoinHandle<()>>,
     /// winit modifier キーの状態。
     modifiers: winit::keyboard::ModifiersState,
     /// winit イベントループへのプロキシ（PTY リーダースレッドに渡す）。
@@ -74,7 +77,8 @@ impl SditApp {
             font_ctx: None,
             term_state: None,
             pty_write_tx: None,
-            pty_thread: None,
+            _pty_reader_thread: None,
+            _pty_writer_thread: None,
             modifiers: winit::keyboard::ModifiersState::empty(),
             event_proxy,
             smoke_test,
@@ -116,9 +120,18 @@ impl SditApp {
             }
         };
 
-        // ----- PTY リーダースレッドを起動 -----
+        // ----- PTY の writer fd をクローンして read/write スレッドを分離 -----
+        let pty_writer = match pty.try_clone_writer() {
+            Ok(w) => w,
+            Err(e) => {
+                log::error!("PTY writer clone failed: {e}");
+                return;
+            }
+        };
         let (pty_write_tx, pty_write_rx) = mpsc::sync_channel::<Vec<u8>>(64);
-        let pty_thread = spawn_pty_reader(pty, Arc::clone(&term_state), event_proxy, pty_write_rx);
+        let writer_event_proxy = event_proxy.clone();
+        let pty_reader_thread = spawn_pty_reader(pty, Arc::clone(&term_state), event_proxy);
+        let pty_writer_thread = spawn_pty_writer(pty_writer, pty_write_rx, writer_event_proxy);
 
         // ----- テクスチャアトラス -----
         let mut atlas = Atlas::new(&gpu.device, 512);
@@ -151,7 +164,8 @@ impl SditApp {
         self.cell_pipeline = Some(cell_pipeline);
         self.term_state = Some(term_state);
         self.pty_write_tx = Some(pty_write_tx);
-        self.pty_thread = Some(pty_thread);
+        self._pty_reader_thread = Some(pty_reader_thread);
+        self._pty_writer_thread = Some(pty_writer_thread);
     }
 
     /// PTY 出力があったときに Terminal の Grid から GPU バッファを更新する。
@@ -283,7 +297,9 @@ impl ApplicationHandler<SditEvent> for SditApp {
                     if let Some(bytes) = key_to_bytes(&key_event.logical_key, self.modifiers, mode)
                     {
                         if let Some(tx) = &self.pty_write_tx {
-                            let _ = tx.try_send(bytes);
+                            if let Err(e) = tx.try_send(bytes) {
+                                log::warn!("PTY write channel full or closed: {e}");
+                            }
                         }
                     }
                 }
@@ -337,28 +353,23 @@ impl ApplicationHandler<SditEvent> for SditApp {
 // PTY リーダースレッド
 // ---------------------------------------------------------------------------
 
+/// PTY からの読み取り専用スレッド。
+///
+/// PTY 出力を Terminal に流し、winit イベントループに再描画を通知する。
+/// 書き込みは別スレッド (`spawn_pty_writer`) で行うため、
+/// read のブロッキングが write をブロックしない。
 fn spawn_pty_reader(
     mut pty: Pty,
     term_state: Arc<Mutex<TerminalState>>,
     event_proxy: winit::event_loop::EventLoopProxy<SditEvent>,
-    pty_write_rx: mpsc::Receiver<Vec<u8>>,
 ) -> JoinHandle<()> {
     std::thread::Builder::new()
         .name("pty-reader".into())
         .spawn(move || {
             let mut buf = [0u8; 8192];
             loop {
-                // 書き込み要求があれば先に処理する。
-                while let Ok(data) = pty_write_rx.try_recv() {
-                    if let Err(e) = pty.write_all(&data) {
-                        log::error!("PTY write error: {e}");
-                    }
-                }
-
-                // PTY からの読み取り（ブロッキング with WouldBlock ハンドリング）。
                 match pty.read(&mut buf) {
                     Ok(0) => {
-                        // EOF: 子プロセス終了。
                         let _ = event_proxy.send_event(SditEvent::ChildExit(0));
                         break;
                     }
@@ -367,16 +378,12 @@ fn spawn_pty_reader(
                             let mut state = term_state
                                 .lock()
                                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-                            let bytes = &buf[..n];
-                            // processor と terminal を個別に借用するために
-                            // フィールドを明示的に分離して借用する。
                             let TerminalState { processor, terminal } = &mut *state;
-                            processor.advance(terminal, bytes);
+                            processor.advance(terminal, &buf[..n]);
                         }
                         let _ = event_proxy.send_event(SditEvent::PtyOutput);
                     }
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        // データなし: 少し待機してリトライ。
                         std::thread::sleep(std::time::Duration::from_millis(1));
                     }
                     Err(e) if e.raw_os_error() == Some(5) => {
@@ -389,6 +396,32 @@ fn spawn_pty_reader(
                         let _ = event_proxy.send_event(SditEvent::ChildExit(1));
                         break;
                     }
+                }
+            }
+        })
+        .unwrap()
+}
+
+/// PTY への書き込み専用スレッド。
+///
+/// GUI スレッドからのキー入力データをチャネル経由で受け取り、
+/// クローンした PTY master fd に書き込む。
+/// チャネルが閉じられたら（GUI 終了時）スレッドを終了する。
+fn spawn_pty_writer(
+    mut writer: std::fs::File,
+    pty_write_rx: mpsc::Receiver<Vec<u8>>,
+    event_proxy: winit::event_loop::EventLoopProxy<SditEvent>,
+) -> JoinHandle<()> {
+    std::thread::Builder::new()
+        .name("pty-writer".into())
+        .spawn(move || {
+            // recv() はチャネルが閉じられるまでブロッキングで待機する。
+            // GUI スレッドが pty_write_tx を drop すると RecvError で終了する。
+            while let Ok(data) = pty_write_rx.recv() {
+                if let Err(e) = std::io::Write::write_all(&mut writer, &data) {
+                    log::error!("PTY write error: {e}");
+                    let _ = event_proxy.send_event(SditEvent::ChildExit(1));
+                    break;
                 }
             }
         })

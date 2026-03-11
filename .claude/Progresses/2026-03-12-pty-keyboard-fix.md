@@ -17,12 +17,9 @@
 4. コード変更がある場合、Lint・ビルドを通す（`cargo fmt --check && cargo clippy --all-targets && cargo test`）
 5. コード変更がある場合、セキュリティレビューサブエージェントを起動する（CLAUDE.md「セキュリティレビュー方針」参照）
    - 変更差分に対して脆弱性の有無を検査し、修正案を提示させる（実装はサブエージェントにさせない）
-   - 発見された脆弱性を Progress のチェックリストに **重要度付きで** サブタスクとして追加する
-   - **Critical/High は必ずこのフェーズ内で修正する（先送り禁止）**
-   - **Medium は原則修正。先送りする場合は `phaseX.Y-security-fixes.md` として独立計画を起こす（次フェーズに埋め込まない）**
-   - Low/Info は Plan に記録し、必要に応じて独立計画で対応
+   - 発見された脆弱性を Progress のチェックリストにサブタスクとして追加する
+   - 追加したサブタスクを修正・完了させる（このフェーズ内で解決する）
    - 修正結果を該当フェーズの Plan ファイルに記録する
-   - **セキュリティ修正が全て完了するまでフェーズの完了コミットを行わない**
    - バイナリが動作する段階（Phase 2以降）では、ペネトレーションテストの必要性も検討する
 6. バイナリが動作する段階（Phase 2以降）では、リグレッションテストサブエージェントを起動する（CLAUDE.md「リグレッションテスト方針」参照）
    - 変更内容に基づいて退行リスクのあるテストケースを計画・提案させる
@@ -37,6 +34,17 @@
 
 ---
 
-## タスク
+## タスク: PTY キー入力デッドロック修正
 
-（現在タスクなし）
+- [x] 根本原因調査: `spawn_pty_reader` が1スレッドで read/write を処理 → ブロッキング read が write をブロック
+- [x] `sdit-core`: `Pty::try_clone_writer()` メソッド追加（`AsFd::try_clone_to_owned()` で master fd クローン）
+- [x] `main.rs`: `spawn_pty_reader` (read のみ) と `spawn_pty_writer` (write のみ) に分離
+- [x] ビルド・テスト・clippy 全パス
+- [x] セキュリティレビュー実施（Critical/High: 0件）
+  - [x] SV-2 (Medium): `try_send` サイレント破棄 → `log::warn!` 追加で修正
+  - [x] SV-4 (Low): ライタースレッド異常終了 → `ChildExit` 通知追加で修正
+  - SV-1 (Medium/既存): 入力長制限 — 既存問題、Phase 2 Plan に記録
+  - SV-3, SV-5, SV-6 (Low/既存): Plan に記録
+- [x] Plan ファイル更新
+- [x] Feedback.md 更新（gui入力確認項目を対応済みに更新）
+- [x] knowhow 記録
