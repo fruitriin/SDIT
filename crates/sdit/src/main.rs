@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, WindowEvent};
+use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key, ModifiersState, NamedKey};
 use winit::window::{Window, WindowId};
@@ -15,8 +15,8 @@ use sdit_core::pty::{Pty, PtyConfig, PtySize};
 use sdit_core::terminal::{TermMode, Terminal};
 use sdit_render::atlas::Atlas;
 use sdit_render::font::FontContext;
-use sdit_render::pipeline::{CellPipeline, GpuContext};
-use sdit_session::{Session, SessionId, SessionManager, SpawnParams, TerminalState};
+use sdit_render::pipeline::{CellPipeline, CellVertex, GpuContext};
+use sdit_session::{Session, SessionId, SessionManager, SidebarState, SpawnParams, TerminalState};
 
 // ---------------------------------------------------------------------------
 // カスタムイベント型
@@ -40,8 +40,33 @@ struct WindowState {
     window: Arc<Window>,
     gpu: GpuContext<'static>,
     cell_pipeline: CellPipeline,
+    /// サイドバー描画用パイプライン（表示中のみ使用）。
+    sidebar_pipeline: CellPipeline,
     atlas: Atlas,
-    session_id: SessionId,
+    /// このウィンドウに属するセッション群（タブ順序）。
+    sessions: Vec<SessionId>,
+    /// アクティブセッションのインデックス（`sessions` 内）。
+    active_index: usize,
+    /// サイドバー状態。
+    sidebar: SidebarState,
+}
+
+impl WindowState {
+    /// アクティブセッションの `SessionId` を返す。
+    ///
+    /// # Panics
+    ///
+    /// `sessions` が空、または `active_index` が範囲外の場合にパニックする。
+    /// 設計上 `sessions` は常に1つ以上のエントリを持つ不変条件が保証されている。
+    fn active_session_id(&self) -> SessionId {
+        debug_assert!(
+            self.active_index < self.sessions.len(),
+            "active_index ({}) out of bounds (sessions.len() = {})",
+            self.active_index,
+            self.sessions.len(),
+        );
+        self.sessions[self.active_index]
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +90,10 @@ struct SditApp {
     smoke_test: bool,
     /// 初回 resumed で最初のウィンドウを作成済みか。
     initialized: bool,
+    /// マウスカーソルの現在位置（物理ピクセル）。
+    cursor_position: Option<(f64, f64)>,
+    /// サイドバー内ドラッグの開始行インデックス。
+    drag_source_row: Option<usize>,
 }
 
 impl SditApp {
@@ -78,40 +107,15 @@ impl SditApp {
             event_proxy,
             smoke_test,
             initialized: false,
+            cursor_position: None,
+            drag_source_row: None,
         }
     }
 
-    /// 新しいウィンドウ + セッションを生成する。
-    fn create_window(&mut self, event_loop: &ActiveEventLoop) {
-        let attrs = Window::default_attributes()
-            .with_title("SDIT")
-            .with_inner_size(winit::dpi::LogicalSize::new(800.0_f64, 600.0_f64));
-
-        let window = match event_loop.create_window(attrs) {
-            Ok(w) => Arc::new(w),
-            Err(e) => {
-                log::error!("Window creation failed: {e}");
-                return;
-            }
-        };
-
-        let gpu = match GpuContext::new(&window) {
-            Ok(g) => g,
-            Err(e) => {
-                log::error!("GPU context creation failed: {e}");
-                return;
-            }
-        };
-
-        let metrics = *self.font_ctx.metrics();
-        let (cols, rows) = calc_grid_size(
-            gpu.surface_config.width as f32,
-            gpu.surface_config.height as f32,
-            metrics.cell_width,
-            metrics.cell_height,
-        );
-
-        // --- Session 生成 ---
+    /// 新しいセッションを生成して `SessionManager` に登録する。
+    ///
+    /// GPU パイプラインの初期化は行わない（呼び出し側で描画を更新する）。
+    fn spawn_session(&mut self, rows: usize, cols: usize) -> Option<SessionId> {
         let session_id = self.session_mgr.next_id();
         let pty_size = PtySize::new(rows.try_into().unwrap_or(24), cols.try_into().unwrap_or(80));
         let mut pty_config = PtyConfig::default();
@@ -148,9 +152,49 @@ impl SditApp {
             Ok(s) => s,
             Err(e) => {
                 log::error!("Session spawn failed: {e}");
+                return None;
+            }
+        };
+
+        self.session_mgr.insert(session);
+        Some(session_id)
+    }
+
+    /// 新しいウィンドウ + セッションを生成する。
+    fn create_window(&mut self, event_loop: &ActiveEventLoop) {
+        let attrs = Window::default_attributes()
+            .with_title("SDIT")
+            .with_inner_size(winit::dpi::LogicalSize::new(800.0_f64, 600.0_f64));
+
+        let window = match event_loop.create_window(attrs) {
+            Ok(w) => Arc::new(w),
+            Err(e) => {
+                log::error!("Window creation failed: {e}");
                 return;
             }
         };
+
+        let gpu = match GpuContext::new(&window) {
+            Ok(g) => g,
+            Err(e) => {
+                log::error!("GPU context creation failed: {e}");
+                return;
+            }
+        };
+
+        let metrics = *self.font_ctx.metrics();
+        let (cols, rows) = calc_grid_size(
+            gpu.surface_config.width as f32,
+            gpu.surface_config.height as f32,
+            metrics.cell_width,
+            metrics.cell_height,
+        );
+
+        // --- Session 生成 ---
+        let Some(session_id) = self.spawn_session(rows, cols) else {
+            return;
+        };
+        let session = self.session_mgr.get(session_id).unwrap();
 
         // --- GPU パイプライン初期化 ---
         let mut atlas = Atlas::new(&gpu.device, 512);
@@ -176,30 +220,250 @@ impl SditApp {
 
         atlas.upload_if_dirty(&gpu.queue);
 
+        // サイドバーパイプライン（初期容量は小さく）
+        let sidebar_pipeline =
+            CellPipeline::new(&gpu.device, gpu.surface_config.format, &atlas, 100);
+
         // --- 登録 ---
         let window_id = window.id();
         self.session_to_window.insert(session_id, window_id);
-        self.session_mgr.insert(session);
-        self.windows
-            .insert(window_id, WindowState { window, gpu, cell_pipeline, atlas, session_id });
+        self.windows.insert(
+            window_id,
+            WindowState {
+                window,
+                gpu,
+                cell_pipeline,
+                sidebar_pipeline,
+                atlas,
+                sessions: vec![session_id],
+                active_index: 0,
+                sidebar: SidebarState::new(),
+            },
+        );
 
         log::info!("Created window {window_id:?} with session {}", session_id.0);
     }
 
-    /// 指定ウィンドウとそのセッションを閉じる。
+    /// 既存ウィンドウに新しいセッションを追加する。
+    fn add_session_to_window(&mut self, window_id: WindowId) {
+        let Some(ws) = self.windows.get(&window_id) else { return };
+        let metrics = *self.font_ctx.metrics();
+        let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+        let term_width = (ws.gpu.surface_config.width as f32 - sidebar_w).max(0.0);
+        let (cols, rows) = calc_grid_size(
+            term_width,
+            ws.gpu.surface_config.height as f32,
+            metrics.cell_width,
+            metrics.cell_height,
+        );
+
+        let Some(session_id) = self.spawn_session(rows, cols) else {
+            return;
+        };
+
+        self.session_to_window.insert(session_id, window_id);
+
+        let ws = self.windows.get_mut(&window_id).unwrap();
+        ws.sessions.push(session_id);
+        ws.active_index = ws.sessions.len() - 1;
+        ws.sidebar.auto_update(ws.sessions.len());
+
+        log::info!(
+            "Added session {} to window {window_id:?} (total: {})",
+            session_id.0,
+            ws.sessions.len()
+        );
+
+        // 新しいアクティブセッションで再描画
+        self.redraw_session(session_id);
+    }
+
+    /// アクティブセッションを閉じる。最後の1つならウィンドウごと閉じる。
+    fn remove_active_session(&mut self, window_id: WindowId) -> bool {
+        let Some(ws) = self.windows.get(&window_id) else {
+            return false;
+        };
+
+        if ws.sessions.len() <= 1 {
+            // 最後のセッション → ウィンドウごと閉じる
+            self.close_window(window_id);
+            return true;
+        }
+
+        let removed_sid = ws.active_session_id();
+        let ws = self.windows.get_mut(&window_id).unwrap();
+        ws.sessions.remove(ws.active_index);
+        if ws.active_index >= ws.sessions.len() {
+            ws.active_index = ws.sessions.len() - 1;
+        }
+        ws.sidebar.auto_update(ws.sessions.len());
+
+        self.session_to_window.remove(&removed_sid);
+        self.session_mgr.remove(removed_sid);
+
+        log::info!("Removed session {} from window {window_id:?}", removed_sid.0);
+
+        // 新しいアクティブセッションで再描画
+        let new_active = self.windows.get(&window_id).unwrap().active_session_id();
+        self.redraw_session(new_active);
+        false
+    }
+
+    /// アクティブセッションを切り替える（+1 で次、-1 で前）。
+    #[allow(clippy::cast_possible_wrap)]
+    fn switch_session(&mut self, window_id: WindowId, direction: i32) {
+        let Some(ws) = self.windows.get_mut(&window_id) else { return };
+        if ws.sessions.len() <= 1 {
+            return;
+        }
+
+        let len = ws.sessions.len() as i32;
+        let new_index = ((ws.active_index as i32 + direction) % len + len) % len;
+        ws.active_index = new_index as usize;
+
+        let sid = ws.active_session_id();
+        log::info!("Switched to session {} in window {window_id:?}", sid.0);
+
+        self.redraw_session(sid);
+    }
+
+    /// 指定ウィンドウとそのセッション群を閉じる。
     fn close_window(&mut self, window_id: WindowId) {
         if let Some(ws) = self.windows.remove(&window_id) {
-            let sid = ws.session_id;
-            self.session_to_window.remove(&sid);
-            self.session_mgr.remove(sid);
-            log::info!("Closed window {window_id:?}, session {}", sid.0);
+            for &sid in &ws.sessions {
+                self.session_to_window.remove(&sid);
+                self.session_mgr.remove(sid);
+            }
+            log::info!(
+                "Closed window {window_id:?}, sessions {:?}",
+                ws.sessions.iter().map(|s| s.0).collect::<Vec<_>>()
+            );
         }
     }
 
+    /// アクティブセッションを新しいウィンドウに切り出す（PTY は維持）。
+    ///
+    /// セッションが1つしかない場合は何もしない（切出す意味がない）。
+    fn detach_session_to_new_window(
+        &mut self,
+        source_window_id: WindowId,
+        event_loop: &ActiveEventLoop,
+    ) {
+        let Some(ws) = self.windows.get(&source_window_id) else { return };
+        if ws.sessions.len() <= 1 {
+            return; // 最後の1つは切り出せない
+        }
+
+        let detach_sid = ws.active_session_id();
+        let original_index = ws.active_index;
+
+        // 元ウィンドウからセッションを除去
+        let ws = self.windows.get_mut(&source_window_id).unwrap();
+        ws.sessions.remove(ws.active_index);
+        if ws.active_index >= ws.sessions.len() {
+            ws.active_index = ws.sessions.len().saturating_sub(1);
+        }
+        ws.sidebar.auto_update(ws.sessions.len());
+
+        // ロールバック用のクロージャ的マクロ（元の位置に復元）
+        macro_rules! rollback {
+            () => {{
+                let ws = self.windows.get_mut(&source_window_id).unwrap();
+                ws.sessions.insert(original_index, detach_sid);
+                ws.active_index = original_index;
+                ws.sidebar.auto_update(ws.sessions.len());
+            }};
+        }
+
+        // 新しいウィンドウを作成
+        let attrs = Window::default_attributes()
+            .with_title("SDIT")
+            .with_inner_size(winit::dpi::LogicalSize::new(800.0_f64, 600.0_f64));
+
+        let new_window = match event_loop.create_window(attrs) {
+            Ok(w) => Arc::new(w),
+            Err(e) => {
+                log::error!("Window creation failed for detach: {e}");
+                rollback!();
+                return;
+            }
+        };
+
+        let gpu = match GpuContext::new(&new_window) {
+            Ok(g) => g,
+            Err(e) => {
+                log::error!("GPU context creation failed for detach: {e}");
+                rollback!();
+                return;
+            }
+        };
+
+        let metrics = *self.font_ctx.metrics();
+        let atlas = Atlas::new(&gpu.device, 512);
+        let cell_pipeline =
+            CellPipeline::new(&gpu.device, gpu.surface_config.format, &atlas, 80 * 24);
+        let sidebar_pipeline =
+            CellPipeline::new(&gpu.device, gpu.surface_config.format, &atlas, 100);
+
+        let new_window_id = new_window.id();
+
+        // 新ウィンドウにセッションを登録
+        self.session_to_window.insert(detach_sid, new_window_id);
+        self.windows.insert(
+            new_window_id,
+            WindowState {
+                window: new_window,
+                gpu,
+                cell_pipeline,
+                sidebar_pipeline,
+                atlas,
+                sessions: vec![detach_sid],
+                active_index: 0,
+                sidebar: SidebarState::new(),
+            },
+        );
+
+        // 新ウィンドウのサイズに合わせて Terminal + PTY をリサイズ
+        let new_ws = self.windows.get(&new_window_id).unwrap();
+        let (cols, rows) = calc_grid_size(
+            new_ws.gpu.surface_config.width as f32,
+            new_ws.gpu.surface_config.height as f32,
+            metrics.cell_width,
+            metrics.cell_height,
+        );
+        if let Some(session) = self.session_mgr.get(detach_sid) {
+            let mut state =
+                session.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            state.terminal.resize(rows, cols);
+            drop(state);
+            let pty_size =
+                PtySize::new(rows.try_into().unwrap_or(24), cols.try_into().unwrap_or(80));
+            session.resize_pty(pty_size);
+        }
+
+        log::info!(
+            "Detached session {} from {source_window_id:?} to new window {new_window_id:?}",
+            detach_sid.0
+        );
+
+        // 両ウィンドウを再描画
+        let source_active = self.windows.get(&source_window_id).unwrap().active_session_id();
+        self.redraw_session(source_active);
+        self.redraw_session(detach_sid);
+    }
+
     /// PTY 出力があったときに Terminal の Grid から GPU バッファを更新する。
+    ///
+    /// 非アクティブセッションの出力は描画をスキップする（Terminal には蓄積される）。
     fn redraw_session(&mut self, session_id: SessionId) {
         let Some(&window_id) = self.session_to_window.get(&session_id) else { return };
         let Some(ws) = self.windows.get_mut(&window_id) else { return };
+
+        // 非アクティブセッションの出力は描画しない
+        if ws.active_session_id() != session_id {
+            return;
+        }
+
         let Some(session) = self.session_mgr.get(session_id) else { return };
 
         let metrics = *self.font_ctx.metrics();
@@ -208,11 +472,16 @@ impl SditApp {
             [ws.gpu.surface_config.width as f32, ws.gpu.surface_config.height as f32];
         let atlas_size_f32 = ws.atlas.size() as f32;
 
+        // サイドバー表示中はターミナル描画を右にオフセット
+        let sidebar_width_px = ws.sidebar.width_px(metrics.cell_width);
+
         let state_lock =
             session.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let grid = state_lock.terminal.grid();
 
-        let needed = grid.screen_lines() * grid.columns();
+        let grid_rows = grid.screen_lines();
+        let grid_cols = grid.columns();
+        let needed = grid_rows * grid_cols;
         ws.cell_pipeline.ensure_capacity(&ws.gpu.device, needed);
 
         ws.cell_pipeline.update_from_grid(
@@ -226,29 +495,71 @@ impl SditApp {
         );
         drop(state_lock);
 
+        // ターミナルパイプラインの origin_x を設定
+        let rows_f32 = grid_rows as f32;
+        let cols_f32 = grid_cols as f32;
+        ws.cell_pipeline.update_uniforms(
+            &ws.gpu.queue,
+            cell_size,
+            [cols_f32, rows_f32],
+            surface_size,
+            atlas_size_f32,
+            sidebar_width_px,
+        );
+
+        // サイドバー描画
+        if ws.sidebar.visible {
+            let sidebar_cells = build_sidebar_cells(
+                &ws.sessions,
+                ws.active_index,
+                &ws.sidebar,
+                &metrics,
+                surface_size,
+                &mut self.font_ctx,
+                &mut ws.atlas,
+            );
+            let sidebar_rows = (surface_size[1] / metrics.cell_height).floor().max(1.0) as usize;
+            ws.sidebar_pipeline.ensure_capacity(&ws.gpu.device, sidebar_cells.len());
+            ws.sidebar_pipeline.update_cells(&ws.gpu.queue, &sidebar_cells);
+            ws.sidebar_pipeline.update_uniforms(
+                &ws.gpu.queue,
+                cell_size,
+                [ws.sidebar.width_cells as f32, sidebar_rows as f32],
+                surface_size,
+                atlas_size_f32,
+                0.0, // サイドバー自体は origin_x = 0
+            );
+        }
+
         ws.atlas.upload_if_dirty(&ws.gpu.queue);
         ws.window.request_redraw();
     }
 
     /// ウィンドウリサイズ時に GPU・Terminal を更新する。
+    ///
+    /// 全セッションの Terminal と PTY をリサイズする。
     fn handle_resize(&mut self, window_id: WindowId, width: u32, height: u32) {
         let Some(ws) = self.windows.get_mut(&window_id) else { return };
         ws.gpu.resize(width, height);
 
         let metrics = *self.font_ctx.metrics();
+        let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+        let term_width = (width as f32 - sidebar_w).max(0.0);
         let (cols, rows) =
-            calc_grid_size(width as f32, height as f32, metrics.cell_width, metrics.cell_height);
+            calc_grid_size(term_width, height as f32, metrics.cell_width, metrics.cell_height);
 
-        if let Some(session) = self.session_mgr.get(ws.session_id) {
-            let mut state =
-                session.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-            state.terminal.resize(rows, cols);
-            drop(state);
+        let session_ids: Vec<SessionId> = ws.sessions.clone();
+        for sid in session_ids {
+            if let Some(session) = self.session_mgr.get(sid) {
+                let mut state =
+                    session.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                state.terminal.resize(rows, cols);
+                drop(state);
 
-            // PTY にもリサイズを通知して SIGWINCH を送る。
-            let pty_size =
-                PtySize::new(rows.try_into().unwrap_or(24), cols.try_into().unwrap_or(80));
-            session.resize_pty(pty_size);
+                let pty_size =
+                    PtySize::new(rows.try_into().unwrap_or(24), cols.try_into().unwrap_or(80));
+                session.resize_pty(pty_size);
+            }
         }
     }
 }
@@ -266,6 +577,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
         self.create_window(event_loop);
     }
 
+    #[allow(clippy::too_many_lines)]
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
@@ -277,9 +589,9 @@ impl ApplicationHandler<SditEvent> for SditApp {
 
             WindowEvent::Resized(size) => {
                 self.handle_resize(id, size.width, size.height);
-                // リサイズ後に再描画
+                // リサイズ後にアクティブセッションを再描画
                 if let Some(ws) = self.windows.get(&id) {
-                    let sid = ws.session_id;
+                    let sid = ws.active_session_id();
                     self.redraw_session(sid);
                 }
             }
@@ -290,14 +602,56 @@ impl ApplicationHandler<SditEvent> for SditApp {
 
             WindowEvent::KeyboardInput { event: key_event, .. } => {
                 if key_event.state == ElementState::Pressed {
+                    // Cmd+Shift+N (macOS) でアクティブセッションを新ウィンドウに切出し
+                    if is_detach_session_shortcut(&key_event.logical_key, self.modifiers) {
+                        self.detach_session_to_new_window(id, event_loop);
+                        return;
+                    }
+
                     // Cmd+N (macOS) / Ctrl+Shift+N で新規ウィンドウ
                     if is_new_window_shortcut(&key_event.logical_key, self.modifiers) {
                         self.create_window(event_loop);
                         return;
                     }
 
+                    // Cmd+\ (macOS) / Ctrl+\ でサイドバートグル
+                    if is_sidebar_toggle_shortcut(&key_event.logical_key, self.modifiers) {
+                        if let Some(ws) = self.windows.get_mut(&id) {
+                            ws.sidebar.toggle();
+                            let sid = ws.active_session_id();
+                            self.redraw_session(sid);
+                        }
+                        return;
+                    }
+
+                    // Cmd+T (macOS) / Ctrl+Shift+T で同一ウィンドウに新規セッション追加
+                    if is_add_session_shortcut(&key_event.logical_key, self.modifiers) {
+                        self.add_session_to_window(id);
+                        return;
+                    }
+
+                    // Cmd+W (macOS) / Ctrl+Shift+W でアクティブセッションを閉じる
+                    if is_close_session_shortcut(&key_event.logical_key, self.modifiers) {
+                        let window_closed = self.remove_active_session(id);
+                        if window_closed && self.windows.is_empty() {
+                            event_loop.exit();
+                        }
+                        return;
+                    }
+
+                    // Ctrl+Tab / Cmd+Shift+] で次のセッション
+                    // Ctrl+Shift+Tab / Cmd+Shift+[ で前のセッション
+                    if let Some(dir) =
+                        session_switch_direction(&key_event.logical_key, self.modifiers)
+                    {
+                        self.switch_session(id, dir);
+                        return;
+                    }
+
                     let Some(ws) = self.windows.get(&id) else { return };
-                    let Some(session) = self.session_mgr.get(ws.session_id) else { return };
+                    let Some(session) = self.session_mgr.get(ws.active_session_id()) else {
+                        return;
+                    };
 
                     let mode = session
                         .term_state
@@ -315,9 +669,82 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 }
             }
 
+            WindowEvent::CursorMoved { position, .. } => {
+                self.cursor_position = Some((position.x, position.y));
+
+                // ドラッグ中: サイドバー内で行が変わったらタブ順序を入れ替え
+                if let Some(drag_row) = self.drag_source_row {
+                    if let Some(ws) = self.windows.get_mut(&id) {
+                        let metrics = *self.font_ctx.metrics();
+                        if let Some(target_row) = ws.sidebar.hit_test(
+                            position.y as f32,
+                            metrics.cell_height,
+                            ws.sessions.len(),
+                        ) {
+                            if target_row != drag_row {
+                                ws.sessions.swap(drag_row, target_row);
+                                // active_index を追従させる
+                                if ws.active_index == drag_row {
+                                    ws.active_index = target_row;
+                                } else if ws.active_index == target_row {
+                                    ws.active_index = drag_row;
+                                }
+                                self.drag_source_row = Some(target_row);
+                                let sid = ws.active_session_id();
+                                self.redraw_session(sid);
+                            }
+                        }
+                    }
+                }
+            }
+
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                ..
+            } => {
+                if let Some((x, y)) = self.cursor_position {
+                    if let Some(ws) = self.windows.get(&id) {
+                        let metrics = *self.font_ctx.metrics();
+                        let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+                        // サイドバー領域内のクリック
+                        if ws.sidebar.visible && (x as f32) < sidebar_w {
+                            if let Some(row) = ws.sidebar.hit_test(
+                                y as f32,
+                                metrics.cell_height,
+                                ws.sessions.len(),
+                            ) {
+                                // ドラッグ開始を記録
+                                self.drag_source_row = Some(row);
+                                // クリックでセッション切替
+                                if row != ws.active_index {
+                                    let ws = self.windows.get_mut(&id).unwrap();
+                                    ws.active_index = row;
+                                    let sid = ws.active_session_id();
+                                    self.redraw_session(sid);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            WindowEvent::MouseInput {
+                state: ElementState::Released,
+                button: MouseButton::Left,
+                ..
+            } => {
+                self.drag_source_row = None;
+            }
+
             WindowEvent::RedrawRequested => {
                 let Some(ws) = self.windows.get(&id) else { return };
-                match ws.gpu.render_frame(Some(&ws.cell_pipeline)) {
+                let pipelines: Vec<&CellPipeline> = if ws.sidebar.visible {
+                    vec![&ws.sidebar_pipeline, &ws.cell_pipeline]
+                } else {
+                    vec![&ws.cell_pipeline]
+                };
+                match ws.gpu.render_frame(&pipelines) {
                     Ok(()) => {}
                     Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
                         if let Some(ws) = self.windows.get_mut(&id) {
@@ -347,7 +774,32 @@ impl ApplicationHandler<SditEvent> for SditApp {
             SditEvent::ChildExit(session_id, code) => {
                 log::info!("Session {} child exited with code {code}", session_id.0);
                 if let Some(&window_id) = self.session_to_window.get(&session_id) {
-                    self.close_window(window_id);
+                    let is_only_session =
+                        self.windows.get(&window_id).is_none_or(|ws| ws.sessions.len() <= 1);
+
+                    if is_only_session {
+                        self.close_window(window_id);
+                    } else {
+                        // 複数セッションがある場合、終了したセッションだけ除去
+                        // 削除順序: ws.sessions → session_to_window → session_mgr
+                        if let Some(ws) = self.windows.get_mut(&window_id) {
+                            if let Some(pos) = ws.sessions.iter().position(|&s| s == session_id) {
+                                ws.sessions.remove(pos);
+                                if ws.active_index >= ws.sessions.len() {
+                                    ws.active_index = ws.sessions.len().saturating_sub(1);
+                                }
+                                ws.sidebar.auto_update(ws.sessions.len());
+                            }
+                        }
+                        self.session_to_window.remove(&session_id);
+                        self.session_mgr.remove(session_id);
+                        if let Some(ws) = self.windows.get(&window_id) {
+                            if !ws.sessions.is_empty() {
+                                let new_active = ws.active_session_id();
+                                self.redraw_session(new_active);
+                            }
+                        }
+                    }
                 }
                 if self.windows.is_empty() {
                     event_loop.exit();
@@ -365,6 +817,31 @@ impl ApplicationHandler<SditEvent> for SditApp {
 // 新規ウィンドウショートカット判定
 // ---------------------------------------------------------------------------
 
+/// Cmd+\ (macOS) または Ctrl+\ でのサイドバートグルかどうか。
+fn is_sidebar_toggle_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
+    let is_backslash = matches!(key, Key::Character(s) if s.as_str() == "\\" || s.as_str() == "|");
+    if !is_backslash {
+        return false;
+    }
+    if cfg!(target_os = "macos") && modifiers.super_key() {
+        return true;
+    }
+    modifiers.control_key()
+}
+
+/// Cmd+Shift+N (macOS) でのセッション切出しショートカットかどうか。
+fn is_detach_session_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
+    let is_n = matches!(key, Key::Character(s) if s.as_str() == "n" || s.as_str() == "N");
+    if !is_n {
+        return false;
+    }
+    // macOS: Cmd+Shift+N
+    if cfg!(target_os = "macos") && modifiers.super_key() && modifiers.shift_key() {
+        return true;
+    }
+    false
+}
+
 /// Cmd+N (macOS) または Ctrl+Shift+N でのウィンドウ生成ショートカットかどうか。
 fn is_new_window_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
     let is_n = matches!(key, Key::Character(s) if s.as_str() == "n" || s.as_str() == "N");
@@ -380,6 +857,57 @@ fn is_new_window_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
         return true;
     }
     false
+}
+
+/// Cmd+T (macOS) または Ctrl+Shift+T でのセッション追加ショートカットかどうか。
+fn is_add_session_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
+    let is_t = matches!(key, Key::Character(s) if s.as_str() == "t" || s.as_str() == "T");
+    if !is_t {
+        return false;
+    }
+    if cfg!(target_os = "macos") && modifiers.super_key() && !modifiers.shift_key() {
+        return true;
+    }
+    modifiers.control_key() && modifiers.shift_key()
+}
+
+/// Cmd+W (macOS) または Ctrl+Shift+W でのセッション閉じショートカットかどうか。
+fn is_close_session_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
+    let is_w = matches!(key, Key::Character(s) if s.as_str() == "w" || s.as_str() == "W");
+    if !is_w {
+        return false;
+    }
+    if cfg!(target_os = "macos") && modifiers.super_key() && !modifiers.shift_key() {
+        return true;
+    }
+    modifiers.control_key() && modifiers.shift_key()
+}
+
+/// セッション切替ショートカット。次: +1、前: -1 を返す。
+fn session_switch_direction(key: &Key, modifiers: ModifiersState) -> Option<i32> {
+    match key {
+        // Ctrl+Tab → 次、Ctrl+Shift+Tab → 前
+        Key::Named(NamedKey::Tab) if modifiers.control_key() => {
+            Some(if modifiers.shift_key() { -1 } else { 1 })
+        }
+        // Cmd+Shift+] → 次（macOS）
+        Key::Character(s) if s.as_str() == "]" || s.as_str() == "}" => {
+            if cfg!(target_os = "macos") && modifiers.super_key() && modifiers.shift_key() {
+                Some(1)
+            } else {
+                None
+            }
+        }
+        // Cmd+Shift+[ → 前（macOS）
+        Key::Character(s) if s.as_str() == "[" || s.as_str() == "{" => {
+            if cfg!(target_os = "macos") && modifiers.super_key() && modifiers.shift_key() {
+                Some(-1)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -540,6 +1068,78 @@ fn calc_grid_size(
     let cols = if cell_width > 0.0 { (surface_width / cell_width).floor() as usize } else { 80 };
     let rows = if cell_height > 0.0 { (surface_height / cell_height).floor() as usize } else { 24 };
     (cols.max(1), rows.max(1))
+}
+
+/// サイドバー用の `CellVertex` 列を生成する。
+///
+/// 各セッションに1行を割り当て、アクティブセッションをハイライトする。
+fn build_sidebar_cells(
+    sessions: &[SessionId],
+    active_index: usize,
+    sidebar: &SidebarState,
+    metrics: &sdit_render::font::CellMetrics,
+    surface_size: [f32; 2],
+    font_ctx: &mut FontContext,
+    atlas: &mut Atlas,
+) -> Vec<CellVertex> {
+    let width = sidebar.width_cells;
+    let total_rows = (surface_size[1] / metrics.cell_height).floor().max(1.0) as usize;
+    let atlas_size = atlas.size() as f32;
+
+    // Catppuccin Mocha カラー
+    let sidebar_bg = [0x31 as f32 / 255.0, 0x32 as f32 / 255.0, 0x44 as f32 / 255.0, 1.0]; // Surface0
+    let active_bg = [0x45 as f32 / 255.0, 0x47 as f32 / 255.0, 0x5a as f32 / 255.0, 1.0]; // Surface1
+    let fg_color = [0xcd as f32 / 255.0, 0xd6 as f32 / 255.0, 0xf4 as f32 / 255.0, 1.0]; // Text
+    let dim_fg = [0x6c as f32 / 255.0, 0x70 as f32 / 255.0, 0x86 as f32 / 255.0, 1.0]; // Overlay0
+
+    let mut cells = Vec::with_capacity(total_rows * width);
+
+    for row in 0..total_rows {
+        let is_session_row = row < sessions.len();
+        let is_active = is_session_row && row == active_index;
+        let bg = if is_active { active_bg } else { sidebar_bg };
+        let fg = if is_session_row { fg_color } else { dim_fg };
+
+        // セッション名を生成（例: "> Session 0" or "  Session 1"）
+        let label = if is_session_row {
+            let prefix = if is_active { "> " } else { "  " };
+            format!("{prefix}Session {}", sessions[row].0)
+        } else {
+            String::new()
+        };
+        let label_chars: Vec<char> = label.chars().collect();
+
+        for col in 0..width {
+            let ch = label_chars.get(col).copied().unwrap_or(' ');
+
+            let (uv, glyph_offset, glyph_size) =
+                if let Some(entry) = font_ctx.rasterize_glyph(ch, atlas) {
+                    let r = entry.region;
+                    let uv = [
+                        r.x as f32 / atlas_size,
+                        r.y as f32 / atlas_size,
+                        (r.x + r.width) as f32 / atlas_size,
+                        (r.y + r.height) as f32 / atlas_size,
+                    ];
+                    let offset = [entry.placement_left as f32, entry.placement_top as f32];
+                    let size = [r.width as f32, r.height as f32];
+                    (uv, offset, size)
+                } else {
+                    ([0.0_f32; 4], [0.0_f32; 2], [0.0_f32; 2])
+                };
+
+            cells.push(CellVertex {
+                bg,
+                fg,
+                grid_pos: [col as f32, row as f32],
+                uv,
+                glyph_offset,
+                glyph_size,
+            });
+        }
+    }
+
+    cells
 }
 
 // ---------------------------------------------------------------------------

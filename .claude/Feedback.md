@@ -28,3 +28,4 @@
 - Phase 2 セキュリティ Low は各 Plan に記録済み（独立計画不要）
 - Phase 2.5 セキュリティ Low L-1〜L-4 は `docs/plans/phase2.5-integration-testing.md` に記録済み
 - Phase 2.6 セキュリティ Low L-1〜L-3 / Info I-1〜I-3 は `docs/plans/phase2.6-security-fixes.md` に記録済み
+- Phase 4 セキュリティ Medium M-1〜M-3 修正済み、Low/Info は `docs/plans/phase4-session-sidebar.md` に記録済み

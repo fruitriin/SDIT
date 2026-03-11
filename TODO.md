@@ -3,7 +3,7 @@
 `docs/plans/` の完了状態・優先度をトラックする。
 `docs/plans/` と TODO が一致しなければ TODO を編集する。
 
-## 現在のフェーズ: Phase 4 — 縦タブ（SessionSidebar）
+## 現在のフェーズ: Phase 5 — 設定・仕上げ
 
 ## バックログ
 
@@ -17,5 +17,5 @@
 | done | 2.7 | `docs/plans/phase2.7-test-smell-fixes.md` | **完了** |
 | done | 3 | `docs/plans/phase3-sdi-multi-window.md` | **完了** |
 | done | 3.1 | `docs/plans/phase3.1-security-fixes.md` | **完了** |
-| **next** | 4 | `docs/plans/phase4-session-sidebar.md` | 未着手 |
-| later | 5 | `docs/plans/phase5-config-polish.md` | 未着手 |
+| done | 4 | `docs/plans/phase4-session-sidebar.md` | **完了** |
+| **now** | 5 | `docs/plans/phase5-config-polish.md` | 未着手 |

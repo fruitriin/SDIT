@@ -87,11 +87,9 @@ impl GpuContext<'_> {
 
     /// フレームを1枚レンダリングして present する。
     ///
-    /// `cell_pipeline` が `Some` の場合はセルパイプラインも実行する。
-    pub fn render_frame(
-        &self,
-        cell_pipeline: Option<&CellPipeline>,
-    ) -> Result<(), wgpu::SurfaceError> {
+    /// `pipelines` 内の各パイプラインを順番に描画する。
+    /// サイドバー + ターミナルの2パス描画に対応。
+    pub fn render_frame(&self, pipelines: &[&CellPipeline]) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -121,7 +119,7 @@ impl GpuContext<'_> {
                 occlusion_query_set: None,
             });
 
-            if let Some(cp) = cell_pipeline {
+            for cp in pipelines {
                 if cp.cell_count > 0 {
                     pass.set_pipeline(&cp.pipeline);
                     pass.set_bind_group(0, &cp.bind_group, &[]);
@@ -190,7 +188,8 @@ struct Uniforms {
     grid_size: [f32; 2],
     surface_size: [f32; 2],
     atlas_size: f32,
-    _padding: f32,
+    /// 描画開始 X オフセット（ピクセル）。サイドバー分のオフセットに使用。
+    origin_x: f32,
 }
 
 // ---------------------------------------------------------------------------
@@ -380,8 +379,9 @@ impl CellPipeline {
         grid_size: [f32; 2],
         surface_size: [f32; 2],
         atlas_size: f32,
+        origin_x: f32,
     ) {
-        let uniforms = Uniforms { cell_size, grid_size, surface_size, atlas_size, _padding: 0.0 };
+        let uniforms = Uniforms { cell_size, grid_size, surface_size, atlas_size, origin_x };
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
     }
 
@@ -400,13 +400,15 @@ impl CellPipeline {
         let rows = grid.screen_lines();
         let cols = grid.columns();
 
-        // Uniforms を更新。
+        // Uniforms を更新。origin_x は呼び出し側で設定する場合もあるが、
+        // update_from_grid では常に 0.0（サイドバーオフセットなし）を使用する。
         self.update_uniforms(
             queue,
             cell_size,
             [cols as f32, rows as f32],
             surface_size,
             atlas_size,
+            0.0,
         );
 
         let mut vertices: Vec<CellVertex> = Vec::with_capacity(rows * cols);
@@ -456,6 +458,17 @@ impl CellPipeline {
         let count = vertices.len();
         if count > 0 {
             queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&vertices));
+        }
+        self.cell_count = count as u32;
+    }
+
+    /// 生の `CellVertex` 列から頂点バッファを更新する。
+    ///
+    /// サイドバー等、Grid を介さないカスタム描画に使用する。
+    pub fn update_cells(&mut self, queue: &wgpu::Queue, cells: &[CellVertex]) {
+        let count = cells.len();
+        if count > 0 {
+            queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(cells));
         }
         self.cell_count = count as u32;
     }

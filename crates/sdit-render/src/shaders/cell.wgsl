@@ -16,7 +16,8 @@ struct Uniforms {
     surface_size: vec2<f32>,
     /// アトラステクスチャの一辺（ピクセル）
     atlas_size: f32,
-    _padding: f32,
+    /// 描画開始 X オフセット（ピクセル）。サイドバー分のオフセットに使用。
+    origin_x: f32,
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -91,8 +92,8 @@ fn vs_main(
     // セル内ローカル座標（ピクセル）。
     let local = corner * u.cell_size;
 
-    // スクリーン座標（Y は下向きが正）。
-    let screen = cell_px + local;
+    // スクリーン座標（Y は下向きが正）。origin_x でサイドバー分オフセット。
+    let screen = cell_px + local + vec2<f32>(u.origin_x, 0.0);
 
     // クリップ空間に変換（-1..+1, Y 反転）。
     let clip = vec2<f32>(
