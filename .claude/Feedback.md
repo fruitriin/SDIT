@@ -17,7 +17,5 @@
 
 ## 改善アクション
 
-- Phase 2 セキュリティ Low は `docs/plans/phase2-first-sdi-window.md` に記録済み（Phase 3以降で対応）
-- Phase 2.5 セキュリティ Medium M-1,M-3 → `docs/plans/phase2.6-security-fixes.md` として独立計画化（ポリシー適用）
+- Phase 2 セキュリティ Low は各 Plan に記録済み（独立計画不要）
 - Phase 2.5 セキュリティ Low L-1〜L-4 は `docs/plans/phase2.5-integration-testing.md` に記録済み
-- 3エージェント並行実装パターンが有効だった（Layer 1+2 main.rs / Layer 1 テスト / Layer 3 ユーティリティ）。ただしエージェント間で main.rs の変更が競合する可能性があり、片方が先に書いた変更をもう片方が上書きするリスクがある。次回は main.rs 変更は1エージェントに集約するか、worktree 分離を使う
