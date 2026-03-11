@@ -15,13 +15,16 @@
 
 ### タスク完了時
 4. コード変更がある場合、Lint・ビルドを通す（`cargo fmt --check && cargo clippy --all-targets && cargo test`）
-5. 投入されたタスクのPlanに実装完了状況を反映する
-6. .claude/Feedback.md にPlan, TODO, Progress推進エンジンの問題の記録・改善アクションを追記する。反映済みの項目は削除する
-7. .claude/Feedback.md にプロジェクト進行上の問題の記録・改善アクションを追記する。反映済みの項目は削除する
-8. `.claude/Progresses/YYYY-MM-DD-プラン名.md` にリネームして移動し、`.claude/templates/ProgressTemplate.md` から新規の Progress.md を作成する
-9. 実装の知見で継続して効果が見込めるもの、再調査が必要なものを docs/knowhow に.mdで作成する。
+5. コード変更がある場合、セキュリティレビューサブエージェントを起動する（CLAUDE.md「セキュリティレビュー方針」参照）
+   - 変更差分に対して脆弱性の有無を検査し、問題があれば修正案を提示させる（実装はサブエージェントにさせない）
+   - バイナリが動作する段階（Phase 2以降）では、ペネトレーションテストの必要性も検討する
+6. 投入されたタスクのPlanに実装完了状況を反映する
+7. .claude/Feedback.md にPlan, TODO, Progress推進エンジンの問題の記録・改善アクションを追記する。反映済みの項目は削除する
+8. .claude/Feedback.md にプロジェクト進行上の問題の記録・改善アクションを追記する。反映済みの項目は削除する
+9. `.claude/Progresses/YYYY-MM-DD-プラン名.md` にリネームして移動し、`.claude/templates/ProgressTemplate.md` から新規の Progress.md を作成する
+10. 実装の知見で継続して効果が見込めるもの、再調査が必要なものを docs/knowhow に.mdで作成する。
 
-10. コミットする
+11. コミットする
 
 ---
 
