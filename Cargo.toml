@@ -47,6 +47,9 @@ cosmic-text = "0.12"
 serde      = { version = "1", features = ["derive"] }
 toml       = "0.8"
 
+# システム
+rustix        = { version = "0.38", features = ["termios", "process"] }
+
 # ユーティリティ
 bitflags      = "2"
 unicode-width = "0.2"

@@ -114,6 +114,23 @@ impl Pty {
         self.pty.resize(pty_process::Size::new(size.rows, size.cols)).map_err(PtyError::PtyProcess)
     }
 
+    /// PTY の master fd をクローンしてリサイズ専用の `OwnedFd` を返す。
+    ///
+    /// Session が Pty を Reader スレッドに move した後でも、
+    /// この fd を使って `TIOCSWINSZ` ioctl を呼び子プロセスに SIGWINCH を送れる。
+    ///
+    /// # Errors
+    /// fd のクローンに失敗した場合にエラーを返す。
+    pub fn try_clone_resize_fd(&self) -> Result<std::os::fd::OwnedFd> {
+        use std::os::fd::AsFd;
+        self.pty.as_fd().try_clone_to_owned().map_err(PtyError::Io)
+    }
+
+    /// 子プロセスの PID を返す。
+    pub fn child_id(&self) -> u32 {
+        self.child.id()
+    }
+
     /// 子プロセスが終了しているか確認する（ノンブロッキング）
     ///
     /// # Errors

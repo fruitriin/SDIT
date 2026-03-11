@@ -11,5 +11,6 @@ workspace = true
 
 [dependencies]
 sdit-core = { path = "../sdit-core" }
+rustix    = { workspace = true }
 log       = { workspace = true }
 thiserror = { workspace = true }

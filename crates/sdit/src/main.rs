@@ -128,17 +128,21 @@ impl SditApp {
                 terminal_rows: rows,
                 terminal_cols: cols,
                 scrollback: 10_000,
-                spawn_reader: move |pty: Pty, term_state: Arc<Mutex<TerminalState>>| {
-                    let pty_writer = pty.try_clone_writer().expect("PTY writer clone failed");
-                    let (pty_write_tx, pty_write_rx) = mpsc::sync_channel::<Vec<u8>>(64);
-                    let reader_proxy = event_proxy.clone();
-                    let writer_proxy = event_proxy;
+                spawn_reader:
+                    move |pty: Pty,
+                          term_state: Arc<Mutex<TerminalState>>,
+                          child_exited: Arc<std::sync::atomic::AtomicBool>| {
+                        let pty_writer = pty.try_clone_writer().expect("PTY writer clone failed");
+                        let (pty_write_tx, pty_write_rx) = mpsc::sync_channel::<Vec<u8>>(64);
+                        let reader_proxy = event_proxy.clone();
+                        let writer_proxy = event_proxy;
 
-                    let reader = spawn_pty_reader(pty, term_state, reader_proxy, sid);
-                    let writer = spawn_pty_writer(pty_writer, pty_write_rx, writer_proxy, sid);
+                        let reader =
+                            spawn_pty_reader(pty, term_state, reader_proxy, sid, child_exited);
+                        let writer = spawn_pty_writer(pty_writer, pty_write_rx, writer_proxy, sid);
 
-                    (reader, writer, pty_write_tx)
-                },
+                        (reader, writer, pty_write_tx)
+                    },
             },
         ) {
             Ok(s) => s,
@@ -239,6 +243,12 @@ impl SditApp {
             let mut state =
                 session.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             state.terminal.resize(rows, cols);
+            drop(state);
+
+            // PTY にもリサイズを通知して SIGWINCH を送る。
+            let pty_size =
+                PtySize::new(rows.try_into().unwrap_or(24), cols.try_into().unwrap_or(80));
+            session.resize_pty(pty_size);
         }
     }
 }
@@ -381,6 +391,7 @@ fn spawn_pty_reader(
     term_state: Arc<Mutex<TerminalState>>,
     event_proxy: winit::event_loop::EventLoopProxy<SditEvent>,
     session_id: SessionId,
+    child_exited: Arc<std::sync::atomic::AtomicBool>,
 ) -> JoinHandle<()> {
     std::thread::Builder::new()
         .name(format!("pty-reader-{}", session_id.0))
@@ -389,6 +400,7 @@ fn spawn_pty_reader(
             loop {
                 match pty.read(&mut buf) {
                     Ok(0) => {
+                        child_exited.store(true, std::sync::atomic::Ordering::Release);
                         let _ = event_proxy.send_event(SditEvent::ChildExit(session_id, 0));
                         break;
                     }
@@ -406,11 +418,13 @@ fn spawn_pty_reader(
                         std::thread::sleep(std::time::Duration::from_millis(1));
                     }
                     Err(e) if e.raw_os_error() == Some(5) => {
+                        child_exited.store(true, std::sync::atomic::Ordering::Release);
                         let _ = event_proxy.send_event(SditEvent::ChildExit(session_id, 0));
                         break;
                     }
                     Err(e) => {
                         log::error!("PTY read error (session {}): {e}", session_id.0);
+                        child_exited.store(true, std::sync::atomic::Ordering::Release);
                         let _ = event_proxy.send_event(SditEvent::ChildExit(session_id, 1));
                         break;
                     }

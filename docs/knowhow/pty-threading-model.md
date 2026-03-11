@@ -74,8 +74,36 @@ Phase 3 以降でリセット or 安全終了を検討。
 - Arrow キー → `TermMode::APP_CURSOR` に応じて `\x1bOX` or `\x1b[X`
 - Enter → `\r`, Backspace → `\x7f`, Tab → `\t`, Escape → `\x1b`
 
+## PTY リサイズ（SIGWINCH）
+
+Phase 3.1 で解決済み。`Pty::try_clone_resize_fd()` で `OwnedFd` を Session に保持し、
+Reader スレッドに Pty を move した後でも `rustix::termios::tcsetwinsize()` でリサイズ可能。
+
+```rust
+// Session が保持する resize_fd (OwnedFd) を使って TIOCSWINSZ ioctl を呼ぶ
+pub fn resize_pty(&self, size: PtySize) {
+    use std::os::fd::AsFd;
+    let winsize = rustix::termios::Winsize { ws_row, ws_col, ws_xpixel, ws_ypixel };
+    rustix::termios::tcsetwinsize(self.resize_fd.as_fd(), winsize);
+}
+```
+
+## Session Drop シャットダウンシーケンス
+
+Phase 3.1 で実装。PID 再利用による誤シグナル送信を `child_exited: Arc<AtomicBool>` で防止。
+
+```
+1. child_exited チェック → false なら SIGHUP 送信
+2. Writer スレッド join (200ms deadline) — write_tx drop で即座に終了するはず
+3. Reader スレッド join (300ms deadline) — SIGHUP で read() が EIO を返して終了するはず
+   - まだ終了しない場合は SIGKILL で強制終了
+```
+
+- `to_rustix_pid()`: `u32` → `i32` → `Pid` の安全な変換。失敗時は None（PID 1 への誤送信を防止）
+- Writer を先に join する理由: write_tx の drop が Writer の終了トリガーになるため
+
 ## 要改善事項
 
 - PtyOutput イベントのバッチング（高速出力時のイベント連射対策）
 - Ctrl+記号キーの完全マッピング（`[` → ESC, `\` → 0x1c 等）
-- PTY リサイズ時の SIGWINCH（現在は Terminal::resize() のみ、Pty::resize() 未呼び出し）
+- `wait_and_join()` のビジーウェイト（10ms sleep ループ）→ condvar 等への置き換え

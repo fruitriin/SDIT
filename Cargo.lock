@@ -1792,6 +1792,7 @@ name = "sdit-session"
 version = "0.1.0"
 dependencies = [
  "log",
+ "rustix 0.38.44",
  "sdit-core",
  "thiserror",
 ]
