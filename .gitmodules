@@ -17,3 +17,6 @@
 	path = refs/zellij
 	url = https://github.com/zellij-org/zellij.git
 	branch = main
+[submodule "refs/rust-clippy"]
+	path = refs/rust-clippy
+	url = https://github.com/rust-lang/rust-clippy.git
