@@ -34,6 +34,43 @@
 
 ---
 
-## タスク
+## タスク: Phase 2 — 最初のSDIウィンドウ
 
-（現在タスクなし）
+### Step 1: winit + wgpu 空ウィンドウ表示 ✓ 完了（2026-03-11）
+- [x] sdit-render: `GpuContext` 構造体（wgpu Device/Queue/Surface 初期化）
+- [x] sdit binary: `SditApp` 構造体 + `ApplicationHandler` trait 実装
+- [x] sdit binary: カスタムイベント型 `SditEvent` 定義
+- [x] winit EventLoop 起動 → 空ウィンドウ表示（背景色クリアのみ）
+- [x] ビルド確認（cargo fmt/clippy/test 全通過、警告ゼロ）
+
+### Step 2: フォント読み込み + テクスチャアトラス
+- [ ] sdit-render: `Atlas` 構造体（ビンパッキング、wgpu テクスチャ管理）
+- [ ] sdit-render: cosmic-text `FontSystem` + `SwashCache` でグリフラスタライズ
+- [ ] sdit-render: `FontContext` 構造体（セルメトリクス計算・グリフキャッシュ）
+- [ ] テスト: アトラスへのグリフ配置・メトリクス計算
+
+### Step 3: グリッドレンダリングパイプライン
+- [ ] sdit-render: WGSL シェーダー（背景色 + テキスト描画）
+- [ ] sdit-render: `RenderPipeline` 構造体（wgpu パイプライン・バインドグループ）
+- [ ] sdit-render: Grid → `RenderableCell` 変換（背景色配列 + 前景テキスト配列）
+- [ ] sdit-render: `draw()` 関数（セルバッファ → GPU バッファ同期 → 描画）
+- [ ] 静的テキスト描画の動作確認
+
+### Step 4: PTY スレッド接続 + Terminal 状態共有
+- [ ] sdit binary: `Arc<Mutex<Terminal>>` で Terminal 状態共有
+- [ ] sdit binary: PTY reader スレッド（polling/read → VTE parse → Terminal 更新）
+- [ ] sdit binary: PTY → `EventLoopProxy::send_event()` で再描画要求
+- [ ] sdit binary: ウィンドウリサイズ → PTY resize + Grid resize
+- [ ] シェル出力がウィンドウに表示されることを確認
+
+### Step 5: キー入力 → PTY 送信
+- [ ] sdit binary: winit `KeyEvent` → バイト列変換（基本キー + 修飾キー）
+- [ ] sdit binary: Main → PTY writer チャネル（`std::sync::mpsc`）
+- [ ] 対話的なシェル操作の動作確認（ls, cd, echo 等）
+
+### 完了処理
+- [ ] `cargo fmt --check && cargo clippy --all-targets && cargo test`
+- [ ] セキュリティレビューサブエージェント起動・指摘対応
+- [ ] リグレッションテスト計画・実施
+- [ ] Plan ファイル・TODO・Feedback 更新
+- [ ] knowhow 記録・コミット
