@@ -205,6 +205,8 @@ pub struct CellPipeline {
     uniform_buffer: wgpu::Buffer,
     /// 描画するセル数。
     pub cell_count: u32,
+    /// 頂点バッファの確保容量（セル数）。
+    vertex_buffer_capacity: usize,
 }
 
 impl CellPipeline {
@@ -212,10 +214,16 @@ impl CellPipeline {
     ///
     /// - `surface_format`: サーフェスのカラーフォーマット
     /// - `atlas`: テクスチャアトラス（既に GPU にアップロード済みであること）
+    /// - `initial_capacity`: 頂点バッファの初期容量（セル数）
     ///
     /// Uniforms は作成後に `update_uniforms()` で設定すること。
     #[allow(clippy::too_many_lines)]
-    pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat, atlas: &Atlas) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        surface_format: wgpu::TextureFormat,
+        atlas: &Atlas,
+        initial_capacity: usize,
+    ) -> Self {
         let shader_source = include_str!("shaders/cell.wgsl");
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("cell shader"),
@@ -324,16 +332,38 @@ impl CellPipeline {
             multiview: None,
         });
 
-        // 頂点バッファ: 最大 80×24 セルを想定して初期確保。
-        let max_cells = 80 * 24;
+        // 頂点バッファ: 指定されたセル数で初期確保。
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("cell vertex buffer"),
-            size: (max_cells * std::mem::size_of::<CellVertex>()) as u64,
+            size: (initial_capacity.max(1) * std::mem::size_of::<CellVertex>()) as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        Self { pipeline, bind_group, vertex_buffer, uniform_buffer, cell_count: 0 }
+        Self {
+            pipeline,
+            bind_group,
+            vertex_buffer,
+            uniform_buffer,
+            cell_count: 0,
+            vertex_buffer_capacity: initial_capacity.max(1),
+        }
+    }
+
+    /// 頂点バッファの容量が `needed` 未満なら再確保する。
+    pub fn ensure_capacity(&mut self, device: &wgpu::Device, needed: usize) {
+        if needed <= self.vertex_buffer_capacity {
+            return;
+        }
+        // 必要量の 2 倍に拡張してリアロケーションを減らす。
+        let new_capacity = needed * 2;
+        self.vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("cell vertex buffer"),
+            size: (new_capacity * std::mem::size_of::<CellVertex>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        self.vertex_buffer_capacity = new_capacity;
     }
 
     /// Uniforms を更新する。
