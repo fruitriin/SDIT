@@ -14,6 +14,7 @@
 | done | 2 | `docs/plans/phase2-first-sdi-window.md` | **完了** |
 | done | 2.5 | `docs/plans/phase2.5-integration-testing.md` | **完了** |
 | done | 2.6 | `docs/plans/phase2.6-security-fixes.md` | **完了** |
-| **now** | 3 | `docs/plans/phase3-sdi-multi-window.md` | 未着手 |
+| **now** | 2.7 | `docs/plans/phase2.7-test-smell-fixes.md` | 未着手 |
+| next | 3 | `docs/plans/phase3-sdi-multi-window.md` | 未着手 |
 | later | 4 | `docs/plans/phase4-session-sidebar.md` | 未着手 |
 | later | 5 | `docs/plans/phase5-config-polish.md` | 未着手 |
