@@ -101,9 +101,9 @@ tools/test-utils/
 | 重要度 | ID | 内容 | 対処 |
 |---|---|---|---|
 | High | H-1 | send-keys.sh AppleScript インジェクション | **修正済み**: エスケープ処理追加 |
-| Medium | M-1 | capture-window.swift パストラバーサル | 記録: テスト用途のため許容、Phase 3以降で対処検討 |
+| Medium | M-1 | capture-window.swift パストラバーサル | **Phase 2.6 で修正済み** |
 | Medium | M-2 | SDIT_SMOKE_TEST 環境変数の本番影響 | **修正済み**: `cfg!(debug_assertions)` でガード |
-| Medium | M-3 | プロセス名完全一致バイパス | 記録: テスト用途のため許容 |
+| Medium | M-3 | プロセス名完全一致バイパス | **Phase 2.6 で修正済み** |
 | Low | L-1 | EIO マジックナンバー(5) | 記録: Phase 3 で libc::EIO に変更検討 |
 | Low | L-2 | PoisonError の silencing | 記録: Phase 3 で安全な終了処理検討 |
 | Low | L-3 | smoke_headless.rs の二重 wait | 記録: テスト自体は動作、Phase 3 で改善 |

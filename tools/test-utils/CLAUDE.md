@@ -57,8 +57,9 @@ kill $SDIT_PID
 
 ### セキュリティ
 - **send-keys.sh**: AppleScript に変数を埋め込む際は必ずエスケープする（H-1 対応済み）
-- **capture-window**: 出力パスのバリデーションは未実装（M-1 記録済み）
-- **window-info / capture-window**: プロセス名のフルパス比較は未実装（M-3 記録済み）
+- **send-keys.sh**: `pgrep -x` で PID を取得し、AppleScript で `unix id` ベースのプロセス指定（M-3 対応済み）
+- **capture-window**: 出力パスをワーキングディレクトリ配下に制限（パストラバーサル防止、M-1 対応済み）
+- **capture-window**: `--pid <pid>` オプションで PID 直接指定が可能。プロセス名検索はフルパス優先+basename フォールバック（警告付き）（M-3 対応済み）
 
 ### 制約
 - Swift コードは `swiftc` でコンパイルが必要（インタプリタ実行不可、ScreenCaptureKit リンクが必要）

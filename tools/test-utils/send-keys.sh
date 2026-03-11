@@ -25,23 +25,27 @@ fi
 PROCESS_NAME="$1"
 TEXT="$2"
 
+# プロセス名バリデーション（正規表現メタキャラクタ防止: M-NEW-1 対応）
+if [[ ! "$PROCESS_NAME" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    echo "Error: process name must match [a-zA-Z0-9._-]+" >&2
+    exit 1
+fi
+
 # AppleScript インジェクション防止: バックスラッシュと二重引用符をエスケープ
-ESCAPED_PROCESS="${PROCESS_NAME//\\/\\\\}"
-ESCAPED_PROCESS="${ESCAPED_PROCESS//\"/\\\"}"
 ESCAPED_TEXT="${TEXT//\\/\\\\}"
 ESCAPED_TEXT="${ESCAPED_TEXT//\"/\\\"}"
 
-# プロセスが存在するか確認
-if ! pgrep -x "$PROCESS_NAME" > /dev/null 2>&1; then
+# M-3: PID ベースでプロセスを特定（basename なりすまし防止）
+PID=$(pgrep -x "$PROCESS_NAME" | head -1)
+if [[ -z "$PID" ]]; then
     echo "Error: process '$PROCESS_NAME' not found" >&2
     exit 2
 fi
 
-# osascript でキーストローク送信
-# System Events の keystroke は Unicode 文字列を受け付ける
+# osascript でキーストローク送信（PID ベースのプロセス指定）
 osascript <<APPLESCRIPT
 tell application "System Events"
-    set targetApp to first process whose name is "$ESCAPED_PROCESS"
+    set targetApp to first process whose unix id is $PID
     set frontmost of targetApp to true
     delay 0.1
     keystroke "$ESCAPED_TEXT"
@@ -54,4 +58,4 @@ if [[ $STATUS -ne 0 ]]; then
     exit 2
 fi
 
-echo "Sent keystrokes to '$PROCESS_NAME': $TEXT"
+echo "Sent keystrokes to '$PROCESS_NAME' (pid=$PID): $TEXT"
