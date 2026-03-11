@@ -1777,6 +1777,7 @@ name = "sdit-render"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytemuck",
  "cosmic-text",
  "log",
  "pollster",

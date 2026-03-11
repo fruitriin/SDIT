@@ -18,3 +18,4 @@ log         = { workspace = true }
 thiserror   = { workspace = true }
 anyhow      = { workspace = true }
 pollster    = { workspace = true }
+bytemuck    = { workspace = true }

@@ -43,18 +43,25 @@
 - [x] winit EventLoop 起動 → 空ウィンドウ表示（背景色クリアのみ）
 - [x] ビルド確認（cargo fmt/clippy/test 全通過、警告ゼロ）
 
-### Step 2: フォント読み込み + テクスチャアトラス
-- [ ] sdit-render: `Atlas` 構造体（ビンパッキング、wgpu テクスチャ管理）
-- [ ] sdit-render: cosmic-text `FontSystem` + `SwashCache` でグリフラスタライズ
-- [ ] sdit-render: `FontContext` 構造体（セルメトリクス計算・グリフキャッシュ）
-- [ ] テスト: アトラスへのグリフ配置・メトリクス計算
+### Step 2: フォント読み込み + テクスチャアトラス ✓ 完了（2026-03-11）
+- [x] sdit-render: `Atlas` 構造体（シェルフアルゴリズム、wgpu テクスチャ管理）
+- [x] sdit-render: cosmic-text `FontSystem` + `SwashCache` でグリフラスタライズ
+- [x] sdit-render: `FontContext` 構造体（セルメトリクス計算・グリフキャッシュ）
+- [x] テスト: アトラスへのグリフ配置・メトリクス計算
 
-### Step 3: グリッドレンダリングパイプライン
-- [ ] sdit-render: WGSL シェーダー（背景色 + テキスト描画）
-- [ ] sdit-render: `RenderPipeline` 構造体（wgpu パイプライン・バインドグループ）
-- [ ] sdit-render: Grid → `RenderableCell` 変換（背景色配列 + 前景テキスト配列）
-- [ ] sdit-render: `draw()` 関数（セルバッファ → GPU バッファ同期 → 描画）
-- [ ] 静的テキスト描画の動作確認
+### Step 3: グリッドレンダリングパイプライン ✓ 完了（2026-03-11）
+- [x] sdit-render: WGSL シェーダー（背景色 + テキスト描画）cell.wgsl
+- [x] sdit-render: `CellPipeline` 構造体（wgpu パイプライン・バインドグループ）
+- [x] sdit-render: Grid → `CellVertex` 変換（インスタンス描画方式）
+- [x] sdit-render: `update_from_grid()` + `render_frame()` で GPU 描画
+- [x] 静的テキスト "Hello, SDIT!" 描画の実装完了
+
+#### セキュリティレビュー結果（Step 2+3）
+- **Low**: `vertex_buffer` サイズが 80×24 固定のため、グリッドサイズが変更された場合に `write_buffer` 超過の可能性あり
+  → Step 4（グリッドリサイズ実装時）に動的サイズ計算に変更する
+- `unsafe_code = "deny"` 維持確認済み
+- bytemuck::cast_slice は Pod/Zeroable derive で安全
+- ペネトレーションテスト: PTY 接続（Step 4）まで不要
 
 ### Step 4: PTY スレッド接続 + Terminal 状態共有
 - [ ] sdit binary: `Arc<Mutex<Terminal>>` で Terminal 状態共有
