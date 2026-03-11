@@ -42,11 +42,11 @@
 - [x] Grid ユニットテスト（45テスト全通過）
 
 ### 2. VTE パーサー統合（Grid に依存）
-- [ ] vte::Perform を高レベル操作に変換する Processor
-- [ ] Terminal 構造体（Grid<Cell> 保持、モードフラグ、スクロール領域）
-- [ ] CSI/ESC/OSC ディスパッチ → Terminal メソッド呼び出し
-- [ ] Alternate screen buffer（grid/inactive_grid 切替）
-- [ ] Terminal ユニットテスト（エスケープシーケンス処理）
+- [x] vte::Perform を高レベル操作に変換する Processor
+- [x] Terminal 構造体（Grid<Cell> 保持、モードフラグ、スクロール領域）
+- [x] CSI/ESC/OSC ディスパッチ → Terminal メソッド呼び出し
+- [x] Alternate screen buffer（grid/inactive_grid 切替）
+- [x] Terminal ユニットテスト（エスケープシーケンス処理 — 13テスト）
 
 ### 3. PTY モジュール（依存なし、Grid と並行可）
 - [ ] Pty 構造体（pty-process ラッパー、子プロセス管理）
