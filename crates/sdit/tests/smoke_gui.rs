@@ -43,6 +43,7 @@ fn wait_with_timeout(
 fn gui_smoke_test_exits_successfully() {
     let mut child = Command::new(sdit_bin())
         .env("SDIT_SMOKE_TEST", "1")
+        .env("RUST_LOG", "info")
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -69,5 +70,15 @@ fn gui_smoke_test_exits_successfully() {
     assert!(
         status.success(),
         "GUI smoke test exited with non-zero status: {status:?}\nstderr:\n{stderr}"
+    );
+
+    // 期待されるログメッセージが出力されていることを確認する。
+    assert!(
+        stderr.contains("SDIT starting"),
+        "GUI smoke test should log startup message.\nstderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("smoke_test: 1 frame rendered"),
+        "GUI smoke test should log frame render completion.\nstderr:\n{stderr}"
     );
 }

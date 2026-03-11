@@ -67,6 +67,7 @@ fn headless_mode_exits_successfully() {
 fn headless_mode_stderr_no_error_keywords() {
     let output = Command::new(sdit_bin())
         .arg("--headless")
+        .env("RUST_LOG", "info")
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -94,4 +95,10 @@ fn headless_mode_stderr_no_error_keywords() {
     assert!(!stderr.contains("SIGSEGV"), "headless mode caused SIGSEGV:\n{stderr}");
     assert!(!stderr.contains("SIGABRT"), "headless mode caused SIGABRT:\n{stderr}");
     assert!(!stderr.contains("thread '"), "headless mode thread panicked:\n{stderr}");
+
+    // 期待されるログメッセージが出力されていることを確認する。
+    assert!(
+        stderr.contains("SDIT starting in headless mode"),
+        "headless mode should log startup message.\nstderr:\n{stderr}"
+    );
 }
