@@ -237,3 +237,141 @@ impl SditApp {
         None
     }
 }
+
+// ---------------------------------------------------------------------------
+// IME ユーティリティ関数
+// ---------------------------------------------------------------------------
+
+/// テキストをブラケットペーストシーケンスで包む。
+///
+/// Terminal Injection 攻撃防止のため、テキスト内のブラケットシーケンスをサニタイズする。
+pub(crate) fn wrap_bracketed_paste(text: &str) -> Vec<u8> {
+    // ダブルリプレースバイパス対策: 収束するまで繰り返し除去する
+    let mut sanitized = text.to_owned();
+    loop {
+        let next = sanitized.replace("\x1b[200~", "").replace("\x1b[201~", "");
+        if next == sanitized {
+            break;
+        }
+        sanitized = next;
+    }
+    let mut v = b"\x1b[200~".to_vec();
+    v.extend_from_slice(sanitized.as_bytes());
+    v.extend_from_slice(b"\x1b[201~");
+    v
+}
+
+/// IME Commit テキストをPTY送信用バイト列に変換する。
+///
+/// `bracketed_paste` が true かつテキストが2バイト以上の場合、
+/// ブラケットペーストシーケンスで包む（Terminal Injection 攻撃防止のためサニタイズ済み）。
+/// 1バイト以下の場合は通常の文字入力として `into_bytes()` を返す。
+pub(crate) fn ime_commit_to_bytes(text: String, bracketed_paste: bool) -> Vec<u8> {
+    if text.chars().count() > 1 && bracketed_paste {
+        wrap_bracketed_paste(&text)
+    } else {
+        text.into_bytes()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -----------------------------------------------------------------------
+    // PreeditState のテスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn preedit_state_construct() {
+        let state = PreeditState { text: "あいう".to_string(), cursor_offset: Some((0, 3)) };
+        assert_eq!(state.text, "あいう");
+        assert_eq!(state.cursor_offset, Some((0, 3)));
+    }
+
+    #[test]
+    fn preedit_state_no_cursor() {
+        let state = PreeditState { text: "変換中".to_string(), cursor_offset: None };
+        assert_eq!(state.text, "変換中");
+        assert!(state.cursor_offset.is_none());
+    }
+
+    #[test]
+    fn preedit_state_clone() {
+        let original = PreeditState { text: "テスト".to_string(), cursor_offset: Some((0, 6)) };
+        let cloned = original.clone();
+        assert_eq!(cloned.text, original.text);
+        assert_eq!(cloned.cursor_offset, original.cursor_offset);
+    }
+
+    #[test]
+    fn preedit_state_empty_text() {
+        let state = PreeditState { text: String::new(), cursor_offset: None };
+        assert!(state.text.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // ime_commit_to_bytes のテスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ime_commit_single_char_no_bracket() {
+        // 1バイト文字はブラケットペーストモードでもラップしない
+        let bytes = ime_commit_to_bytes("a".to_string(), true);
+        assert_eq!(bytes, b"a");
+    }
+
+    #[test]
+    fn ime_commit_single_char_no_bracket_mode_off() {
+        let bytes = ime_commit_to_bytes("a".to_string(), false);
+        assert_eq!(bytes, b"a");
+    }
+
+    #[test]
+    fn ime_commit_multi_char_bracketed_paste_on() {
+        // 複数文字かつブラケットペーストモード: ラップされる
+        let bytes = ime_commit_to_bytes("あいう".to_string(), true);
+        let s = String::from_utf8(bytes).unwrap();
+        assert!(s.starts_with("\x1b[200~"), "ブラケット開始シーケンスがない: {s:?}");
+        assert!(s.ends_with("\x1b[201~"), "ブラケット終了シーケンスがない: {s:?}");
+        assert!(s.contains("あいう"), "テキスト本体がない: {s:?}");
+    }
+
+    #[test]
+    fn ime_commit_multi_char_bracketed_paste_off() {
+        // ブラケットペーストモード無効: ラップしない
+        let bytes = ime_commit_to_bytes("あいう".to_string(), false);
+        assert_eq!(bytes, "あいう".as_bytes());
+    }
+
+    #[test]
+    fn ime_commit_sanitizes_injection_sequence() {
+        // Terminal Injection: テキスト内にブラケットシーケンスが混入していたらサニタイズする
+        let malicious = "safe\x1b[200~INJECTED\x1b[201~end".to_string();
+        let bytes = ime_commit_to_bytes(malicious, true);
+        let s = String::from_utf8(bytes).unwrap();
+        // サニタイズ後のテキストにはブラケットシーケンスが1組だけある（ラップの分）
+        assert_eq!(s.matches("\x1b[200~").count(), 1, "ブラケット開始が複数ある: {s:?}");
+        assert_eq!(s.matches("\x1b[201~").count(), 1, "ブラケット終了が複数ある: {s:?}");
+        // INJECTED はサニタイズされず含まれる（シーケンス自体が除去される）
+        assert!(
+            !s[6..s.len() - 6].contains("\x1b[200~"),
+            "インジェクションシーケンスが残存: {s:?}"
+        );
+    }
+
+    #[test]
+    fn ime_commit_empty_string() {
+        let bytes = ime_commit_to_bytes(String::new(), true);
+        assert!(bytes.is_empty());
+    }
+
+    #[test]
+    fn ime_commit_two_byte_ascii() {
+        // ASCII 2文字はブラケットペーストモードではラップされる（len > 1 の判定）
+        let bytes = ime_commit_to_bytes("ab".to_string(), true);
+        let s = String::from_utf8(bytes).unwrap();
+        assert!(s.starts_with("\x1b[200~"), "ブラケット開始シーケンスがない: {s:?}");
+        assert!(s.contains("ab"), "テキスト本体がない: {s:?}");
+    }
+}

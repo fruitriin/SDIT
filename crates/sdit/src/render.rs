@@ -138,7 +138,7 @@ impl SditApp {
         }
 
         // プリエディット描画: カーソル位置から文字を上書き
-        if let Some(ref preedit) = self.preedit.clone() {
+        if let Some(ref preedit) = self.preedit {
             if !preedit.text.is_empty() {
                 let atlas_size = ws.atlas.size() as f32;
                 let mut col_offset = cursor_col;
@@ -239,7 +239,7 @@ impl SditApp {
 /// 簡易実装: CJK 統合漢字・ひらがな・カタカナ等の範囲を全角とみなす。
 /// 完全な実装には `unicode-width` クレートが必要だが、依存を追加せずに
 /// 主要な CJK 範囲をカバーする。
-fn char_cell_width(c: char) -> usize {
+pub(crate) fn char_cell_width(c: char) -> usize {
     let cp = c as u32;
     // 主要な全角文字の範囲
     matches!(cp,
@@ -263,4 +263,94 @@ fn char_cell_width(c: char) -> usize {
     )
     .then_some(2)
     .unwrap_or(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::char_cell_width;
+
+    // -----------------------------------------------------------------------
+    // char_cell_width のテスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ascii_is_single_width() {
+        for c in 'A'..='Z' {
+            assert_eq!(char_cell_width(c), 1, "ASCII '{c}' should be width 1");
+        }
+        assert_eq!(char_cell_width('a'), 1);
+        assert_eq!(char_cell_width('0'), 1);
+        assert_eq!(char_cell_width(' '), 1);
+    }
+
+    #[test]
+    fn hiragana_is_double_width() {
+        // ひらがな範囲 0x3041-0x3096
+        assert_eq!(char_cell_width('あ'), 2);
+        assert_eq!(char_cell_width('い'), 2);
+        assert_eq!(char_cell_width('う'), 2);
+        assert_eq!(char_cell_width('ん'), 2);
+    }
+
+    #[test]
+    fn katakana_is_double_width() {
+        // カタカナ範囲 0x30A0-0x30FF
+        assert_eq!(char_cell_width('ア'), 2);
+        assert_eq!(char_cell_width('イ'), 2);
+        assert_eq!(char_cell_width('ウ'), 2);
+    }
+
+    #[test]
+    fn cjk_ideographs_are_double_width() {
+        // CJK 統合漢字 0x4E00-0x9FFF
+        assert_eq!(char_cell_width('日'), 2);
+        assert_eq!(char_cell_width('本'), 2);
+        assert_eq!(char_cell_width('語'), 2);
+        assert_eq!(char_cell_width('字'), 2);
+    }
+
+    #[test]
+    fn fullwidth_ascii_is_double_width() {
+        // 全角英数字 0xFF01-0xFF60
+        assert_eq!(char_cell_width('Ａ'), 2); // U+FF21
+        assert_eq!(char_cell_width('！'), 2); // U+FF01
+    }
+
+    #[test]
+    fn hangul_is_double_width() {
+        // ハングル音節 0xAC00-0xD7AF
+        assert_eq!(char_cell_width('가'), 2); // U+AC00
+        assert_eq!(char_cell_width('힣'), 2); // U+D7A3
+    }
+
+    #[test]
+    fn latin_extended_is_single_width() {
+        // ラテン拡張文字は半角
+        assert_eq!(char_cell_width('é'), 1); // U+00E9
+        assert_eq!(char_cell_width('ñ'), 1); // U+00F1
+        assert_eq!(char_cell_width('ü'), 1); // U+00FC
+    }
+
+    #[test]
+    fn mixed_string_total_width() {
+        // 混在文字列の幅計算
+        let text = "hello世界"; // 5 ASCII + 2 CJK
+        let total: usize = text.chars().map(char_cell_width).sum();
+        assert_eq!(total, 5 + 4, "幅計算: ASCII=5*1 + CJK=2*2 = 9");
+    }
+
+    #[test]
+    fn mixed_preedit_width() {
+        // プリエディット: ひらがな混在
+        let preedit = "あいう123"; // 3全角 + 3半角 = 9セル
+        let total: usize = preedit.chars().map(char_cell_width).sum();
+        assert_eq!(total, 3 * 2 + 3, "あいう(3*2) + 123(3*1) = 9");
+    }
+
+    #[test]
+    fn emoji_is_double_width() {
+        // 絵文字 0x1F300-0x1F9FF
+        assert_eq!(char_cell_width('🎉'), 2); // U+1F389
+        assert_eq!(char_cell_width('😀'), 2); // U+1F600
+    }
 }

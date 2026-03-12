@@ -1,0 +1,47 @@
+# Knowhow Index
+
+> 自動生成。`/knowhow-index reindex` で再生成できる。
+
+## ターミナルエミュレーション
+
+| ファイル | 要約 | キーワード |
+|---|---|---|
+| [vte-integration.md](vte-integration.md) | vte 0.13 の Perform trait によるエスケープシーケンス処理の統合パターンとテスト構成 | `vte::Perform`, `csi_dispatch`, `esc_dispatch`, `osc_dispatch`, `input_needs_wrap`, `SGR 38;5;N`, `SGR 38:2:r:g:b`, `Line::as_viewport_idx`, `saturating_sub`, `MAX_TITLE_BYTES`, `scroll_up`, `headless_pipeline` |
+| [vte-terminal-integration.md](vte-terminal-integration.md) | vte 0.13 の Params サブパラメータ構造、CSI デフォルト値、Alternate Screen Buffer 実装の実践知見 | `vte::Params`, `ParamsIter`, `first_param`, `nth_param`, `handler.rs`, `erase_cells`, `std::mem::swap`, `inactive_grid`, `cursor_cell`, `IndexMut`, `template.clone`, `cast_possible_wrap`, `i32::try_from` |
+| [grid-implementation.md](grid-implementation.md) | Grid/Row/Storage のリングバッファ設計と O(1) スクロール実装の詳細 | `Storage<T>`, `Row<T>`, `Grid<T>`, `zero` offset, `compute_index`, `rotate`, `rezero`, `occ` dirty tracking, `saturating_*`, `Line(i32)`, `Column(usize)`, `scroll_up`, `enforce_scroll_limit`, `max_scroll_limit` |
+| [terminal-device-reports.md](terminal-device-reports.md) | DA1/DA2/DSR/CPR デバイスレポート応答と Alt-ESC/カーソルスタイルの実装パターン | `pending_writes`, `drain_pending_writes`, `write_response`, `MAX_PENDING_WRITES`, `DA1`, `DA2`, `intermediates`, `is_private`, `DECSCUSR`, `Alt+ESC prefix`, `set_title` デッドロック回避, `clone` before unlock |
+
+## レンダリング
+
+| ファイル | 要約 | キーワード |
+|---|---|---|
+| [wgpu-instanced-rendering.md](wgpu-instanced-rendering.md) | wgpu インスタンス描画による全セル一括レンダリングと CellVertex/WGSL シェーダー設計 | `CellVertex`, `draw(0..6, 0..cell_count)`, `Instance` step mode, `vertex_index`, `QUAD_UV`, `R8Unorm`, `ALPHA_BLENDING`, `bytemuck::Pod`, `grid_pos`, `uv`, `glyph_offset`, `glyph_size` |
+| [wgpu-winit-integration.md](wgpu-winit-integration.md) | wgpu 0.20 + winit 0.30 の Surface ライフタイム管理、アトラス、GPU バッファ動的リサイズ | `Surface<'static>`, `Arc<Window>`, `GpuContext`, `ApplicationHandler`, `resumed`, `window_event`, `user_event`, `SurfaceError::Lost`, `ensure_capacity`, `shelf algorithm`, `upload_if_dirty`, `SwashCache::get_image_uncached` |
+| [cosmic-text-glyph-rasterize.md](cosmic-text-glyph-rasterize.md) | cosmic-text によるグリフラスタライズフローとキャッシュキー設計 | `FontSystem::new`, `Buffer`, `Metrics`, `Shaping::Advanced`, `shape_until_scroll`, `LayoutRun`, `PhysicalGlyph`, `SwashImage`, `Placement`, `monospace_em_width`, `fontdb::ID`, `GlyphCacheKey`, `Content::Mask` |
+| [session-sidebar-rendering.md](session-sidebar-rendering.md) | サイドバーの origin_x レイアウト分割、CellPipeline 再利用、セッション切出しロールバック | `origin_x`, `sidebar_width_px`, `build_sidebar_cells`, `CellPipeline`, `detach_session_to_new_window`, `insert(original_index)`, `CursorMoved`, `MouseInput`, `sessions.swap`, `active_index`, `calc_grid_size` |
+
+## PTY・スレッド管理
+
+| ファイル | 要約 | キーワード |
+|---|---|---|
+| [pty-threading-model.md](pty-threading-model.md) | 3スレッドモデル（Main/Reader/Writer）、fd クローン分離、シャットダウンシーケンスの設計 | `try_clone_writer`, `try_clone_to_owned`, `dup(2)`, `AsFd`, `OwnedFd`, `sync_channel(64)`, `try_send`, `WouldBlock`, `EIO`, `PoisonError::into_inner`, `SIGHUP`, `SIGKILL`, `child_exited: AtomicBool`, `to_rustix_pid`, `tcsetwinsize`, `APP_CURSOR` |
+| [macos26-pty-compat.md](macos26-pty-compat.md) | macOS 26 で TIOCSWINSZ ioctl が spawn 前に ENOTTY を返す問題と回避策 | `TIOCSWINSZ`, `ENOTTY`, `errno 25`, `pty-process 0.4`, `Pty::new`, `Pty::resize`, `cmd.spawn(&pts)`, `Darwin 25.3.0`, `macOS 26` |
+
+## アーキテクチャ・設計
+
+| ファイル | 要約 | キーワード |
+|---|---|---|
+| [architecture-decisions.md](architecture-decisions.md) | 2クレート構成、スレッドモデル、Session/Window 分離、縦タブバーの設計判断まとめ | `sdit-core`, `sdit (bin)`, `Mailbox`, `RwLock`, `display_offset`, `damage tracking`, `Session ≠ Window`, `Surface 差し替え`, `polling vs tokio`, `cosmic-text`, `MAX_CACHE_SIZE`, `1500行再分割基準` |
+| [multi-window-session-management.md](multi-window-session-management.md) | Session/Window 分離パターン、spawn_reader クロージャ注入、ChildExit ライフサイクル | `SessionId`, `WindowId`, `SessionManager`, `SpawnParams`, `spawn_reader`, `EventLoopProxy`, `SditEvent::PtyOutput`, `SditEvent::ChildExit`, `session_to_window`, `close_window`, `detach` |
+
+## 設定・テーマ
+
+| ファイル | 要約 | キーワード |
+|---|---|---|
+| [config-and-theming.md](config-and-theming.md) | TOML 設定基盤、f32 クランプの NaN 対策、WCAG コントラスト比検証、CJK 全角描画 | `#[serde(default)]`, `Config::load`, `dirs::config_dir`, `f32::is_finite`, `ResolvedColors`, `hex_to_rgba`, `WCAG 2.1`, `sRGB 線形化`, `WIDE_CHAR`, `WIDE_CHAR_SPACER`, `cell_width_scale: 2.0`, `atomic rename`, `TOCTOU` |
+
+## テスト・品質保証
+
+| ファイル | 要約 | キーワード |
+|---|---|---|
+| [integration-testing-patterns.md](integration-testing-patterns.md) | 3層テスト構成（ヘッドレス/GUI スモーク/GUI 操作）と macOS 権限モデルの知見 | `--headless`, `SDIT_SMOKE_TEST=1`, `smoke_headless.rs`, `smoke_gui.rs`, `gui_interaction.rs`, `wait_with_timeout`, `try_wait`, `AXUIElement`, `ScreenCaptureKit`, `send-keys.sh`, `osascript`, `Screen Recording 権限` |

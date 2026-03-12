@@ -25,11 +25,16 @@
 ### セキュリティ考慮事項
 
 - `Ime::Commit` 時、BRACKETED_PASTE モードが有効かつテキスト長が1より大きい場合はブラケットシーケンスをサニタイズしてから送信（Terminal Injection 攻撃防止）
+- **M-1 修正済み**: `wrap_bracketed_paste()` をループ方式に変更（ダブルリプレースバイパス対策）。ペースト処理と共通ヘルパーに統合
+- **L-1 修正済み**: `ime_commit_to_bytes()` で `text.len()` → `text.chars().count()` に修正（バイト数ではなく文字数で判定）
+- **I-1 修正済み**: `render.rs` の不要な `preedit.clone()` を借用に変更
 
 ### 制限事項と Low/Info 項目
 
-- **L-1**: `char_cell_width()` は主要な CJK 範囲のみをカバー。`unicode-width` クレートを使えば完全対応できる（将来の改善として残す）
-- **L-2**: プリエディット中のカーソル位置ハイライト（IME カーソル下線）は未実装。winit の `cursor_offset` を使ったインライン下線描画は Phase 8 以降で対応
+- **L-2**: `char_cell_width()` は主要な CJK 範囲のみをカバー。`unicode-width` クレートを使えば完全対応できる（将来の改善として残す）
+- **L-3**: プリエディット中のカーソル位置ハイライト（IME カーソル下線）は未実装。winit の `cursor_offset` を使ったインライン下線描画は Phase 8 以降で対応
+- **L-4**: プリエディットテキストの長さ上限なし（悪意ある IME からの DoS 可能性は極めて低い）
+- **L-5**: `char_cell_width()` の絵文字範囲 `0x1FA00..=0x1FAFF` が未カバー
 - **Info**: `PreeditState.cursor_offset` フィールドは現時点で未使用（将来の下線描画用）
 
 ## 依存関係

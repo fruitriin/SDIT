@@ -35,46 +35,52 @@
    - 発見した脆弱性を重要度付き（Critical/High/Medium/Low/Info）で報告する
    - バイナリが動作する段階では、ペネトレーションテストの必要性も検討する
 
-   **[integration-test エージェント]** — 統合テスト・リグレッションテスト
-   - 変更内容に基づいて退行リスクのあるテストケースを計画・提案する
-   - `docs/test-scenarios/` の該当シナリオがあれば `/gui-test` で実行する
-   - 提案されたテストを実装・実行し、既存機能の退行がないことを確認する
+   **[integration-test エージェント]** — 統合テスト・シナリオ管理
+   - **テストシナリオの追加・ブラッシュアップ**: 今回の Plan に対応するテストシナリオを `docs/test-scenarios/` に新規作成、または既存シナリオを更新する
+   - **選択的テスト実施**: 全シナリオではなく、変更に関連するシナリオを選んで `/gui-test` で実行する
+   - **シナリオインデックス更新**: `docs/test-scenarios/INDEX.md` を更新する（最終実行日時を記録）
+   - **退行確認**: 実行したシナリオで既存機能の退行がないことを確認する
+   - **Teardown**（メインプロセスから打ち切り指示を受けたとき）: 実行結果レポートを返し、得た知見を `/knowhow` で記録する
 
-6. チームの報告を集約し、フィードバックに基づいてサブタスクを追加する:
+   > `docs/test-scenarios/INDEX.md` の形式は `/knowhow-index` と類似:
+   > | シナリオ | 要約 | 最終実行 | 結果 |
+   > シナリオ追加・更新時は必ずインデックスも更新する。
+
+6. **Stage 2 の制御フロー**:
+   - security-review と integration-test は **並列** で開始する
+   - セキュリティレビューの指摘 → メインプロセスが修正 → **セキュリティ修正が全て完了したら integration-test に Teardown を指示する**
+   - integration-test は Teardown 指示を受けたら、実行中のテストを区切りよく終え、結果レポート + knowhow 書き出しを行って終了する
+
+7. フィードバックの集約:
    - **Critical/High**: 必ずこのフェーズ内で修正する（先送り禁止）
    - **Medium**: 原則修正。先送りする場合は `phaseX.Y-security-fixes.md` として独立計画を起こす
    - **Low/Info**: Plan に記録し、必要に応じて独立計画で対応
    - **テスト提案**: 実装・実行して `cargo test` スイートに追加する
    - 修正・テスト追加後、Stage 1 を再実行して通過を確認する
    - 修正結果を該当フェーズの Plan ファイルに記録する
-   - セキュリティ修正やテストで得た知見を `/knowhow` で記録する
    - **セキュリティ修正が全て完了するまでフェーズの完了コミットを行わない**
 
 #### 完了処理
 
-7. 投入されたタスクのPlanに実装完了状況を反映する
-8. .claude/Feedback.md にPlan, TODO, Progress推進エンジンの問題の記録・改善アクションを追記する。反映済みの項目は削除する
-9. .claude/Feedback.md にプロジェクト進行上の問題の記録・改善アクションを追記する。反映済みの項目は削除する
-10. `.claude/Progresses/YYYY-MM-DD-プラン名.md` にリネームして移動し、`.claude/templates/ProgressTemplate.md` から新規の Progress.md を作成する
-11. 実装の知見で継続して効果が見込めるもの、再調査が必要なものを docs/knowhow に.mdで作成する
+8. 投入されたタスクのPlanに実装完了状況を反映する
+9. .claude/Feedback.md にPlan, TODO, Progress推進エンジンの問題の記録・改善アクションを追記する。反映済みの項目は削除する
+10. .claude/Feedback.md にプロジェクト進行上の問題の記録・改善アクションを追記する。反映済みの項目は削除する
+11. `.claude/Progresses/YYYY-MM-DD-プラン名.md` にリネームして移動し、`.claude/templates/ProgressTemplate.md` から新規の Progress.md を作成する
+12. Progress 推進エンジン自体に関するフィードバック・ノウハウがあれば、テンプレート（`.claude/templates/ProgressTemplate.md`）の改善案を Feedback.md に記録する
 
-12. コミットする
+13. コミットする
 
 ---
 
-## タスク: Phase 7 — IME入力サポート（完了）
+## タスク: Phase 8.1 — フォントサイズ動的変更
 
 ### 実装
-- [x] Step 1: IME 有効化 — `window_ops.rs` で `set_ime_allowed(true)` を追加
-- [x] Step 2: IME Commit 処理 — `event_loop.rs` で `Ime::Commit` → PTY 送信
-- [x] Step 3: PreeditState 構造体追加 — `app.rs` に preedit 状態管理を追加
-- [x] Step 4: IME Preedit イベント処理 — `event_loop.rs` で `Ime::Preedit` → 状態更新
-- [x] Step 5: IME カーソル位置通知 + プリエディット描画 — `render.rs`
+- [ ] Step 1: Atlas::clear() メソッド追加 — shelves/data/dirty をリセット
+- [ ] Step 2: FontContext::set_font_size() メソッド追加 — font_size 変更 + metrics 再計算 + glyph_cache クリア
+- [ ] Step 3: ショートカット判定関数追加 — is_zoom_in/out/reset_shortcut (Cmd+=/Cmd+-/Cmd+0)
+- [ ] Step 4: SditApp にデフォルトフォントサイズ保持 + change_font_size() メソッド追加
+- [ ] Step 5: event_loop.rs にショートカットハンドラ統合 — 全ウィンドウの atlas クリア + 全セッション resize + redraw
 
 ### 品質ゲート
-- [x] Stage 1: `cargo fmt --check && cargo clippy --all-targets && cargo test` — 全通過（警告0）
-
-### 完了処理
-- [x] Plan 更新 (`docs/plans/phase7-ime.md`)
-- [x] TODO 更新 (Phase 7 → done)
-- [x] knowhow 記録 (`docs/knowhow/ime-input-support.md`)
+- [ ] Stage 1: `cargo fmt --check && cargo clippy --all-targets && cargo test`
+- [ ] Stage 2: security-review + integration-test

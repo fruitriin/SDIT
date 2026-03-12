@@ -10,7 +10,7 @@ use sdit_core::render::pipeline::CellPipeline;
 use sdit_core::selection::{Selection, SelectionType, selected_text};
 use sdit_core::terminal::TermMode;
 
-use crate::app::{PreeditState, SditApp, SditEvent};
+use crate::app::{PreeditState, SditApp, SditEvent, ime_commit_to_bytes, wrap_bracketed_paste};
 use crate::input::{
     is_add_session_shortcut, is_close_session_shortcut, is_copy_shortcut,
     is_detach_session_shortcut, is_new_window_shortcut, is_paste_shortcut,
@@ -175,14 +175,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         if !text.is_empty() {
                             let bracketed = mode.contains(TermMode::BRACKETED_PASTE);
                             let bytes: Vec<u8> = if bracketed {
-                                // ペースト内容からブラケットシーケンスを除去
-                                // (Terminal Injection via Clipboard 攻撃防止)
-                                let sanitized =
-                                    text.replace("\x1b[200~", "").replace("\x1b[201~", "");
-                                let mut v = b"\x1b[200~".to_vec();
-                                v.extend_from_slice(sanitized.as_bytes());
-                                v.extend_from_slice(b"\x1b[201~");
-                                v
+                                wrap_bracketed_paste(&text)
                             } else {
                                 text.into_bytes()
                             };
@@ -585,16 +578,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                     .terminal
                     .mode();
 
-                let bytes: Vec<u8> = if text.len() > 1 && mode.contains(TermMode::BRACKETED_PASTE) {
-                    // ブラケットペーストモード: インジェクション攻撃防止のためサニタイズ
-                    let sanitized = text.replace("\x1b[200~", "").replace("\x1b[201~", "");
-                    let mut v = b"\x1b[200~".to_vec();
-                    v.extend_from_slice(sanitized.as_bytes());
-                    v.extend_from_slice(b"\x1b[201~");
-                    v
-                } else {
-                    text.into_bytes()
-                };
+                let bytes = ime_commit_to_bytes(text, mode.contains(TermMode::BRACKETED_PASTE));
                 if let Err(e) = session.pty_io.write_tx.try_send(bytes) {
                     log::warn!("IME commit PTY write failed: {e}");
                 }
