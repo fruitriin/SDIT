@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use crate::color::ColorConfig;
-use crate::font::FontConfig;
+use self::color::ColorConfig;
+use self::font::FontConfig;
 
 /// SDIT 設定全体。
 #[derive(Debug, Clone, Default, Deserialize)]

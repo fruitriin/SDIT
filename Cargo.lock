@@ -1791,7 +1791,6 @@ dependencies = [
  "anyhow",
  "env_logger",
  "log",
- "sdit-config",
  "sdit-core",
  "sdit-render",
  "sdit-session",
@@ -1800,24 +1799,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "sdit-config"
-version = "0.1.0"
-dependencies = [
- "dirs",
- "log",
- "serde",
- "toml",
-]
-
-[[package]]
 name = "sdit-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "bitflags 2.11.0",
+ "dirs",
  "log",
  "pty-process",
+ "serde",
  "thiserror",
+ "toml",
  "unicode-width 0.2.2",
  "vte",
 ]
@@ -1831,7 +1823,6 @@ dependencies = [
  "cosmic-text",
  "log",
  "pollster",
- "sdit-config",
  "sdit-core",
  "thiserror",
  "wgpu",

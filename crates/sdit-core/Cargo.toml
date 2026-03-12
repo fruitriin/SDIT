@@ -16,6 +16,9 @@ bitflags      = { workspace = true }
 unicode-width = { workspace = true }
 log           = { workspace = true }
 thiserror     = { workspace = true }
+serde         = { workspace = true }
+toml          = { workspace = true }
+dirs          = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

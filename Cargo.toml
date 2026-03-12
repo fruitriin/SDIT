@@ -4,7 +4,6 @@ members = [
     "crates/sdit-core",
     "crates/sdit-session",
     "crates/sdit-render",
-    "crates/sdit-config",
 ]
 resolver = "2"
 

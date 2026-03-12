@@ -1,3 +1,4 @@
+pub mod config;
 pub mod font;
 pub mod grid;
 pub mod index;

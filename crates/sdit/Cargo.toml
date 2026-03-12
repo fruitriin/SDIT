@@ -17,7 +17,6 @@ path = "src/main.rs"
 sdit-core    = { path = "../sdit-core" }
 sdit-session = { path = "../sdit-session" }
 sdit-render  = { path = "../sdit-render" }
-sdit-config  = { path = "../sdit-config" }
 winit        = { workspace = true }
 wgpu         = { workspace = true }
 log          = { workspace = true }

@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use cosmic_text::{
     Attrs, Buffer, Family, FontSystem, Metrics, Placement, Shaping, SwashCache, fontdb,
 };
-use sdit_config::font::FontConfig;
+use sdit_core::config::font::FontConfig;
 
 use crate::atlas::{Atlas, AtlasRegion};
 

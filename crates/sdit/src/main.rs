@@ -83,7 +83,7 @@ struct SditApp {
     /// フォントコンテキスト（全ウィンドウで共有）。
     font_ctx: FontContext,
     /// 解決済みカラーテーブル。
-    colors: sdit_config::color::ResolvedColors,
+    colors: sdit_core::config::color::ResolvedColors,
     /// winit modifier キーの状態。
     modifiers: ModifiersState,
     /// winit イベントループへのプロキシ。
@@ -108,14 +108,14 @@ impl SditApp {
     fn new(
         event_proxy: winit::event_loop::EventLoopProxy<SditEvent>,
         smoke_test: bool,
-        config: &sdit_config::Config,
+        config: &sdit_core::config::Config,
     ) -> Self {
         Self {
             windows: HashMap::new(),
             session_to_window: HashMap::new(),
             session_mgr: SessionManager::new(),
             font_ctx: FontContext::from_config(&config.font),
-            colors: sdit_config::color::ResolvedColors::from_theme(&config.colors.theme),
+            colors: sdit_core::config::color::ResolvedColors::from_theme(&config.colors.theme),
             modifiers: ModifiersState::empty(),
             event_proxy,
             smoke_test,
@@ -1177,7 +1177,7 @@ fn build_sidebar_cells(
     surface_size: [f32; 2],
     font_ctx: &mut FontContext,
     atlas: &mut Atlas,
-    colors: &sdit_config::color::ResolvedColors,
+    colors: &sdit_core::config::color::ResolvedColors,
 ) -> Vec<CellVertex> {
     let width = sidebar.width_cells;
     let total_rows = (surface_size[1] / metrics.cell_height).floor().max(1.0) as usize;
@@ -1340,7 +1340,7 @@ fn main() {
     let smoke_test =
         cfg!(debug_assertions) && std::env::var("SDIT_SMOKE_TEST").as_deref() == Ok("1");
 
-    let config = sdit_config::Config::load(&sdit_config::Config::default_path());
+    let config = sdit_core::config::Config::load(&sdit_core::config::Config::default_path());
     log::info!("SDIT starting (font: {} {}px)", config.font.family, config.font.size);
     let event_loop = EventLoop::<SditEvent>::with_user_event().build().unwrap();
     let proxy = event_loop.create_proxy();
