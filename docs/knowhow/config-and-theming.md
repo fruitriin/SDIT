@@ -25,6 +25,18 @@
 - `WIDE_CHAR` セルには `cell_width_scale: 2.0` を設定し、シェーダー側でクワッドを2セル幅に拡張
 - シェーダー内で `clamp(cell_width_scale, 1.0, 2.0)` して異常値を防御
 
+## 設定 Hot Reload（config_watcher）
+
+- `notify::RecommendedWatcher` でファイルの **親ディレクトリ** を監視する（ファイル自体の監視は一部 FS で動作しないため）
+- デバウンス 300ms: `Instant` を `Arc<Mutex>` で共有し、最後のイベントから 300ms 経過後に `SditEvent::ConfigReloaded` を送信する
+- 親ディレクトリが存在しない場合は `None` を返して起動を続行する（graceful fallback）
+  - 例: `~/.config/sdit/` ディレクトリが未作成の場合は WARN ログを出して監視なしで起動する
+- `_watcher` を `main.rs` 内でドロップせずに保持する必要がある（ドロップすると監視が停止する）
+- `apply_config_reload()` は `Config::load()` でファイルを再読み込みし、フォント・カラー・キーバインドの差分のみ更新する
+  - フォント変更時: `FontContext` を再構築 + 全アトラスクリア + 全セッション resize
+  - カラー変更時: `ResolvedColors` を差し替え
+  - キーバインド変更時: `config` を置換（validate は load 内で実施済み）
+
 ## 永続化のアトミック書き込み
 
 - 一時ファイル + rename パターンでデータ破損を防ぐ

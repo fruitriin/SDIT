@@ -81,6 +81,8 @@ pub(crate) enum SditEvent {
     ChildExit(SessionId, i32),
     /// OSC 52 クリップボード書き込み要求。
     ClipboardWrite(String),
+    /// 設定ファイルが変更された → 設定を再読み込みして反映する。
+    ConfigReloaded,
 }
 
 // ---------------------------------------------------------------------------
@@ -289,6 +291,78 @@ impl SditApp {
             }
         }
         None
+    }
+
+    /// 設定ファイルを再読み込みして変更を反映する。
+    ///
+    /// フォント・カラー・キーバインドの変更を検出し、必要な部分だけ更新する。
+    /// 再描画の呼び出しは呼び出し側の責任（`event_loop.rs` で `request_redraw` を呼ぶ）。
+    pub(crate) fn apply_config_reload(&mut self) {
+        let new_config =
+            sdit_core::config::Config::load(&sdit_core::config::Config::default_path());
+
+        // 1. フォント変更チェック
+        let old_font_size = self.font_ctx.metrics().font_size;
+        let new_font_size = new_config.font.clamped_size();
+        let font_changed = (old_font_size - new_font_size).abs() > f32::EPSILON
+            || self.config.font.family != new_config.font.family
+            || (self.config.font.clamped_line_height() - new_config.font.clamped_line_height())
+                .abs()
+                > f32::EPSILON;
+
+        if font_changed {
+            // FontContext を再構築（family/line_height も変わりうる）
+            self.font_ctx = FontContext::from_config(&new_config.font);
+            self.default_font_size = new_config.font.clamped_size();
+            // 全ウィンドウのアトラスをクリア
+            for ws in self.windows.values_mut() {
+                ws.atlas.clear();
+            }
+            // 全セッションをリサイズ
+            let metrics = *self.font_ctx.metrics();
+            let window_ids: Vec<winit::window::WindowId> = self.windows.keys().copied().collect();
+            for window_id in window_ids {
+                let Some(ws) = self.windows.get(&window_id) else { continue };
+                let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+                let surface_w = ws.gpu.surface_config.width as f32;
+                let surface_h = ws.gpu.surface_config.height as f32;
+                let term_width = (surface_w - sidebar_w).max(0.0);
+                let (cols, rows) =
+                    calc_grid_size(term_width, surface_h, metrics.cell_width, metrics.cell_height);
+
+                let session_ids: Vec<_> = ws.sessions.clone();
+                for sid in session_ids {
+                    if let Some(session) = self.session_mgr.get(sid) {
+                        {
+                            let mut state = session
+                                .term_state
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                            state.terminal.resize(rows, cols);
+                        }
+                        let pty_size = PtySize::new(
+                            rows.try_into().unwrap_or(24),
+                            cols.try_into().unwrap_or(80),
+                        );
+                        session.resize_pty(pty_size);
+                    }
+                }
+            }
+        }
+
+        // 2. カラー変更チェック
+        if self.config.colors.theme != new_config.colors.theme {
+            self.colors =
+                sdit_core::config::color::ResolvedColors::from_theme(&new_config.colors.theme);
+        }
+
+        // 3. キーバインド更新（常に置換）
+        // validate() は Config::load() 内で既に呼ばれている
+
+        // 4. 設定を置換
+        self.config = new_config;
+
+        log::info!("Config reloaded successfully");
     }
 
     /// フォントサイズを変更する。

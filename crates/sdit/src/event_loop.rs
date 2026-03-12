@@ -828,6 +828,13 @@ impl ApplicationHandler<SditEvent> for SditApp {
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: SditEvent) {
         match event {
+            SditEvent::ConfigReloaded => {
+                self.apply_config_reload();
+                // 全ウィンドウ再描画
+                for ws in self.windows.values() {
+                    ws.window.request_redraw();
+                }
+            }
             SditEvent::PtyOutput(session_id) => {
                 self.redraw_session(session_id);
             }
