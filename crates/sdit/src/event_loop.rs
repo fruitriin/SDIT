@@ -15,6 +15,7 @@ use crate::app::{
     wrap_bracketed_paste,
 };
 use sdit_core::config::keybinds::Action;
+use sdit_core::session::AppSnapshot;
 
 use crate::input::{
     is_url_modifier, key_to_bytes, mouse_report_sgr, mouse_report_x11, pixel_to_grid,
@@ -31,7 +32,10 @@ impl ApplicationHandler<SditEvent> for SditApp {
             return;
         }
         self.initialized = true;
-        self.create_window(event_loop);
+        // 前回保存したジオメトリを復元して最初のウィンドウを作成する
+        let snapshot = AppSnapshot::load(&AppSnapshot::default_path());
+        let geometry = snapshot.windows.first().cloned().map(|g| g.validated());
+        self.create_window(event_loop, geometry.as_ref());
     }
 
     #[allow(clippy::too_many_lines)]
@@ -156,7 +160,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                 self.detach_session_to_new_window(id, event_loop);
                             }
                             Action::NewWindow => {
-                                self.create_window(event_loop);
+                                self.create_window(event_loop, None);
                             }
                             Action::SidebarToggle => {
                                 if let Some(ws) = self.windows.get_mut(&id) {

@@ -7,12 +7,63 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+/// ウィンドウジオメトリのスナップショット。
+///
+/// `width`/`height` は論理ピクセル（DPI 非依存）、`x`/`y` は物理ピクセル（`outer_position`）。
+/// DPI が変わった場合でも論理サイズは OS 側で適切にスケーリングされるため、
+/// 物理座標との混在は意図的な設計。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowGeometry {
+    /// 論理幅（LogicalSize）。
+    pub width: f64,
+    /// 論理高さ（LogicalSize）。
+    pub height: f64,
+    /// 物理X座標（`outer_position`）。
+    pub x: i32,
+    /// 物理Y座標（`outer_position`）。
+    pub y: i32,
+}
+
+/// ジオメトリバリデーションの定数。
+const MIN_WINDOW_SIZE: f64 = 100.0;
+const MAX_WINDOW_SIZE: f64 = 16384.0;
+const MAX_WINDOW_POS: i32 = 65536;
+const MIN_WINDOW_POS: i32 = -16384;
+
+impl WindowGeometry {
+    /// 不正値をデフォルトにクランプしたジオメトリを返す。
+    ///
+    /// - NaN / Infinity / 極小値 / 極大値はデフォルト（800×600）にフォールバック
+    /// - 座標は合理的な範囲にクランプ（マルチモニタ対応）
+    #[must_use]
+    pub fn validated(self) -> Self {
+        let width = if self.width.is_finite() && self.width >= MIN_WINDOW_SIZE {
+            self.width.min(MAX_WINDOW_SIZE)
+        } else {
+            800.0
+        };
+        let height = if self.height.is_finite() && self.height >= MIN_WINDOW_SIZE {
+            self.height.min(MAX_WINDOW_SIZE)
+        } else {
+            600.0
+        };
+        let x = self.x.clamp(MIN_WINDOW_POS, MAX_WINDOW_POS);
+        let y = self.y.clamp(MIN_WINDOW_POS, MAX_WINDOW_POS);
+        Self { width, height, x, y }
+    }
+}
+
 /// アプリケーション全体のスナップショット。
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppSnapshot {
     /// 保存されたセッション一覧。
     #[serde(default)]
     pub sessions: Vec<SessionSnapshot>,
+    /// 保存されたウィンドウジオメトリ一覧。
+    ///
+    /// 後方互換: 古い session.toml に windows フィールドがなくても読める。
+    #[serde(default)]
+    pub windows: Vec<WindowGeometry>,
 }
 
 /// 1セッション分のスナップショット。
@@ -105,6 +156,7 @@ mod tests {
                 SessionSnapshot { cwd: PathBuf::from("/home/user") },
                 SessionSnapshot { cwd: PathBuf::from("/tmp") },
             ],
+            windows: vec![],
         };
 
         snap.save(&path).expect("save failed");
@@ -138,5 +190,121 @@ mod tests {
         let path = AppSnapshot::default_path();
         assert!(path.to_string_lossy().contains("sdit"));
         assert!(path.to_string_lossy().ends_with("session.toml"));
+    }
+
+    // -----------------------------------------------------------------------
+    // WindowGeometry テスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn window_geometry_roundtrip() {
+        let dir = PathBuf::from("tmp/test-persistence-geometry");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("session.toml");
+
+        let snap = AppSnapshot {
+            sessions: vec![SessionSnapshot { cwd: PathBuf::from("/home/user") }],
+            windows: vec![
+                WindowGeometry { width: 800.0, height: 600.0, x: 100, y: 200 },
+                WindowGeometry { width: 1024.0, height: 768.0, x: 300, y: 400 },
+            ],
+        };
+
+        snap.save(&path).expect("save failed");
+        let loaded = AppSnapshot::load(&path);
+
+        assert_eq!(loaded.windows.len(), 2);
+        assert!((loaded.windows[0].width - 800.0).abs() < f64::EPSILON);
+        assert!((loaded.windows[0].height - 600.0).abs() < f64::EPSILON);
+        assert_eq!(loaded.windows[0].x, 100);
+        assert_eq!(loaded.windows[0].y, 200);
+        assert!((loaded.windows[1].width - 1024.0).abs() < f64::EPSILON);
+        assert!((loaded.windows[1].height - 768.0).abs() < f64::EPSILON);
+        assert_eq!(loaded.windows[1].x, 300);
+        assert_eq!(loaded.windows[1].y, 400);
+
+        // クリーンアップ
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn backward_compat_no_windows_field() {
+        // windows フィールドなしの古い TOML を load してもエラーにならない
+        let dir = PathBuf::from("tmp/test-persistence-compat");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("session.toml");
+
+        // windows フィールドを含まない旧形式の TOML
+        let old_toml = r#"[[sessions]]
+cwd = "/home/user"
+"#;
+        std::fs::write(&path, old_toml).expect("write failed");
+
+        let snap = AppSnapshot::load(&path);
+        // windows は空のベクタになる
+        assert!(snap.windows.is_empty(), "windows should be empty for old format");
+        // sessions は正しく読み込まれる
+        assert_eq!(snap.sessions.len(), 1);
+        assert_eq!(snap.sessions[0].cwd, PathBuf::from("/home/user"));
+
+        // クリーンアップ
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validated_clamps_invalid_geometry() {
+        // ゼロサイズ → デフォルト
+        let geom = WindowGeometry { width: 0.0, height: 0.0, x: 0, y: 0 }.validated();
+        assert!((geom.width - 800.0).abs() < f64::EPSILON);
+        assert!((geom.height - 600.0).abs() < f64::EPSILON);
+
+        // 負値 → デフォルト
+        let geom = WindowGeometry { width: -100.0, height: -50.0, x: 0, y: 0 }.validated();
+        assert!((geom.width - 800.0).abs() < f64::EPSILON);
+        assert!((geom.height - 600.0).abs() < f64::EPSILON);
+
+        // NaN / Infinity → デフォルト
+        let geom =
+            WindowGeometry { width: f64::NAN, height: f64::INFINITY, x: 0, y: 0 }.validated();
+        assert!((geom.width - 800.0).abs() < f64::EPSILON);
+        assert!((geom.height - 600.0).abs() < f64::EPSILON);
+
+        // 極大値 → クランプ
+        let geom = WindowGeometry { width: 99999.0, height: 99999.0, x: 0, y: 0 }.validated();
+        assert!((geom.width - 16384.0).abs() < f64::EPSILON);
+        assert!((geom.height - 16384.0).abs() < f64::EPSILON);
+
+        // 極端な座標 → クランプ
+        let geom = WindowGeometry { width: 800.0, height: 600.0, x: -99999, y: 99999 }.validated();
+        assert_eq!(geom.x, -16384);
+        assert_eq!(geom.y, 65536);
+
+        // 正常値はそのまま
+        let geom = WindowGeometry { width: 1024.0, height: 768.0, x: 100, y: 200 }.validated();
+        assert!((geom.width - 1024.0).abs() < f64::EPSILON);
+        assert!((geom.height - 768.0).abs() < f64::EPSILON);
+        assert_eq!(geom.x, 100);
+        assert_eq!(geom.y, 200);
+    }
+
+    #[test]
+    fn empty_windows_list_roundtrip() {
+        let dir = PathBuf::from("tmp/test-persistence-empty-windows");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("session.toml");
+
+        // windows が空の AppSnapshot を save/load
+        let snap = AppSnapshot { sessions: vec![], windows: vec![] };
+
+        snap.save(&path).expect("save failed");
+        let loaded = AppSnapshot::load(&path);
+        assert!(loaded.windows.is_empty());
+        assert!(loaded.sessions.is_empty());
+
+        // クリーンアップ
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

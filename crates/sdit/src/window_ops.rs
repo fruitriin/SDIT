@@ -6,20 +6,52 @@ use winit::window::{Window, WindowId};
 use sdit_core::pty::PtySize;
 use sdit_core::render::atlas::Atlas;
 use sdit_core::render::pipeline::{CellPipeline, GpuContext};
-use sdit_core::session::SidebarState;
+use sdit_core::session::{AppSnapshot, SessionSnapshot, SidebarState, WindowGeometry};
 
 use crate::app::{SditApp, WindowState};
 use crate::window::calc_grid_size;
 
 impl SditApp {
-    /// 新しいウィンドウ + セッションを生成する。
-    pub(crate) fn create_window(&mut self, event_loop: &ActiveEventLoop) {
-        let mut attrs = Window::default_attributes()
-            .with_title("SDIT")
-            .with_inner_size(winit::dpi::LogicalSize::new(800.0_f64, 600.0_f64));
+    /// 現在のウィンドウ群のジオメトリを収集する。
+    fn collect_window_geometries(&self) -> Vec<WindowGeometry> {
+        self.windows
+            .values()
+            .filter_map(|ws| {
+                let size = ws.window.inner_size().to_logical::<f64>(ws.window.scale_factor());
+                let pos = ws.window.outer_position().ok()?;
+                Some(WindowGeometry { width: size.width, height: size.height, x: pos.x, y: pos.y })
+            })
+            .collect()
+    }
 
-        if let Some(pos) = self.cascade_position() {
-            attrs = attrs.with_position(pos);
+    /// 現在のセッション群のスナップショットを収集する。
+    ///
+    /// 現時点では cwd の取得はサポートしていないため、空のリストを返す。
+    /// セッション復元は将来のフェーズで実装予定。
+    fn collect_session_snapshots() -> Vec<SessionSnapshot> {
+        Vec::new()
+    }
+
+    /// 新しいウィンドウ + セッションを生成する。
+    ///
+    /// `geometry` が `Some` の場合、指定サイズ・位置でウィンドウを作成する。
+    /// `None` の場合はデフォルト（800×600）でカスケード配置する。
+    pub(crate) fn create_window(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        geometry: Option<&WindowGeometry>,
+    ) {
+        let mut attrs = Window::default_attributes().with_title("SDIT");
+
+        if let Some(geom) = geometry {
+            attrs = attrs
+                .with_inner_size(winit::dpi::LogicalSize::new(geom.width, geom.height))
+                .with_position(winit::dpi::PhysicalPosition::new(geom.x, geom.y));
+        } else {
+            attrs = attrs.with_inner_size(winit::dpi::LogicalSize::new(800.0_f64, 600.0_f64));
+            if let Some(pos) = self.cascade_position() {
+                attrs = attrs.with_position(pos);
+            }
         }
 
         let window = match event_loop.create_window(attrs) {
@@ -208,6 +240,15 @@ impl SditApp {
                 "Closed window {window_id:?}, sessions {:?}",
                 ws.sessions.iter().map(|s| s.0).collect::<Vec<_>>()
             );
+        }
+
+        // 残存ウィンドウのジオメトリとセッションを保存する
+        let snapshot = AppSnapshot {
+            sessions: Self::collect_session_snapshots(),
+            windows: self.collect_window_geometries(),
+        };
+        if let Err(e) = snapshot.save(&AppSnapshot::default_path()) {
+            log::warn!("Failed to save window geometry: {e}");
         }
     }
 
