@@ -3,6 +3,8 @@ mod config_watcher;
 mod event_loop;
 mod headless;
 mod input;
+#[cfg(target_os = "macos")]
+mod menu;
 mod render;
 mod window;
 mod window_ops;
@@ -32,6 +34,22 @@ fn main() {
         &sdit_core::config::Config::default_path(),
         proxy.clone(),
     );
+
+    // macOS メニューバーの初期化
+    // _menu_bar をドロップするとメニューが消えるため変数に保持する。
+    #[cfg(target_os = "macos")]
+    let _menu_bar = {
+        let (menu_bar, id_map) = menu::build_menu_bar();
+        menu_bar.init_for_nsapp();
+
+        let menu_proxy = proxy.clone();
+        muda::MenuEvent::set_event_handler(Some(move |event: muda::MenuEvent| {
+            if let Some(&action) = id_map.get(event.id()) {
+                let _ = menu_proxy.send_event(SditEvent::MenuAction(action));
+            }
+        }));
+        menu_bar
+    };
 
     let mut app = SditApp::new(proxy, smoke_test, &config);
     event_loop.run_app(&mut app).unwrap();

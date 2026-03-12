@@ -22,3 +22,5 @@ env_logger   = { workspace = true }
 anyhow       = { workspace = true }
 arboard      = "3"
 notify       = { workspace = true }
+muda = "0.17.1"
+open = "5"

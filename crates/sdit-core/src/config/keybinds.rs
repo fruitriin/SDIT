@@ -28,6 +28,14 @@ pub enum Action {
     SearchPrev,
     NextSession,
     PrevSession,
+    /// アプリケーションを終了する。
+    Quit,
+    /// バージョン情報を表示する。
+    About,
+    /// 設定ファイルをエディタで開く。
+    Preferences,
+    /// 全テキストを選択する（将来実装）。
+    SelectAll,
 }
 
 // ---------------------------------------------------------------------------
@@ -132,6 +140,7 @@ fn macos_default_bindings() -> Vec<KeyBinding> {
         // クリップボード
         bind("c", "super", Copy),
         bind("v", "super", Paste),
+        bind("a", "super", SelectAll),
         // ズーム
         // "=" → Cmd+= (SUPER のみ)、"plus" → Cmd++ = Cmd+Shift+= (SUPER|SHIFT)
         bind("=", "super", ZoomIn),
@@ -148,6 +157,9 @@ fn macos_default_bindings() -> Vec<KeyBinding> {
         bind("Tab", "ctrl|shift", PrevSession),
         bind("]", "super|shift", NextSession),
         bind("[", "super|shift", PrevSession),
+        // アプリ
+        bind("q", "super", Quit),
+        bind(",", "super", Preferences),
     ]
 }
 
@@ -248,6 +260,9 @@ mod tests {
             Action::Search,
             Action::NextSession,
             Action::PrevSession,
+            Action::Quit,
+            Action::SelectAll,
+            Action::Preferences,
         ] {
             assert!(
                 actions.contains(&required),

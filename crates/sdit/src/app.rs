@@ -83,6 +83,8 @@ pub(crate) enum SditEvent {
     ClipboardWrite(String),
     /// 設定ファイルが変更された → 設定を再読み込みして反映する。
     ConfigReloaded,
+    /// メニューバーのアイテムが選択された。
+    MenuAction(sdit_core::config::keybinds::Action),
 }
 
 // ---------------------------------------------------------------------------
