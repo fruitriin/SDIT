@@ -7,12 +7,12 @@
 
 use std::collections::HashMap;
 
+use crate::config::font::FontConfig;
 use cosmic_text::{
     Attrs, Buffer, Family, FontSystem, Metrics, Placement, Shaping, SwashCache, fontdb,
 };
-use sdit_core::config::font::FontConfig;
 
-use crate::atlas::{Atlas, AtlasRegion};
+use super::atlas::{Atlas, AtlasRegion};
 
 /// セルのピクセルメトリクス。
 #[derive(Debug, Clone, Copy)]

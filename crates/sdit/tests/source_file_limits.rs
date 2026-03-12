@@ -12,13 +12,7 @@ const WARN_THRESHOLD: usize = 1000;
 const ERROR_THRESHOLD: usize = 1500;
 
 /// 検査対象のクレートディレクトリ（ワークスペースルートからの相対パス）
-const CRATE_DIRS: &[&str] = &[
-    "crates/sdit/src",
-    "crates/sdit-core/src",
-    "crates/sdit-session/src",
-    "crates/sdit-render/src",
-    "crates/sdit-config/src",
-];
+const CRATE_DIRS: &[&str] = &["crates/sdit/src", "crates/sdit-core/src"];
 
 fn workspace_root() -> PathBuf {
     // crates/sdit/ から2階層上がワークスペースルート

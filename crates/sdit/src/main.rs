@@ -12,11 +12,13 @@ use winit::window::{Window, WindowId};
 
 use sdit_core::grid::Dimensions;
 use sdit_core::pty::{Pty, PtyConfig, PtySize};
+use sdit_core::render::atlas::Atlas;
+use sdit_core::render::font::FontContext;
+use sdit_core::render::pipeline::{CellPipeline, CellVertex, GpuContext};
+use sdit_core::session::{
+    Session, SessionId, SessionManager, SidebarState, SpawnParams, TerminalState,
+};
 use sdit_core::terminal::{TermMode, Terminal};
-use sdit_render::atlas::Atlas;
-use sdit_render::font::FontContext;
-use sdit_render::pipeline::{CellPipeline, CellVertex, GpuContext};
-use sdit_session::{Session, SessionId, SessionManager, SidebarState, SpawnParams, TerminalState};
 
 // ---------------------------------------------------------------------------
 // カスタムイベント型
@@ -1173,7 +1175,7 @@ fn build_sidebar_cells(
     sessions: &[SessionId],
     active_index: usize,
     sidebar: &SidebarState,
-    metrics: &sdit_render::font::CellMetrics,
+    metrics: &sdit_core::render::font::CellMetrics,
     surface_size: [f32; 2],
     font_ctx: &mut FontContext,
     atlas: &mut Atlas,

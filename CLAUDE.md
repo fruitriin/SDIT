@@ -250,26 +250,20 @@ Zellijのタブ概念 → SDITの概念への変換表:
 │  │              │  │              │  │              │  │
 │  │  Session A   │  │  Session B   │  │  Session C   │  │
 │  └──────────────┘  └──────────────┘  └──────────────┘  │
-│          ↑ wgpu rendering (Ghostty参照)                  │
+│          ↑ wgpu rendering                               │
 │                                                         │
 │  ┌──────────────────────────────────────────────────┐   │
 │  │  SessionSidebar (縦タブ) — デフォルト非表示       │   │
-│  │  Zellij tab-bar plugin参照                       │   │
 │  └──────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
           ↓
 ┌─────────────────────────────────────────────────────────┐
-│  sdit-core (library crate)  ← Ghostty libghostty参照    │
+│  sdit-core (library crate)                              │
 │                                                         │
-│  Terminal  PTY  Grid  VTE-Parser  FontRasterizer        │
-│  ↑Ghostty参照  ↑Alacritty参照    ↑Ghostty参照           │
-└─────────────────────────────────────────────────────────┘
-          ↓
-┌─────────────────────────────────────────────────────────┐
-│  sdit-session (library crate) ← WezTerm Mux参照         │
-│                                                         │
-│  SessionManager  WindowRegistry  ArrangementStore       │
-│  ← WezTerm mux参照              ← Zellij session参照    │
+│  terminal/ pty/ grid/ font/  ← PTY・VTE・Grid コア      │
+│  render/                     ← wgpu パイプライン・アトラス│
+│  session/                    ← セッション管理・永続化    │
+│  config/                     ← TOML 設定・カラーテーマ   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -282,23 +276,15 @@ sdit/
 ├── crates/
 │   ├── sdit/              # バイナリ。GUIループ・ウィンドウ生成
 │   │   └── src/main.rs
-│   ├── sdit-core/         # PTY・VTE・グリッド・フォント。GUIゼロ依存
-│   │   └── src/
-│   │       ├── terminal/  # VTEステートマシン
-│   │       ├── grid/      # セルグリッド・スクロールバック
-│   │       ├── pty/       # PTYプロセス管理
-│   │       └── font/      # フォントラスタライズ
-│   ├── sdit-session/      # セッション・ウィンドウ状態管理
-│   │   └── src/
-│   │       ├── session.rs        # Session型
-│   │       ├── window_registry.rs # SDIウィンドウ一覧
-│   │       └── sidebar.rs        # 縦タブ状態
-│   ├── sdit-render/       # wgpuレンダーバックエンド
-│   │   └── src/
-│   │       ├── pipeline.rs
-│   │       └── atlas.rs   # フォントテクスチャアトラス
-│   └── sdit-config/       # TOML設定スキーマ
+│   └── sdit-core/         # ライブラリ。PTY/VTE/Grid/Render/Session/Config
 │       └── src/
+│           ├── terminal/  # VTEステートマシン
+│           ├── grid/      # セルグリッド・スクロールバック
+│           ├── pty/       # PTYプロセス管理
+│           ├── font/      # フォントラスタライズ（低レベル）
+│           ├── render/    # wgpuレンダー（pipeline/atlas/font context）
+│           ├── session/   # セッション管理・サイドバー状態・永続化
+│           └── config/    # TOML設定スキーマ・カラーテーマ
 ├── refs/                  # リファレンスOSS（git submodule）
 └── docs/                  # 読解メモ・計画ファイル
 ```

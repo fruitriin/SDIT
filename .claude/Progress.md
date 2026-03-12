@@ -37,6 +37,35 @@
 
 ---
 
-## タスク
+## タスク: Phase 5.8 クレート統合リファクタリング
 
-（現在タスクなし）
+### Step 1: sdit-config → sdit-core に統合
+- [ ] ファイル移動: `config/src/{lib,color,font}.rs` → `sdit-core/src/config/`
+- [ ] モジュール宣言: `sdit-core/src/lib.rs` に `pub mod config;`
+- [ ] 依存移動: `serde`, `toml`, `dirs` → sdit-core Cargo.toml
+- [ ] インポート書き換え: `use sdit_config::` → `use sdit_core::config::`
+- [ ] sdit-config クレート削除 + ワークスペース除外
+- [ ] テスト通過確認
+
+### Step 2: sdit-session → sdit-core に統合
+- [ ] ファイル移動: `session/src/*.rs` → `sdit-core/src/session/`
+- [ ] モジュール宣言 + 依存移動 (rustix)
+- [ ] インポート書き換え: `use sdit_session::` → `use sdit_core::session::`
+- [ ] 内部参照の簡略化 (`use sdit_core::` → `use crate::`)
+- [ ] sdit-session クレート削除
+- [ ] テスト通過確認
+
+### Step 3: sdit-render → sdit-core に統合
+- [ ] ファイル移動: `render/src/*.rs` → `sdit-core/src/render/`
+- [ ] モジュール宣言 + 依存移動 (wgpu, cosmic-text, bytemuck, etc.)
+- [ ] インポート書き換え: `use sdit_render::` → `use sdit_core::render::`
+- [ ] 内部参照の簡略化 (`use sdit_core::` / `use sdit_config::` → `use crate::`)
+- [ ] sdit-render クレート削除
+- [ ] テスト通過確認
+
+### Step 4: 最終確認
+- [ ] `cargo fmt --check && cargo clippy --all-targets && cargo test`
+- [ ] CLAUDE.md クレート構成セクション更新
+- [ ] docs/knowhow 更新
+- [ ] セキュリティレビュー
+- [ ] コミット

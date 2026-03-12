@@ -1792,8 +1792,6 @@ dependencies = [
  "env_logger",
  "log",
  "sdit-core",
- "sdit-render",
- "sdit-session",
  "wgpu",
  "winit",
 ]
@@ -1804,42 +1802,20 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bitflags 2.11.0",
+ "bytemuck",
+ "cosmic-text",
  "dirs",
  "log",
+ "pollster",
  "pty-process",
+ "rustix 0.38.44",
  "serde",
  "thiserror",
  "toml",
  "unicode-width 0.2.2",
  "vte",
-]
-
-[[package]]
-name = "sdit-render"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytemuck",
- "cosmic-text",
- "log",
- "pollster",
- "sdit-core",
- "thiserror",
  "wgpu",
  "winit",
-]
-
-[[package]]
-name = "sdit-session"
-version = "0.1.0"
-dependencies = [
- "dirs",
- "log",
- "rustix 0.38.44",
- "sdit-core",
- "serde",
- "thiserror",
- "toml",
 ]
 
 [[package]]

@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use crate::session::{Session, SessionId};
+use super::session::{Session, SessionId};
 
 /// 全セッションの管理とID採番を行う。
 ///
 /// Window との紐付けは sdit バイナリ側（`SditApp`）が行う。
-/// sdit-session は GUI に依存しないため、winit の `WindowId` を知らない。
+/// sdit-core は GUI に依存しないため、winit の `WindowId` を知らない。
 pub struct SessionManager {
     sessions: HashMap<SessionId, Session>,
     next_id: u64,

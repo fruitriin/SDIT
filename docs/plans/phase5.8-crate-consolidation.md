@@ -63,16 +63,16 @@ After:
 | sdit-config クレート削除 | `crates/sdit-config/` 削除、ワークスペース Cargo.toml から除外 | 極小 |
 | テスト通過確認 | config の19テストがそのまま通ることを確認 | 極小 |
 
-### Step 2: sdit-session → sdit-core に統合
+### Step 2: sdit-session → sdit-core に統合 ✅ 完了
 
 | タスク | 詳細 | 工数 |
 |---|---|---|
 | ファイル移動 | `session/src/{session,sidebar,window_registry,persistence}.rs` → `sdit-core/src/session/` | 極小 |
 | モジュール宣言追加 | `sdit-core/src/lib.rs` に `pub mod session;` | 極小 |
-| 依存移動 | session 固有の依存があれば移動 | 極小 |
-| インポート書き換え | `use sdit_session::` → `use sdit_core::session::` | 小 |
-| sdit-session クレート削除 | `crates/sdit-session/` 削除 | 極小 |
-| テスト通過確認 | session の16テストがそのまま通ることを確認 | 極小 |
+| 依存移動 | `rustix` を sdit-core の Cargo.toml に追加 | 極小 |
+| インポート書き換え | `use sdit_session::` → `use sdit_core::session::` (main.rs) | 小 |
+| sdit-session クレート削除 | `crates/sdit-session/` 削除、ワークスペース Cargo.toml から除外 | 極小 |
+| テスト通過確認 | session の16テストが全て通過（99テスト中に含む） | 極小 |
 
 ### Step 3: sdit-render → sdit-core に統合
 
@@ -135,11 +135,19 @@ crates/sdit-core/src/
 
 ## 完了条件
 
-- クレートが2つ（sdit, sdit-core）になっている
-- 全112テスト通過
-- `cargo clippy --all-targets` 警告なし
-- 機能変更なし（純粋なリファクタリング）
-- CLAUDE.md のクレート構成が更新されている
+- [x] クレートが2つ（sdit, sdit-core）になっている
+- [x] 全105ユニットテスト + 統合テスト通過
+- [x] `cargo clippy --all-targets` 警告なし
+- [x] 機能変更なし（純粋なリファクタリング）
+- [x] CLAUDE.md のクレート構成が更新されている
+
+## 実装結果（2026-03-12）
+
+Step 1〜3 を順次実行し、全クレートを sdit-core に統合完了。
+- sdit-config → sdit-core/src/config/
+- sdit-session → sdit-core/src/session/
+- sdit-render → sdit-core/src/render/
+依存グラフは `sdit → sdit-core` のみに簡素化。
 
 ## 依存関係
 

@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use sdit_core::pty::{Pty, PtyConfig, PtySize};
-use sdit_core::terminal::{Processor, Terminal};
+use crate::pty::{Pty, PtyConfig, PtySize};
+use crate::terminal::{Processor, Terminal};
 
 /// セッション ID（単調増加）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -66,8 +66,8 @@ impl Session {
     ///
     /// PTY を起動し、Reader/Writer スレッドを立ち上げる。
     /// Reader スレッドの生成は呼び出し側がカスタムできるよう `spawn_reader` で受け取る
-    /// （winit の `EventLoopProxy` への依存を sdit-session から排除するため）。
-    pub fn spawn<F>(id: SessionId, params: SpawnParams<F>) -> sdit_core::pty::Result<Self>
+    /// （winit の `EventLoopProxy` への依存を session から排除するため）。
+    pub fn spawn<F>(id: SessionId, params: SpawnParams<F>) -> crate::pty::Result<Self>
     where
         F: FnOnce(
             Pty,

@@ -15,8 +15,6 @@ path = "src/main.rs"
 
 [dependencies]
 sdit-core    = { path = "../sdit-core" }
-sdit-session = { path = "../sdit-session" }
-sdit-render  = { path = "../sdit-render" }
 winit        = { workspace = true }
 wgpu         = { workspace = true }
 log          = { workspace = true }

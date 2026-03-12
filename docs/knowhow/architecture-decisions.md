@@ -1,28 +1,28 @@
 # アーキテクチャ判断メモ（Phase 0 読解から得た知見）
 
-## 1. 3層分離アーキテクチャ（Ghostty libghostty 参照）
+## 1. 2クレート構成（Phase 5.8 で統合）
 
-Rust での実現方針:
+Phase 5.8 で sdit-config/sdit-session/sdit-render を sdit-core に統合。
+過分割（5クレート・平均1350行）を解消し、2クレート構成に簡素化。
 
 ```
-sdit-core (lib, GUI ゼロ依存)
-  ├─ Terminal（VTE ステートマシン）
-  ├─ Grid/Screen（セルデータ + リングバッファ）
-  ├─ PTY I/O 抽象（trait PtyBackend）
-  └─ Dirty Flags（差分描画判定）
-
-sdit-session (lib, GUI ゼロ依存)
-  ├─ SessionManager（全 Session/Window 管理、Mux 相当）
-  ├─ Session = PTY + Terminal（ライフサイクル独立）
-  ├─ WindowRegistry（SDI ウィンドウ一覧）
-  └─ SessionEvent（Notification 型イベント）
+sdit-core (lib)
+  ├─ terminal/  — VTE ステートマシン
+  ├─ grid/      — セルグリッド・スクロールバック
+  ├─ pty/       — PTY プロセス管理
+  ├─ font/      — 低レベルフォント処理
+  ├─ render/    — wgpu パイプライン・アトラス・フォントコンテキスト
+  ├─ session/   — セッション管理・サイドバー状態・永続化
+  └─ config/    — TOML 設定・カラーテーマ
 
 sdit (bin, GUI 依存)
   ├─ winit イベントループ
-  ├─ wgpu レンダラー
+  ├─ GPU コンテキスト初期化
   ├─ SessionSidebar（縦タブ UI）
   └─ Mailbox（スレッド間通信）
 ```
+
+再分割の判断基準: 単一モジュールが1500行超、独立コンパイルサイクル必要、外部公開理由あり。
 
 ## 2. スレッドモデル
 

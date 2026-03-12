@@ -1,4 +1,5 @@
 pub mod persistence;
+#[allow(clippy::module_inception)]
 pub mod session;
 pub mod sidebar;
 pub mod window_registry;

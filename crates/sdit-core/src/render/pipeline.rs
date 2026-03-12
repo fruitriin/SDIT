@@ -6,15 +6,15 @@
 
 use std::sync::Arc;
 
+use crate::grid::Grid;
+use crate::grid::{Cell, CellFlags, Color, Dimensions, NamedColor};
+use crate::index::{Column, Line, Point};
 use anyhow::{Context as _, Result};
 use bytemuck::{Pod, Zeroable};
-use sdit_core::grid::Grid;
-use sdit_core::grid::{Cell, CellFlags, Color, Dimensions, NamedColor};
-use sdit_core::index::{Column, Line, Point};
 use winit::window::Window;
 
-use crate::atlas::Atlas;
-use crate::font::FontContext;
+use super::atlas::Atlas;
+use super::font::FontContext;
 
 // ---------------------------------------------------------------------------
 // GpuContext
@@ -446,8 +446,7 @@ impl CellPipeline {
                 }
 
                 let is_cursor = cursor_pos == Some((col, row));
-                let is_selected =
-                    selection.is_some_and(|sel| is_in_selection(col, row, sel));
+                let is_selected = selection.is_some_and(|sel| is_in_selection(col, row, sel));
                 let (bg, fg) = if is_cursor || is_selected {
                     // カーソル位置 or 選択範囲: fg/bg を反転
                     (color_to_rgba(cell.fg), color_to_rgba(cell.bg))
