@@ -175,8 +175,12 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         if !text.is_empty() {
                             let bracketed = mode.contains(TermMode::BRACKETED_PASTE);
                             let bytes: Vec<u8> = if bracketed {
+                                // ペースト内容からブラケットシーケンスを除去
+                                // (Terminal Injection via Clipboard 攻撃防止)
+                                let sanitized =
+                                    text.replace("\x1b[200~", "").replace("\x1b[201~", "");
                                 let mut v = b"\x1b[200~".to_vec();
-                                v.extend_from_slice(text.as_bytes());
+                                v.extend_from_slice(sanitized.as_bytes());
                                 v.extend_from_slice(b"\x1b[201~");
                                 v
                             } else {
