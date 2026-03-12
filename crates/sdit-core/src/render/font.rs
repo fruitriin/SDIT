@@ -187,13 +187,14 @@ impl FontContext {
                     .collect()
             }
             SwashContent::SubpixelMask => {
-                // サブピクセル: RGB → RGBA（A = max(R,G,B)）
+                // サブピクセル: RGBA 4bytes/pixel（zeno Format::Subpixel）
+                // A チャンネルは 0 のため、max(R,G,B) をアルファとして使う
                 image
                     .data
-                    .chunks_exact(3)
-                    .flat_map(|rgb| {
-                        let a = rgb[0].max(rgb[1]).max(rgb[2]);
-                        [rgb[0], rgb[1], rgb[2], a]
+                    .chunks_exact(4)
+                    .flat_map(|rgba| {
+                        let a = rgba[0].max(rgba[1]).max(rgba[2]);
+                        [rgba[0], rgba[1], rgba[2], a]
                     })
                     .collect()
             }
