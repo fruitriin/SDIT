@@ -407,8 +407,11 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                     }
                                 };
                                 if let Some(url) = url {
-                                    // セキュリティ: http:// または https:// で始まることを確認
-                                    if url.starts_with("http://") || url.starts_with("https://") {
+                                    // セキュリティ: http(s) スキーム + 制御文字なしを確認
+                                    let is_safe = (url.starts_with("http://")
+                                        || url.starts_with("https://"))
+                                        && url.bytes().all(|b| b >= 0x20 && b != 0x7F);
+                                    if is_safe {
                                         #[cfg(target_os = "macos")]
                                         {
                                             if let Err(e) =

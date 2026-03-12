@@ -72,6 +72,15 @@
 
 ---
 
-## タスク
+## タスク: Phase 8.2 — URL検出・クリック
 
-（現在タスクなし）
+### 実装
+- [x] Step 1: Cell に hyperlink フィールド追加 (`Option<Arc<str>>`)
+- [x] Step 2: Terminal に current_hyperlink 状態追加 + OSC 8 パーサー実装
+- [x] Step 3: URL 正規表現検出モジュール追加 (グリッド行テキストをオンデマンド走査)
+- [x] Step 4: input.rs に is_url_modifier() + event_loop.rs に Cmd+Click ハンドラ + `open` 実行
+- [x] Step 5: レンダリング — Cmd ホバー時の URL アンダーライン + 青色表示
+
+### 品質ゲート
+- [ ] Stage 1: `cargo fmt --check && cargo clippy --all-targets && cargo test`
+- [ ] Stage 2: security-review + integration-test

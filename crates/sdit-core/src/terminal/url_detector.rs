@@ -55,11 +55,15 @@ impl UrlDetector {
         // OSC 8 優先
         if let Some(cell) = cells.get(col) {
             if let Some(ref url) = cell.hyperlink {
-                return Some(url.as_ref().to_owned());
+                // ディフェンスインデプス: OSC 8 パーサーで http/https に制限済みだが再確認
+                let u = url.as_ref();
+                if u.starts_with("http://") || u.starts_with("https://") {
+                    return Some(u.to_owned());
+                }
             }
         }
 
-        // 正規表現でスキャン
+        // 正規表現でスキャン（正規表現パターン自体が https?:// に制限済み）
         let matches = self.detect_urls_in_line(cells);
         matches.into_iter().find(|m| col >= m.start_col && col < m.end_col).map(|m| m.url)
     }

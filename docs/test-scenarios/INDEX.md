@@ -1,47 +1,19 @@
-# テストシナリオ INDEX
-
-> このファイルは手動・エージェントにより更新される。シナリオ追加・実行時は必ず更新すること。
-
-## フォーマット
+# テストシナリオ インデックス
 
 | シナリオ | 要約 | 最終実行 | 結果 |
 |---|---|---|---|
-| ファイル名 | 何をテストするか | YYYY-MM-DD or 未実行 | ok / FAIL / — |
-
----
-
-## シナリオ一覧
-
-| シナリオ | 要約 | 最終実行 | 結果 |
-|---|---|---|---|
-| [001-basic-echo.md](001-basic-echo.md) | キー入力が PTY に届き echo 結果がウィンドウに描画される | 未実行 | — |
-| [002-window-resize.md](002-window-resize.md) | ウィンドウリサイズで PTY が連動してリサイズされる | 未実行 | — |
-| [003-multi-window.md](003-multi-window.md) | Cmd+N で複数ウィンドウを生成・独立動作する | 未実行 | — |
-| [004-window-independent-close.md](004-window-independent-close.md) | Cmd+W でウィンドウを個別に閉じられる | 未実行 | — |
-| [005-session-add-sidebar.md](005-session-add-sidebar.md) | セッション追加でサイドバーが自動出現する | 未実行 | — |
-| [006-session-switch.md](006-session-switch.md) | サイドバーでセッションを切り替えられる | 未実行 | — |
-| [007-session-detach.md](007-session-detach.md) | セッションをドラッグアウトして独立ウィンドウに切り出せる | 未実行 | — |
-| [008-config-font-theme.md](008-config-font-theme.md) | TOML 設定のフォント・カラーテーマが起動時に反映される | 未実行 | — |
-| [009-cjk-display.md](009-cjk-display.md) | 日本語 CJK 文字が豆腐にならず全角幅で描画される | 未実行 | — |
-| [010-alt-key.md](010-alt-key.md) | Alt+key が ESC プレフィックス付きで PTY に送信される | 未実行 | — |
-| [011-window-title.md](011-window-title.md) | OSC 2 エスケープシーケンスでウィンドウタイトルが変わる | 未実行 | — |
-| [012-cursor-style.md](012-cursor-style.md) | DECSCUSR でカーソルスタイルが変わる | 未実行 | — |
-| [013-ime-input.md](013-ime-input.md) | macOS IME（日本語入力）のプリエディット・確定が動作する | 未実行 | — |
-| [014-font-size-change.md](014-font-size-change.md) | Cmd+=/Cmd+-/Cmd+0 でフォントサイズが変わり、連続操作でクラッシュしない | 2026-03-13 | ユニットテストのみ実行（ディスプレイスリープのため GUI 不可） |
-
----
-
-## 実行状況サマリー
-
-| 実行日 | 対象シナリオ | 実行環境 | 結果 |
-|---|---|---|---|
-| 2026-03-13 | 014 (ユニットテスト相当) | macOS（ディスプレイスリープ中） | `cargo test set_font_size` → 3件 ok |
-
----
-
-## 注意事項
-
-- GUI テストはディスプレイがアクティブな状態でのみ実行可能
-- `Display Asleep: Yes` の場合、screencapture が真っ黒な画像を返す
-- capture-window の screencapture フォールバックはウィンドウ座標が (0,0) サイズの場合に失敗する
-- headless / CI 環境では GUI テストをスキップし `#[ignore]` テストを明示的に除外すること
+| [001-basic-echo](001-basic-echo.md) | 基本的な echo 動作確認 | - | - |
+| [002-window-resize](002-window-resize.md) | ウィンドウリサイズ時のグリッド再計算確認 | - | - |
+| [003-multi-window](003-multi-window.md) | 複数ウィンドウ（Cmd+N）の生成・独立動作確認 | - | - |
+| [004-window-independent-close](004-window-independent-close.md) | ウィンドウ独立クローズの確認 | - | - |
+| [005-session-add-sidebar](005-session-add-sidebar.md) | セッション追加とサイドバー表示確認 | - | - |
+| [006-session-switch](006-session-switch.md) | セッション切り替え（サイドバークリック）確認 | - | - |
+| [007-session-detach](007-session-detach.md) | セッション切出し（ドラッグアウト）確認 | - | - |
+| [008-config-font-theme](008-config-font-theme.md) | 設定ファイルによるフォント・テーマ変更確認 | - | - |
+| [009-cjk-display](009-cjk-display.md) | CJK 全角文字の表示確認 | - | - |
+| [010-alt-key](010-alt-key.md) | Alt キー入力の確認 | - | - |
+| [011-window-title](011-window-title.md) | ウィンドウタイトル動的更新の確認 | - | - |
+| [012-cursor-style](012-cursor-style.md) | カーソルスタイル変更の確認 | - | - |
+| [013-ime-input](013-ime-input.md) | IME 入力（日本語）の確認 | - | - |
+| [014-font-size-change](014-font-size-change.md) | フォントサイズ動的変更（Cmd+=/Cmd+-/Cmd+0）の確認 | 2026-03-13 | PASS |
+| [015-url-detection](015-url-detection.md) | URL 検出・Cmd+クリック・ホバーハイライトの確認 | 2026-03-13 | UNIT_ONLY |

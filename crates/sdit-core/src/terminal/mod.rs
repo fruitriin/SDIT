@@ -252,6 +252,8 @@ impl Terminal {
     pub(super) fn swap_alt_screen(&mut self) {
         std::mem::swap(&mut self.grid, &mut self.inactive_grid);
         self.mode.toggle(TermMode::ALT_SCREEN);
+        // 画面切替時にアクティブなハイパーリンクをクリア（意図しないリンク付与を防止）
+        self.current_hyperlink = None;
 
         if self.mode.contains(TermMode::ALT_SCREEN) {
             // Entering alt screen: clear it.
