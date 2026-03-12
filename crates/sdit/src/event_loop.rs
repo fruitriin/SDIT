@@ -407,7 +407,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                 metrics.cell_height,
                                 sidebar_w,
                             );
-                            let count = lines.unsigned_abs().max(1);
+                            let count = lines.unsigned_abs().clamp(1, 20);
                             for _ in 0..count {
                                 // lines > 0 = 上スクロール(64), lines < 0 = 下スクロール(65)
                                 let button: u8 = if lines > 0 { 65 } else { 64 };
