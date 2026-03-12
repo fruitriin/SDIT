@@ -3,7 +3,7 @@
 `docs/plans/` の完了状態・優先度をトラックする。
 `docs/plans/` と TODO が一致しなければ TODO を編集する。
 
-## 現在のフェーズ: Phase 11.3（次に着手）
+## 現在のフェーズ: Phase 10.3b / 12（次に着手）
 
 ## バックログ
 
@@ -34,5 +34,5 @@
 | 中低 | 10.3 | `docs/plans/phase10.3-ligature-emoji.md` | **10.3a 完了**（10.3b リガチャ未着手） |
 | done | 11.1 | `docs/plans/phase11.1-macos-menubar.md` | **完了** |
 | done | 11.2 | `docs/plans/phase11.2-context-menu.md` | **完了** |
-| 中低 | 11.3 | `docs/plans/phase11.3-gui-settings.md` | 未着手 |
+| done | 11.3 | `docs/plans/phase11.3-gui-settings.md` | **完了** |
 | 低 | 12 | `docs/plans/phase12-macos-release.md` | 未着手 |

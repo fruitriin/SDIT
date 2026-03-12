@@ -1,7 +1,7 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// カラーテーマ設定。
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct ColorConfig {
     /// 組み込みテーマ名。
@@ -15,7 +15,7 @@ impl Default for ColorConfig {
 }
 
 /// 組み込みテーマ名。
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub enum ThemeName {
     #[serde(rename = "catppuccin-mocha")]
     CatppuccinMocha,

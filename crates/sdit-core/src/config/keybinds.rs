@@ -3,14 +3,14 @@
 //! winit に依存しない純粋な設定型を定義する。
 //! `Key` / `ModifiersState` を使う `resolve_action` は `sdit` クレートの `input.rs` に配置する。
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
 // Action
 // ---------------------------------------------------------------------------
 
 /// キーバインドで起動できるアクション。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum Action {
     NewWindow,
@@ -43,7 +43,7 @@ pub enum Action {
 // ---------------------------------------------------------------------------
 
 /// 1 つのキーバインド定義。
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KeyBinding {
     /// キー名。例: `n`, `t`, `Tab`, `backslash`, `[`, `]`
     pub key: String,
@@ -69,7 +69,7 @@ const MAX_BINDINGS: usize = 512;
 const MAX_FIELD_LEN: usize = 64;
 
 /// キーバインド設定全体。TOML では配列 `[[keybinds]]` に相当する。
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct KeybindConfig {
     pub bindings: Vec<KeyBinding>,

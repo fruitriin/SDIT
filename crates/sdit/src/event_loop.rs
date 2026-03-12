@@ -970,8 +970,13 @@ impl SditApp {
                 log::info!("SDIT v{}", env!("CARGO_PKG_VERSION"));
             }
             Action::Preferences => {
-                // 設定ファイルをデフォルトエディタで開く。
+                // 設定ファイルが存在しない場合はコメント付きテンプレートを生成する。
+                // save_with_comments は create_new(true) で排他的に作成するため TOCTOU 安全。
                 let path = sdit_core::config::Config::default_path();
+                let config = sdit_core::config::Config::default();
+                if let Err(e) = config.save_with_comments(&path) {
+                    log::warn!("Failed to create default config: {e}");
+                }
                 if let Err(e) = open::that(&path) {
                     log::warn!("Failed to open preferences file {}: {e}", path.display());
                 }
