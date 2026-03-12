@@ -392,6 +392,9 @@ impl CellPipeline {
     }
 
     /// Grid からセルデータを構築して頂点バッファを更新する。
+    ///
+    /// `cursor_pos` はカーソル位置 `(column, row)` で、該当セルの fg/bg を反転描画する。
+    /// `selection` は選択範囲 `(start, end)` で、範囲内のセルの fg/bg を反転描画する。
     #[allow(clippy::too_many_arguments)]
     pub fn update_from_grid(
         &mut self,
@@ -402,6 +405,8 @@ impl CellPipeline {
         atlas_size: f32,
         cell_size: [f32; 2],
         surface_size: [f32; 2],
+        cursor_pos: Option<(usize, usize)>,
+        selection: Option<((usize, usize), (usize, usize))>,
     ) {
         let rows = grid.screen_lines();
         let cols = grid.columns();
@@ -440,8 +445,15 @@ impl CellPipeline {
                     continue;
                 }
 
-                let bg = color_to_rgba(cell.bg);
-                let fg = color_to_rgba(cell.fg);
+                let is_cursor = cursor_pos == Some((col, row));
+                let is_selected =
+                    selection.is_some_and(|sel| is_in_selection(col, row, sel));
+                let (bg, fg) = if is_cursor || is_selected {
+                    // カーソル位置 or 選択範囲: fg/bg を反転
+                    (color_to_rgba(cell.fg), color_to_rgba(cell.bg))
+                } else {
+                    (color_to_rgba(cell.bg), color_to_rgba(cell.fg))
+                };
                 let is_wide = cell.flags.contains(CellFlags::WIDE_CHAR);
 
                 // グリフをラスタライズしてアトラスに配置。
@@ -501,6 +513,33 @@ impl CellPipeline {
 // ---------------------------------------------------------------------------
 // カラー変換ヘルパー
 // ---------------------------------------------------------------------------
+
+/// セル (col, row) が選択範囲内かどうか判定する。
+///
+/// 選択範囲は行優先で正規化し、複数行にまたがる場合は
+/// 開始行は開始列以降、中間行は全列、終了行は終了列以前が対象。
+fn is_in_selection(col: usize, row: usize, selection: ((usize, usize), (usize, usize))) -> bool {
+    let ((sc, sr), (ec, er)) = selection;
+    // 正規化: start が end より前になるようにする
+    let (start_col, start_row, end_col, end_row) =
+        if (sr, sc) <= (er, ec) { (sc, sr, ec, er) } else { (ec, er, sc, sr) };
+
+    if row < start_row || row > end_row {
+        return false;
+    }
+    if start_row == end_row {
+        // 同一行: 列範囲内
+        return col >= start_col && col <= end_col;
+    }
+    if row == start_row {
+        return col >= start_col;
+    }
+    if row == end_row {
+        return col <= end_col;
+    }
+    // 中間行: 全列選択
+    true
+}
 
 /// `Color` を RGBA `[f32; 4]` に変換する。
 /// Named カラーは Catppuccin Mocha パレットにマッピングする。

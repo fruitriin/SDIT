@@ -58,7 +58,11 @@ pub struct PtyConfig {
 impl Default for PtyConfig {
     fn default() -> Self {
         let shell = std::env::var("SHELL").ok();
-        Self { shell, args: Vec::new(), working_directory: None, env: HashMap::new() }
+        // 親プロセスの環境変数を継承し、シェル（fish等）が正常に動作するようにする。
+        // std::process::Command は親環境を自動継承するが、pty_process は
+        // env_clear() 相当の動作をする場合があるため、明示的に全環境を渡す。
+        let env: HashMap<String, String> = std::env::vars().collect();
+        Self { shell, args: Vec::new(), working_directory: None, env }
     }
 }
 

@@ -96,6 +96,12 @@ struct SditApp {
     cursor_position: Option<(f64, f64)>,
     /// サイドバー内ドラッグの開始行インデックス。
     drag_source_row: Option<usize>,
+    /// テキスト選択の開始点 (col, row)。
+    selection_start: Option<(usize, usize)>,
+    /// テキスト選択の終了点 (col, row)。ドラッグ中に更新される。
+    selection_end: Option<(usize, usize)>,
+    /// ターミナル領域でマウスドラッグ中かどうか。
+    is_selecting: bool,
 }
 
 impl SditApp {
@@ -116,6 +122,9 @@ impl SditApp {
             initialized: false,
             cursor_position: None,
             drag_source_row: None,
+            selection_start: None,
+            selection_end: None,
+            is_selecting: false,
         }
     }
 
@@ -127,6 +136,7 @@ impl SditApp {
         let pty_size = PtySize::new(rows.try_into().unwrap_or(24), cols.try_into().unwrap_or(80));
         let mut pty_config = PtyConfig::default();
         pty_config.env.insert("TERM".to_owned(), "xterm-256color".to_owned());
+        pty_config.env.insert("TERM_PROGRAM".to_owned(), "sdit".to_owned());
 
         let event_proxy = self.event_proxy.clone();
         let sid = session_id;
@@ -167,11 +177,33 @@ impl SditApp {
         Some(session_id)
     }
 
+    /// 既存ウィンドウの位置からカスケード配置のオフセットを計算する。
+    ///
+    /// 既存ウィンドウがあれば、最後にアクティブだったウィンドウの位置から
+    /// (30, 30) ピクセルずらした位置を返す。
+    fn cascade_position(&self) -> Option<winit::dpi::PhysicalPosition<i32>> {
+        const CASCADE_OFFSET: i32 = 30;
+        // 既存ウィンドウから位置を取得（最初に見つかったものを使用）
+        for ws in self.windows.values() {
+            if let Ok(pos) = ws.window.outer_position() {
+                return Some(winit::dpi::PhysicalPosition::new(
+                    pos.x + CASCADE_OFFSET,
+                    pos.y + CASCADE_OFFSET,
+                ));
+            }
+        }
+        None
+    }
+
     /// 新しいウィンドウ + セッションを生成する。
     fn create_window(&mut self, event_loop: &ActiveEventLoop) {
-        let attrs = Window::default_attributes()
+        let mut attrs = Window::default_attributes()
             .with_title("SDIT")
             .with_inner_size(winit::dpi::LogicalSize::new(800.0_f64, 600.0_f64));
+
+        if let Some(pos) = self.cascade_position() {
+            attrs = attrs.with_position(pos);
+        }
 
         let window = match event_loop.create_window(attrs) {
             Ok(w) => Arc::new(w),
@@ -214,6 +246,9 @@ impl SditApp {
         let grid = state_lock.terminal.grid();
         let mut cell_pipeline =
             CellPipeline::new(&gpu.device, gpu.surface_config.format, &atlas, rows * cols);
+        let cursor_col = grid.cursor.point.column.0;
+        #[allow(clippy::cast_sign_loss)]
+        let cursor_row = grid.cursor.point.line.0 as usize;
         cell_pipeline.update_from_grid(
             &gpu.queue,
             grid,
@@ -222,6 +257,8 @@ impl SditApp {
             atlas_size_f32,
             cell_size,
             surface_size,
+            Some((cursor_col, cursor_row)),
+            None,
         );
         drop(state_lock);
 
@@ -249,6 +286,9 @@ impl SditApp {
         );
 
         log::info!("Created window {window_id:?} with session {}", session_id.0);
+
+        // 初回描画を明示的にトリガーする（add_session_to_window と同様）
+        self.redraw_session(session_id);
     }
 
     /// 既存ウィンドウに新しいセッションを追加する。
@@ -382,10 +422,14 @@ impl SditApp {
             }};
         }
 
-        // 新しいウィンドウを作成
-        let attrs = Window::default_attributes()
+        // 新しいウィンドウを作成（元ウィンドウからカスケード配置）
+        let mut attrs = Window::default_attributes()
             .with_title("SDIT")
             .with_inner_size(winit::dpi::LogicalSize::new(800.0_f64, 600.0_f64));
+
+        if let Some(pos) = self.cascade_position() {
+            attrs = attrs.with_position(pos);
+        }
 
         let new_window = match event_loop.create_window(attrs) {
             Ok(w) => Arc::new(w),
@@ -491,6 +535,16 @@ impl SditApp {
         let needed = grid_rows * grid_cols;
         ws.cell_pipeline.ensure_capacity(&ws.gpu.device, needed);
 
+        // カーソル位置を取得
+        let cursor_col = grid.cursor.point.column.0;
+        #[allow(clippy::cast_sign_loss)]
+        let cursor_row = grid.cursor.point.line.0 as usize;
+        let cursor_pos = Some((cursor_col, cursor_row));
+
+        let selection = match (self.selection_start, self.selection_end) {
+            (Some(s), Some(e)) => Some((s, e)),
+            _ => None,
+        };
         ws.cell_pipeline.update_from_grid(
             &ws.gpu.queue,
             grid,
@@ -499,6 +553,8 @@ impl SditApp {
             atlas_size_f32,
             cell_size,
             surface_size,
+            cursor_pos,
+            selection,
         );
         drop(state_lock);
 
@@ -668,6 +724,10 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         .terminal
                         .mode();
 
+                    // キー入力時に選択を解除
+                    self.selection_start = None;
+                    self.selection_end = None;
+
                     if let Some(bytes) = key_to_bytes(&key_event.logical_key, self.modifiers, mode)
                     {
                         if let Err(e) = session.pty_io.write_tx.try_send(bytes) {
@@ -704,6 +764,21 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         }
                     }
                 }
+
+                // テキスト選択中: selection_end を更新
+                if self.is_selecting {
+                    if let Some(ws) = self.windows.get(&id) {
+                        let metrics = *self.font_ctx.metrics();
+                        let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+                        let term_x = position.x as f32 - sidebar_w;
+                        let col = (term_x / metrics.cell_width).floor().max(0.0) as usize;
+                        let row =
+                            (position.y as f32 / metrics.cell_height).floor().max(0.0) as usize;
+                        self.selection_end = Some((col, row));
+                        let sid = ws.active_session_id();
+                        self.redraw_session(sid);
+                    }
+                }
             }
 
             WindowEvent::MouseInput {
@@ -732,6 +807,16 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                     self.redraw_session(sid);
                                 }
                             }
+                        } else {
+                            // ターミナル領域: テキスト選択開始
+                            let term_x = x as f32 - sidebar_w;
+                            let col = (term_x / metrics.cell_width).floor().max(0.0) as usize;
+                            let row = (y as f32 / metrics.cell_height).floor().max(0.0) as usize;
+                            self.selection_start = Some((col, row));
+                            self.selection_end = Some((col, row));
+                            self.is_selecting = true;
+                            let sid = ws.active_session_id();
+                            self.redraw_session(sid);
                         }
                     }
                 }
@@ -743,6 +828,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 ..
             } => {
                 self.drag_source_row = None;
+                self.is_selecting = false;
             }
 
             WindowEvent::RedrawRequested => {
@@ -1055,6 +1141,7 @@ fn key_to_bytes(key: &Key, modifiers: ModifiersState, mode: TermMode) -> Option<
                 NamedKey::PageDown => b"\x1b[6~",
                 NamedKey::Insert => b"\x1b[2~",
                 NamedKey::Delete => b"\x1b[3~",
+                NamedKey::Space => b" ",
                 _ => return None,
             };
             Some(s.to_vec())
