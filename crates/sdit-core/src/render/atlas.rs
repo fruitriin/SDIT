@@ -160,6 +160,16 @@ impl Atlas {
     pub fn size(&self) -> u32 {
         self.size
     }
+
+    /// アトラスをクリアする。全グリフ領域を解放し、GPU へのアップロードを予約する。
+    ///
+    /// グリフキャッシュを持つ `FontContext` の `glyph_cache` も合わせてクリアすること。
+    pub fn clear(&mut self) {
+        self.shelves.clear();
+        self.next_shelf_y = 0;
+        self.data.fill(0);
+        self.dirty = true;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -220,6 +230,12 @@ mod tests {
                     .copy_from_slice(&data[src_start..src_start + region.width as usize]);
             }
         }
+
+        fn clear(&mut self) {
+            self.shelves.clear();
+            self.next_shelf_y = 0;
+            self.data.fill(0);
+        }
     }
 
     #[test]
@@ -248,6 +264,25 @@ mod tests {
         let _ = atlas.reserve(8, 8).unwrap();
         // 次の reserve は満杯で失敗。
         assert!(atlas.reserve(1, 1).is_none());
+    }
+
+    #[test]
+    fn clear_resets_atlas() {
+        let mut atlas = InMemAtlas::new(32);
+        // 領域を確保してデータを書き込む
+        let region = atlas.reserve(8, 8).unwrap();
+        atlas.write(region, &[255u8; 64]);
+        assert!(atlas.data.iter().any(|&b| b != 0));
+
+        // クリア後はゼロに戻り、新規確保できる
+        atlas.clear();
+        assert!(atlas.data.iter().all(|&b| b == 0), "クリア後のデータはすべてゼロ");
+        assert!(atlas.shelves.is_empty(), "シェルフがクリアされていない");
+        assert_eq!(atlas.next_shelf_y, 0, "next_shelf_y がリセットされていない");
+
+        // クリア後も正常に領域確保できる
+        let region2 = atlas.reserve(8, 8);
+        assert!(region2.is_some(), "クリア後に reserve が失敗した");
     }
 
     #[test]

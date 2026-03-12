@@ -14,8 +14,8 @@ use crate::app::{PreeditState, SditApp, SditEvent, ime_commit_to_bytes, wrap_bra
 use crate::input::{
     is_add_session_shortcut, is_close_session_shortcut, is_copy_shortcut,
     is_detach_session_shortcut, is_new_window_shortcut, is_paste_shortcut,
-    is_sidebar_toggle_shortcut, key_to_bytes, mouse_report_sgr, mouse_report_x11, pixel_to_grid,
-    session_switch_direction,
+    is_sidebar_toggle_shortcut, is_zoom_in_shortcut, is_zoom_out_shortcut, is_zoom_reset_shortcut,
+    key_to_bytes, mouse_report_sgr, mouse_report_x11, pixel_to_grid, session_switch_direction,
 };
 
 // ---------------------------------------------------------------------------
@@ -99,6 +99,46 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         session_switch_direction(&key_event.logical_key, self.modifiers)
                     {
                         self.switch_session(id, dir);
+                        return;
+                    }
+
+                    // Cmd+= / Cmd++ でズームイン
+                    if is_zoom_in_shortcut(&key_event.logical_key, self.modifiers) {
+                        self.change_font_size(1.0);
+                        for ws in self.windows.values() {
+                            ws.window.request_redraw();
+                        }
+                        // アクティブセッションを再描画（GPU バッファ更新のため）
+                        if let Some(ws) = self.windows.get(&id) {
+                            let sid = ws.active_session_id();
+                            self.redraw_session(sid);
+                        }
+                        return;
+                    }
+
+                    // Cmd+- / Cmd+_ でズームアウト
+                    if is_zoom_out_shortcut(&key_event.logical_key, self.modifiers) {
+                        self.change_font_size(-1.0);
+                        for ws in self.windows.values() {
+                            ws.window.request_redraw();
+                        }
+                        if let Some(ws) = self.windows.get(&id) {
+                            let sid = ws.active_session_id();
+                            self.redraw_session(sid);
+                        }
+                        return;
+                    }
+
+                    // Cmd+0 でデフォルトフォントサイズにリセット
+                    if is_zoom_reset_shortcut(&key_event.logical_key, self.modifiers) {
+                        self.change_font_size(0.0);
+                        for ws in self.windows.values() {
+                            ws.window.request_redraw();
+                        }
+                        if let Some(ws) = self.windows.get(&id) {
+                            let sid = ws.active_session_id();
+                            self.redraw_session(sid);
+                        }
                         return;
                     }
 

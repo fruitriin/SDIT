@@ -54,6 +54,8 @@ pub struct FontContext {
     glyph_cache: HashMap<GlyphCacheKey, GlyphEntry>,
     metrics: CellMetrics,
     font_size: f32,
+    /// 行の高さの倍率（例: 1.2 = フォントサイズの 120%）。
+    line_height_factor: f32,
     /// シェーピング時に使うフォントファミリ名。
     font_family: String,
 }
@@ -91,6 +93,7 @@ impl FontContext {
             glyph_cache: HashMap::new(),
             metrics,
             font_size,
+            line_height_factor: config.clamped_line_height(),
             font_family: config.family.clone(),
         }
     }
@@ -98,6 +101,21 @@ impl FontContext {
     /// セルメトリクスを返す。
     pub fn metrics(&self) -> &CellMetrics {
         &self.metrics
+    }
+
+    /// フォントサイズを変更してメトリクスを再計算する。グリフキャッシュはクリアされる。
+    ///
+    /// アトラス側も別途 `Atlas::clear()` を呼ぶこと。
+    ///
+    /// `font_size` は 1.0〜200.0 の範囲にクランプされる。
+    pub fn set_font_size(&mut self, font_size: f32) {
+        let font_size = if font_size.is_finite() { font_size.clamp(1.0, 200.0) } else { 14.0 };
+        self.font_size = font_size;
+        let line_height = font_size * self.line_height_factor;
+        let cell_width = compute_cell_width(&mut self.font_system, font_size);
+        let baseline = font_size * 0.8;
+        self.metrics = CellMetrics { cell_width, cell_height: line_height, baseline, font_size };
+        self.glyph_cache.clear();
     }
 
     /// 文字 `c` をラスタライズしてアトラスに配置し、`GlyphEntry` を返す。
@@ -196,6 +214,50 @@ mod tests {
         assert!(m.cell_height > 0.0, "cell_height must be positive");
         assert!(m.baseline > 0.0, "baseline must be positive");
         assert!((m.font_size - 14.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn set_font_size_updates_metrics() {
+        let mut ctx = FontContext::new(14.0, 1.2);
+        ctx.set_font_size(20.0);
+        assert!(
+            (ctx.metrics().font_size - 20.0).abs() < f32::EPSILON,
+            "font_size should be 20.0, got {}",
+            ctx.metrics().font_size
+        );
+        assert!(ctx.metrics().cell_width > 0.0, "cell_width must be positive after resize");
+        assert!(ctx.metrics().cell_height > 0.0, "cell_height must be positive after resize");
+    }
+
+    #[test]
+    fn set_font_size_clamps_to_bounds() {
+        let mut ctx = FontContext::new(14.0, 1.2);
+        ctx.set_font_size(0.1);
+        assert!(
+            ctx.metrics().font_size >= 1.0,
+            "font_size should be clamped to >= 1.0, got {}",
+            ctx.metrics().font_size
+        );
+        ctx.set_font_size(999.0);
+        assert!(
+            ctx.metrics().font_size <= 200.0,
+            "font_size should be clamped to <= 200.0, got {}",
+            ctx.metrics().font_size
+        );
+    }
+
+    #[test]
+    fn set_font_size_preserves_line_height_factor() {
+        let factor = 1.5_f32;
+        let mut ctx = FontContext::new(14.0, factor);
+        ctx.set_font_size(20.0);
+        let expected_height = 20.0 * factor;
+        assert!(
+            (ctx.metrics().cell_height - expected_height).abs() < 0.01,
+            "cell_height should be {} after set_font_size, got {}",
+            expected_height,
+            ctx.metrics().cell_height
+        );
     }
 
     #[test]

@@ -111,6 +111,33 @@ pub(crate) fn is_copy_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
     modifiers.control_key() && modifiers.shift_key()
 }
 
+/// Cmd+= または Cmd++ (macOS) でのズームインショートカットかどうか。
+pub(crate) fn is_zoom_in_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
+    let is_eq = matches!(key, Key::Character(s) if s.as_str() == "=" || s.as_str() == "+");
+    if cfg!(target_os = "macos") && modifiers.super_key() {
+        return is_eq;
+    }
+    false
+}
+
+/// Cmd+- または Cmd+_ (macOS) でのズームアウトショートカットかどうか。
+pub(crate) fn is_zoom_out_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
+    let is_minus = matches!(key, Key::Character(s) if s.as_str() == "-" || s.as_str() == "_");
+    if cfg!(target_os = "macos") && modifiers.super_key() {
+        return is_minus;
+    }
+    false
+}
+
+/// Cmd+0 (macOS) でのズームリセットショートカットかどうか。
+pub(crate) fn is_zoom_reset_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
+    let is_zero = matches!(key, Key::Character(s) if s.as_str() == "0");
+    if cfg!(target_os = "macos") && modifiers.super_key() {
+        return is_zero;
+    }
+    false
+}
+
 /// Cmd+V (macOS) または Ctrl+Shift+V でのペーストショートカットかどうか。
 pub(crate) fn is_paste_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
     let is_v = matches!(key, Key::Character(s) if s.as_str() == "v" || s.as_str() == "V");
@@ -246,5 +273,77 @@ pub(crate) fn key_to_bytes(
             Some(s.to_vec())
         }
         _ => None,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// テスト
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use winit::keyboard::SmolStr;
+
+    use super::*;
+
+    fn char_key(c: &str) -> Key {
+        Key::Character(SmolStr::new(c))
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn zoom_in_shortcut_eq() {
+        let mods = ModifiersState::SUPER;
+        assert!(is_zoom_in_shortcut(&char_key("="), mods));
+        assert!(is_zoom_in_shortcut(&char_key("+"), mods));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn zoom_in_shortcut_no_super() {
+        let mods = ModifiersState::empty();
+        assert!(!is_zoom_in_shortcut(&char_key("="), mods));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn zoom_out_shortcut_minus() {
+        let mods = ModifiersState::SUPER;
+        assert!(is_zoom_out_shortcut(&char_key("-"), mods));
+        assert!(is_zoom_out_shortcut(&char_key("_"), mods));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn zoom_out_shortcut_no_super() {
+        let mods = ModifiersState::empty();
+        assert!(!is_zoom_out_shortcut(&char_key("-"), mods));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn zoom_reset_shortcut_zero() {
+        let mods = ModifiersState::SUPER;
+        assert!(is_zoom_reset_shortcut(&char_key("0"), mods));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn zoom_reset_shortcut_no_super() {
+        let mods = ModifiersState::empty();
+        assert!(!is_zoom_reset_shortcut(&char_key("0"), mods));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn zoom_shortcuts_do_not_overlap() {
+        // ズームイン・アウト・リセットが互いに誤検知しないこと
+        let mods = ModifiersState::SUPER;
+        assert!(!is_zoom_in_shortcut(&char_key("-"), mods));
+        assert!(!is_zoom_in_shortcut(&char_key("0"), mods));
+        assert!(!is_zoom_out_shortcut(&char_key("="), mods));
+        assert!(!is_zoom_out_shortcut(&char_key("0"), mods));
+        assert!(!is_zoom_reset_shortcut(&char_key("="), mods));
+        assert!(!is_zoom_reset_shortcut(&char_key("-"), mods));
     }
 }

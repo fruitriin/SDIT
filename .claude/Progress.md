@@ -75,12 +75,12 @@
 ## タスク: Phase 8.1 — フォントサイズ動的変更
 
 ### 実装
-- [ ] Step 1: Atlas::clear() メソッド追加 — shelves/data/dirty をリセット
-- [ ] Step 2: FontContext::set_font_size() メソッド追加 — font_size 変更 + metrics 再計算 + glyph_cache クリア
-- [ ] Step 3: ショートカット判定関数追加 — is_zoom_in/out/reset_shortcut (Cmd+=/Cmd+-/Cmd+0)
-- [ ] Step 4: SditApp にデフォルトフォントサイズ保持 + change_font_size() メソッド追加
-- [ ] Step 5: event_loop.rs にショートカットハンドラ統合 — 全ウィンドウの atlas クリア + 全セッション resize + redraw
+- [x] Step 1: Atlas::clear() メソッド追加 — shelves/data/dirty をリセット
+- [x] Step 2: FontContext::set_font_size() メソッド追加 — font_size 変更 + metrics 再計算 + glyph_cache クリア
+- [x] Step 3: ショートカット判定関数追加 — is_zoom_in/out/reset_shortcut (Cmd+=/Cmd+-/Cmd+0)
+- [x] Step 4: SditApp にデフォルトフォントサイズ保持 + change_font_size() メソッド追加
+- [x] Step 5: event_loop.rs にショートカットハンドラ統合 — 全ウィンドウの atlas クリア + 全セッション resize + redraw
 
 ### 品質ゲート
-- [ ] Stage 1: `cargo fmt --check && cargo clippy --all-targets && cargo test`
+- [x] Stage 1: `cargo fmt --check && cargo clippy --all-targets && cargo test`
 - [ ] Stage 2: security-review + integration-test
