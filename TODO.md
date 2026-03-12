@@ -3,7 +3,7 @@
 `docs/plans/` の完了状態・優先度をトラックする。
 `docs/plans/` と TODO が一致しなければ TODO を編集する。
 
-## 現在のフェーズ: Phase 5.8（クレート統合）
+## 現在のフェーズ: Phase 5.5 / 5.9（次に着手）
 
 ## バックログ
 
@@ -19,7 +19,7 @@
 | done | 3.1 | `docs/plans/phase3.1-security-fixes.md` | **完了** |
 | done | 4 | `docs/plans/phase4-session-sidebar.md` | **完了** |
 | done | 5 | `docs/plans/phase5-config-polish.md` | **完了** |
-| **★ 次** | 5.8 | `docs/plans/phase5.8-crate-consolidation.md` | 未着手 |
+| done | 5.8 | `docs/plans/phase5.8-crate-consolidation.md` | **完了** |
 | **★ 最高** | 5.5 | `docs/plans/phase6-roadmap.md` §Phase 5.5 | 未着手 |
 | **★ 最高** | 5.9 | `docs/plans/phase5.9-main-rs-split.md` | 未着手 |
 | 高 | 6.1 | `docs/plans/phase6-roadmap.md` §Phase 6.1 | 未着手 |
