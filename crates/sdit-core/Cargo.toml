@@ -26,5 +26,6 @@ cosmic-text   = { workspace = true }
 anyhow        = { workspace = true }
 pollster      = { workspace = true }
 bytemuck      = { workspace = true }
+regex         = { workspace = true }
 
 [dev-dependencies]

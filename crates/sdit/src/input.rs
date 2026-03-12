@@ -138,6 +138,13 @@ pub(crate) fn is_zoom_reset_shortcut(key: &Key, modifiers: ModifiersState) -> bo
     false
 }
 
+/// URL を開くモディファイアキーが押されているかどうか。
+///
+/// macOS: Cmd、それ以外: Ctrl
+pub(crate) fn is_url_modifier(modifiers: ModifiersState) -> bool {
+    if cfg!(target_os = "macos") { modifiers.super_key() } else { modifiers.control_key() }
+}
+
 /// Cmd+V (macOS) または Ctrl+Shift+V でのペーストショートカットかどうか。
 pub(crate) fn is_paste_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
     let is_v = matches!(key, Key::Character(s) if s.as_str() == "v" || s.as_str() == "V");
@@ -332,6 +339,20 @@ mod tests {
     fn zoom_reset_shortcut_no_super() {
         let mods = ModifiersState::empty();
         assert!(!is_zoom_reset_shortcut(&char_key("0"), mods));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn url_modifier_super_key() {
+        let mods = ModifiersState::SUPER;
+        assert!(is_url_modifier(mods));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn url_modifier_no_modifier() {
+        let mods = ModifiersState::empty();
+        assert!(!is_url_modifier(mods));
     }
 
     #[cfg(target_os = "macos")]

@@ -64,6 +64,7 @@ impl SditApp {
         let title = state_lock.terminal.title().map(std::borrow::ToOwned::to_owned);
 
         let selection = self.selection.as_ref().map(|sel| sel.to_tuple(grid_cols));
+        let url_hover = self.hovered_url.as_ref().map(|h| (h.row, h.start_col, h.end_col));
         ws.cell_pipeline.update_from_grid(
             &ws.gpu.queue,
             grid,
@@ -74,6 +75,7 @@ impl SditApp {
             surface_size,
             cursor_pos,
             selection,
+            url_hover,
         );
         drop(state_lock);
 

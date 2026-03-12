@@ -5,8 +5,10 @@
 //! [`vte::Parser`] to feed raw bytes into a [`Terminal`].
 
 pub mod handler;
+pub mod url_detector;
 
 use std::ops::Range;
+use std::sync::Arc;
 
 use bitflags::bitflags;
 use vte::Perform;
@@ -113,6 +115,8 @@ pub struct Terminal {
     pub(super) bell_pending: bool,
     /// OSC 52 クリップボード書き込み要求。
     pub(super) clipboard_write_pending: Option<String>,
+    /// OSC 8 ハイパーリンク: 現在アクティブな URL。None はリンクなし。
+    pub(super) current_hyperlink: Option<Arc<str>>,
 }
 
 impl Terminal {
@@ -134,6 +138,7 @@ impl Terminal {
             cursor_blinking: false,
             bell_pending: false,
             clipboard_write_pending: None,
+            current_hyperlink: None,
         }
     }
 
@@ -411,11 +416,13 @@ impl Perform for Terminal {
         // Write the character.
         {
             let tmpl = self.grid.cursor.template.clone();
+            let hyperlink = self.current_hyperlink.clone();
             let cell = self.grid.cursor_cell();
             cell.c = c;
             cell.fg = tmpl.fg;
             cell.bg = tmpl.bg;
             cell.flags = tmpl.flags;
+            cell.hyperlink = hyperlink;
             if width == 2 {
                 cell.flags |= CellFlags::WIDE_CHAR;
             }
@@ -505,6 +512,28 @@ impl Perform for Terminal {
     }
 
     fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
+        // OSC 8: ハイパーリンク。
+        // リンク開始: \e]8;params;URL\ST  (URL は http:// または https:// のみ)
+        // リンク終了: \e]8;;\ST
+        if params.len() >= 2 && params[0] == b"8" {
+            // URL は params[2]（params が3要素以上の場合）。
+            // params が2要素または params[2] が空なら終了。
+            const MAX_URL_BYTES: usize = 2048;
+            let url_bytes = if params.len() >= 3 { params[2] } else { b"" };
+            if url_bytes.is_empty() {
+                self.current_hyperlink = None;
+            } else if url_bytes.len() <= MAX_URL_BYTES {
+                if let Ok(url) = std::str::from_utf8(url_bytes) {
+                    // http:// または https:// のみ受け付ける
+                    if url.starts_with("http://") || url.starts_with("https://") {
+                        self.current_hyperlink = Some(Arc::from(url));
+                    }
+                    // それ以外のスキーム（file:// 等）は無視（current_hyperlink は変更しない）
+                }
+            }
+            return;
+        }
+
         // OSC 0 or OSC 2: set window title.
         if params.len() >= 2 && (params[0] == b"0" || params[0] == b"2") {
             // Limit title length to prevent memory exhaustion from malicious
@@ -1009,6 +1038,78 @@ mod tests {
         // "test" → "dGVzdA=="
         term.osc_dispatch(&[b"52", b"c", b"dGVzdA=="], false);
         assert_eq!(term.take_clipboard_write(), Some("test".to_string()));
+    }
+
+    // OSC 8: URL のセット・クリアテスト
+    #[test]
+    fn osc8_set_and_clear_hyperlink() {
+        let mut term = Terminal::new(24, 80, 0);
+        // URL をセット
+        term.osc_dispatch(&[b"8", b"", b"https://example.com"], false);
+        assert_eq!(term.current_hyperlink.as_deref(), Some("https://example.com"));
+        // URL をクリア
+        term.osc_dispatch(&[b"8", b"", b""], false);
+        assert!(term.current_hyperlink.is_none());
+    }
+
+    #[test]
+    fn osc8_clear_with_two_params() {
+        let mut term = Terminal::new(24, 80, 0);
+        term.osc_dispatch(&[b"8", b"", b"https://example.com"], false);
+        // params が2要素の場合もクリア
+        term.osc_dispatch(&[b"8", b""], false);
+        assert!(term.current_hyperlink.is_none());
+    }
+
+    // OSC 8: URL 長さ上限テスト
+    #[test]
+    fn osc8_url_length_limit() {
+        let mut term = Terminal::new(24, 80, 0);
+        // 2049 バイトの URL は拒否される
+        let long_url: Vec<u8> = {
+            let mut v = b"https://".to_vec();
+            v.extend(std::iter::repeat_n(b'x', 2049 - 8));
+            v
+        };
+        term.osc_dispatch(&[b"8", b"", &long_url], false);
+        assert!(term.current_hyperlink.is_none());
+    }
+
+    // OSC 8: 不正 URL のフィルタリングテスト
+    #[test]
+    fn osc8_reject_non_http_url() {
+        let mut term = Terminal::new(24, 80, 0);
+        // file:// は拒否される
+        term.osc_dispatch(&[b"8", b"", b"file:///etc/passwd"], false);
+        assert!(term.current_hyperlink.is_none());
+        // mailto: も拒否される
+        term.osc_dispatch(&[b"8", b"", b"mailto:foo@example.com"], false);
+        assert!(term.current_hyperlink.is_none());
+        // http:// は受け付ける
+        term.osc_dispatch(&[b"8", b"", b"http://example.com"], false);
+        assert_eq!(term.current_hyperlink.as_deref(), Some("http://example.com"));
+    }
+
+    // OSC 8: セルへの hyperlink 統合テスト
+    #[test]
+    fn osc8_hyperlink_written_to_cells() {
+        let (mut proc, mut term) = make_proc_term(24, 80);
+        // OSC 8 でリンク開始してから文字を書く
+        proc.advance(&mut term, b"\x1b]8;;https://example.com\x07");
+        proc.advance(&mut term, b"Hello");
+        proc.advance(&mut term, b"\x1b]8;;\x07"); // リンク終了
+        proc.advance(&mut term, b"World");
+
+        // "Hello" のセルには hyperlink が入っている
+        for col in 0..5 {
+            let cell = &term.grid()[Point::new(Line(0), Column(col))];
+            assert_eq!(cell.hyperlink.as_deref(), Some("https://example.com"), "col {col}");
+        }
+        // "World" のセルには hyperlink がない
+        for col in 5..10 {
+            let cell = &term.grid()[Point::new(Line(0), Column(col))];
+            assert!(cell.hyperlink.is_none(), "col {col} should have no hyperlink");
+        }
     }
 
     // pending_writes サイズ制限テスト

@@ -13,8 +13,24 @@ use sdit_core::selection::Selection;
 use sdit_core::session::{
     Session, SessionId, SessionManager, SidebarState, SpawnParams, TerminalState,
 };
+use sdit_core::terminal::url_detector::UrlDetector;
 
 use crate::window::{calc_grid_size, spawn_pty_reader, spawn_pty_writer};
+
+// ---------------------------------------------------------------------------
+// URL ホバー状態
+// ---------------------------------------------------------------------------
+
+/// URL ホバー中の状態（Cmd/Ctrl 押下中に URL 上にカーソルがある場合）。
+#[derive(Debug, Clone)]
+pub(crate) struct UrlHoverState {
+    pub(crate) row: usize,
+    pub(crate) start_col: usize,
+    pub(crate) end_col: usize,
+    /// ホバー中の URL 文字列（将来のツールチップ表示等で利用）。
+    #[allow(dead_code)]
+    pub(crate) url: String,
+}
 
 // ---------------------------------------------------------------------------
 // IME プリエディット状態
@@ -131,6 +147,10 @@ pub(crate) struct SditApp {
     pub(crate) preedit: Option<PreeditState>,
     /// 設定ファイルから読み込んだデフォルトフォントサイズ（Cmd+0 でこのサイズに復帰）。
     pub(crate) default_font_size: f32,
+    /// URL 検出器（正規表現コンパイル済み）。
+    pub(crate) url_detector: UrlDetector,
+    /// 現在 URL ホバー中の状態（Cmd/Ctrl 押下中に URL 上にカーソルがある場合）。
+    pub(crate) hovered_url: Option<UrlHoverState>,
 }
 
 impl SditApp {
@@ -164,6 +184,8 @@ impl SditApp {
             cursor_blink_last_toggle: std::time::Instant::now(),
             preedit: None,
             default_font_size,
+            url_detector: UrlDetector::new(),
+            hovered_url: None,
         }
     }
 

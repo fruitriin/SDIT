@@ -10,12 +10,15 @@ use sdit_core::render::pipeline::CellPipeline;
 use sdit_core::selection::{Selection, SelectionType, selected_text};
 use sdit_core::terminal::TermMode;
 
-use crate::app::{PreeditState, SditApp, SditEvent, ime_commit_to_bytes, wrap_bracketed_paste};
+use crate::app::{
+    PreeditState, SditApp, SditEvent, UrlHoverState, ime_commit_to_bytes, wrap_bracketed_paste,
+};
 use crate::input::{
     is_add_session_shortcut, is_close_session_shortcut, is_copy_shortcut,
     is_detach_session_shortcut, is_new_window_shortcut, is_paste_shortcut,
-    is_sidebar_toggle_shortcut, is_zoom_in_shortcut, is_zoom_out_shortcut, is_zoom_reset_shortcut,
-    key_to_bytes, mouse_report_sgr, mouse_report_x11, pixel_to_grid, session_switch_direction,
+    is_sidebar_toggle_shortcut, is_url_modifier, is_zoom_in_shortcut, is_zoom_out_shortcut,
+    is_zoom_reset_shortcut, key_to_bytes, mouse_report_sgr, mouse_report_x11, pixel_to_grid,
+    session_switch_direction,
 };
 
 // ---------------------------------------------------------------------------
@@ -52,6 +55,16 @@ impl ApplicationHandler<SditEvent> for SditApp {
 
             WindowEvent::ModifiersChanged(mods) => {
                 self.modifiers = mods.state();
+                // URL ホバー状態を更新
+                if is_url_modifier(self.modifiers) {
+                    self.update_url_hover(id);
+                } else if self.hovered_url.is_some() {
+                    self.hovered_url = None;
+                    if let Some(ws) = self.windows.get(&id) {
+                        let sid = ws.active_session_id();
+                        self.redraw_session(sid);
+                    }
+                }
             }
 
             WindowEvent::KeyboardInput { event: key_event, .. } => {
@@ -241,6 +254,11 @@ impl ApplicationHandler<SditEvent> for SditApp {
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor_position = Some((position.x, position.y));
 
+                // URL ホバー更新（Cmd/Ctrl が押されている場合）
+                if is_url_modifier(self.modifiers) {
+                    self.update_url_hover(id);
+                }
+
                 // ドラッグ中: サイドバー内で行が変わったらタブ順序を入れ替え
                 if let Some(drag_row) = self.drag_source_row {
                     if let Some(ws) = self.windows.get_mut(&id) {
@@ -353,6 +371,66 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                 }
                             }
                         } else {
+                            // URL Cmd+Click 処理
+                            if is_url_modifier(self.modifiers) {
+                                let metrics = *self.font_ctx.metrics();
+                                let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+                                let (col, row) = pixel_to_grid(
+                                    x,
+                                    y,
+                                    metrics.cell_width,
+                                    metrics.cell_height,
+                                    sidebar_w,
+                                );
+                                let sid = ws.active_session_id();
+                                let url = {
+                                    let session =
+                                        self.session_mgr.get(sid).expect("session exists");
+                                    let state = session
+                                        .term_state
+                                        .lock()
+                                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                    let grid = state.terminal.grid();
+                                    let rows = grid.screen_lines();
+                                    let cols = grid.columns();
+                                    if row < rows && col < cols {
+                                        let line_cells: Vec<_> = (0..cols)
+                                            .map(|c| {
+                                                #[allow(clippy::cast_possible_wrap)]
+                                                grid[Point::new(Line(row as i32), Column(c))]
+                                                    .clone()
+                                            })
+                                            .collect();
+                                        self.url_detector.find_url_at(&line_cells, col)
+                                    } else {
+                                        None
+                                    }
+                                };
+                                if let Some(url) = url {
+                                    // セキュリティ: http:// または https:// で始まることを確認
+                                    if url.starts_with("http://") || url.starts_with("https://") {
+                                        #[cfg(target_os = "macos")]
+                                        {
+                                            if let Err(e) =
+                                                std::process::Command::new("open").arg(&url).spawn()
+                                            {
+                                                log::warn!("URL open failed: {e}");
+                                            }
+                                        }
+                                        #[cfg(not(target_os = "macos"))]
+                                        {
+                                            if let Err(e) = std::process::Command::new("xdg-open")
+                                                .arg(&url)
+                                                .spawn()
+                                            {
+                                                log::warn!("URL open failed: {e}");
+                                            }
+                                        }
+                                    }
+                                    return;
+                                }
+                            }
+
                             // ターミナル領域: マウスモード確認
                             let sid = ws.active_session_id();
                             let mouse_active;
@@ -708,6 +786,106 @@ impl ApplicationHandler<SditEvent> for SditApp {
             for ws in self.windows.values() {
                 ws.window.request_redraw();
             }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// URL ホバーヘルパー
+// ---------------------------------------------------------------------------
+
+impl SditApp {
+    /// 現在のカーソル位置で URL ホバー状態を更新する。
+    ///
+    /// URL が見つかれば `hovered_url` を更新して再描画する。
+    /// 変化がなければ再描画しない。
+    pub(crate) fn update_url_hover(&mut self, window_id: winit::window::WindowId) {
+        let Some((x, y)) = self.cursor_position else {
+            return;
+        };
+        let Some(ws) = self.windows.get(&window_id) else {
+            return;
+        };
+
+        let metrics = *self.font_ctx.metrics();
+        let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+
+        // サイドバー領域は対象外
+        if ws.sidebar.visible && (x as f32) < sidebar_w {
+            if self.hovered_url.is_some() {
+                self.hovered_url = None;
+                if let Some(ws) = self.windows.get(&window_id) {
+                    let sid = ws.active_session_id();
+                    self.redraw_session(sid);
+                }
+            }
+            return;
+        }
+
+        let (col, row) = pixel_to_grid(x, y, metrics.cell_width, metrics.cell_height, sidebar_w);
+
+        let Some(ws) = self.windows.get(&window_id) else {
+            return;
+        };
+        let sid = ws.active_session_id();
+
+        let url_match = {
+            let Some(session) = self.session_mgr.get(sid) else {
+                return;
+            };
+            let state =
+                session.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let grid = state.terminal.grid();
+            let rows = grid.screen_lines();
+            let cols = grid.columns();
+            if row >= rows || col >= cols {
+                None
+            } else {
+                let line_cells: Vec<_> = (0..cols)
+                    .map(|c| {
+                        #[allow(clippy::cast_possible_wrap)]
+                        grid[Point::new(Line(row as i32), Column(c))].clone()
+                    })
+                    .collect();
+                let url = self.url_detector.find_url_at(&line_cells, col);
+                url.map(|u| {
+                    // start_col と end_col を UrlDetector で検出
+                    let matches = self.url_detector.detect_urls_in_line(&line_cells);
+                    matches
+                        .into_iter()
+                        .find(|m| col >= m.start_col && col < m.end_col)
+                        .map(|m| UrlHoverState {
+                            row,
+                            start_col: m.start_col,
+                            end_col: m.end_col,
+                            url: u.clone(),
+                        })
+                        .unwrap_or(UrlHoverState { row, start_col: col, end_col: col + 1, url: u })
+                })
+            }
+        };
+
+        // ホバー状態が変わった場合のみ更新・再描画
+        let changed = match (&self.hovered_url, &url_match) {
+            (None, None) => false,
+            (Some(old), Some(new)) => {
+                old.row != new.row || old.start_col != new.start_col || old.end_col != new.end_col
+            }
+            _ => true,
+        };
+
+        if changed {
+            // カーソルアイコンを変更
+            if let Some(ws) = self.windows.get(&window_id) {
+                let icon = if url_match.is_some() {
+                    winit::window::CursorIcon::Pointer
+                } else {
+                    winit::window::CursorIcon::Default
+                };
+                ws.window.set_cursor(icon);
+            }
+            self.hovered_url = url_match;
+            self.redraw_session(sid);
         }
     }
 }

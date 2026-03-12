@@ -1,5 +1,7 @@
 //! Terminal cell type and related color/flag definitions.
 
+use std::sync::Arc;
+
 use bitflags::bitflags;
 
 // ---------------------------------------------------------------------------
@@ -115,6 +117,8 @@ pub struct Cell {
     pub bg: Color,
     /// Text-attribute bit-flags.
     pub flags: CellFlags,
+    /// OSC 8 ハイパーリンク URL。Arc により同一 URL を持つセル間で共有される。
+    pub hyperlink: Option<Arc<str>>,
 }
 
 impl Default for Cell {
@@ -124,6 +128,7 @@ impl Default for Cell {
             fg: Color::Named(NamedColor::Foreground),
             bg: Color::Named(NamedColor::Background),
             flags: CellFlags::empty(),
+            hyperlink: None,
         }
     }
 }
@@ -135,6 +140,7 @@ impl GridCell for Cell {
             && self.fg == default.fg
             && self.bg == default.bg
             && self.flags == default.flags
+            && self.hyperlink.is_none()
     }
 
     fn reset(&mut self, template: &Self) {
@@ -143,6 +149,7 @@ impl GridCell for Cell {
         self.bg = template.bg;
         // Preserve no content flags; wrapline is also cleared on reset.
         self.flags = CellFlags::empty();
+        self.hyperlink = None;
     }
 
     fn flags(&self) -> CellFlags {
@@ -176,6 +183,7 @@ mod tests {
             fg: Color::Named(NamedColor::Red),
             bg: Color::Named(NamedColor::Blue),
             flags: CellFlags::BOLD | CellFlags::ITALIC,
+            hyperlink: None,
         };
         let template = Cell::default();
         c.reset(&template);
@@ -193,5 +201,20 @@ mod tests {
     #[test]
     fn color_default_is_named_foreground() {
         assert_eq!(Color::default(), Color::Named(NamedColor::Foreground));
+    }
+
+    #[test]
+    fn hyperlink_cell_not_empty() {
+        let c = Cell { hyperlink: Some(Arc::from("https://example.com")), ..Cell::default() };
+        assert!(!c.is_empty());
+    }
+
+    #[test]
+    fn reset_clears_hyperlink() {
+        let mut c =
+            Cell { c: 'A', hyperlink: Some(Arc::from("https://example.com")), ..Cell::default() };
+        c.reset(&Cell::default());
+        assert!(c.hyperlink.is_none());
+        assert!(c.is_empty());
     }
 }

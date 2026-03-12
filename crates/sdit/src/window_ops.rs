@@ -79,6 +79,7 @@ impl SditApp {
             surface_size,
             Some((cursor_col, cursor_row)),
             None,
+            None,
         );
         drop(state_lock);
 

@@ -395,6 +395,7 @@ impl CellPipeline {
     ///
     /// `cursor_pos` はカーソル位置 `(column, row)` で、該当セルの fg/bg を反転描画する。
     /// `selection` は選択範囲 `(start, end)` で、範囲内のセルの fg/bg を反転描画する。
+    /// `url_hover` は `(row, start_col, end_col)` で、範囲内のセルを青色で描画する。
     #[allow(clippy::too_many_arguments)]
     pub fn update_from_grid(
         &mut self,
@@ -407,6 +408,7 @@ impl CellPipeline {
         surface_size: [f32; 2],
         cursor_pos: Option<(usize, usize)>,
         selection: Option<((usize, usize), (usize, usize))>,
+        url_hover: Option<(usize, usize, usize)>,
     ) {
         let rows = grid.screen_lines();
         let cols = grid.columns();
@@ -447,9 +449,14 @@ impl CellPipeline {
 
                 let is_cursor = cursor_pos == Some((col, row));
                 let is_selected = selection.is_some_and(|sel| is_in_selection(col, row, sel));
+                let is_url_hovered =
+                    url_hover.is_some_and(|(hr, hs, he)| row == hr && col >= hs && col < he);
                 let (bg, fg) = if is_cursor || is_selected {
                     // カーソル位置 or 選択範囲: fg/bg を反転
                     (color_to_rgba(cell.fg), color_to_rgba(cell.bg))
+                } else if is_url_hovered {
+                    // URL ホバー: 前景色を青色に変更
+                    (color_to_rgba(cell.bg), [0.4, 0.6, 1.0, 1.0])
                 } else {
                     (color_to_rgba(cell.bg), color_to_rgba(cell.fg))
                 };

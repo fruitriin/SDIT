@@ -2057,6 +2057,7 @@ dependencies = [
  "log",
  "pollster",
  "pty-process",
+ "regex",
  "rustix 0.38.44",
  "serde",
  "thiserror",
