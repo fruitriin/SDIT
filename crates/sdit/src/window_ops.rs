@@ -80,6 +80,8 @@ impl SditApp {
             Some((cursor_col, cursor_row)),
             None,
             None,
+            None,
+            None,
         );
         drop(state_lock);
 

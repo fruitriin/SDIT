@@ -307,6 +307,16 @@ impl<T: GridCell> Grid<T> {
         &mut self.raw[hist + line][col]
     }
 
+    /// 全行を raw storage の順で参照するイテレータを返す。
+    ///
+    /// `0..history_size` が履歴行（最古 = 0）、`history_size..total_lines` がビューポート行。
+    /// 返される行数は `min(total_lines, physical_capacity)` で、物理的に別個の行のみを返す。
+    pub fn iter_raw_rows(&self) -> impl Iterator<Item = &Row<T>> {
+        // raw.len() が物理行数を超える場合は重複が生じるため、物理行数で打ち切る。
+        let count = self.raw.len().min(self.raw.physical_len());
+        (0..count).map(move |i| &self.raw[i])
+    }
+
     /// Enforce the scrollback line limit, discarding the oldest history rows.
     fn enforce_scroll_limit(&mut self) {
         let max_total = self.lines + self.max_scroll_limit;

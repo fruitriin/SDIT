@@ -17,3 +17,4 @@
 | [013-ime-input](013-ime-input.md) | IME 入力（日本語）の確認 | - | - |
 | [014-font-size-change](014-font-size-change.md) | フォントサイズ動的変更（Cmd+=/Cmd+-/Cmd+0）の確認 | 2026-03-13 | PASS |
 | [015-url-detection](015-url-detection.md) | URL 検出・Cmd+クリック・ホバーハイライトの確認 | 2026-03-13 | UNIT_ONLY |
+| [016-scrollback-search](016-scrollback-search.md) | スクロールバック内検索（Cmd+F）の確認 | - | - |

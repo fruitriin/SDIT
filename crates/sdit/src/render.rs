@@ -65,6 +65,36 @@ impl SditApp {
 
         let selection = self.selection.as_ref().map(|sel| sel.to_tuple(grid_cols));
         let url_hover = self.hovered_url.as_ref().map(|h| (h.row, h.start_col, h.end_col));
+
+        // 検索マッチをビューポート相対座標に変換
+        let (search_highlight, current_highlight) = if let Some(ref search) = self.search {
+            use sdit_core::terminal::search::SearchEngine;
+            let history = grid.history_size();
+            let display_offset = grid.display_offset();
+            let screen = grid.screen_lines();
+
+            let visible_matches: Vec<(usize, usize, usize)> = search
+                .matches
+                .iter()
+                .filter_map(|m| {
+                    SearchEngine::raw_row_to_viewport(m.raw_row, history, display_offset, screen)
+                        .map(|vr| (vr, m.start_col, m.end_col))
+                })
+                .collect();
+
+            let current = if search.matches.is_empty() {
+                None
+            } else {
+                let cm = &search.matches[search.current_match];
+                SearchEngine::raw_row_to_viewport(cm.raw_row, history, display_offset, screen)
+                    .map(|vr| (vr, cm.start_col, cm.end_col))
+            };
+
+            (Some(visible_matches), current)
+        } else {
+            (None, None)
+        };
+
         ws.cell_pipeline.update_from_grid(
             &ws.gpu.queue,
             grid,
@@ -76,6 +106,8 @@ impl SditApp {
             cursor_pos,
             selection,
             url_hover,
+            search_highlight.as_deref(),
+            current_highlight,
         );
         drop(state_lock);
 
@@ -198,6 +230,85 @@ impl SditApp {
                 // アトラス更新を GPU に送信
                 ws.atlas.upload_if_dirty(&ws.gpu.queue);
             }
+        }
+
+        // 検索バー描画: 最下行をオーバーレイ
+        if let Some(ref search) = self.search {
+            let bar_row = grid_rows.saturating_sub(1);
+            let search_bg = [
+                (self.colors.background[0] + 0.1).min(1.0),
+                (self.colors.background[1] + 0.1).min(1.0),
+                (self.colors.background[2] + 0.1).min(1.0),
+                1.0,
+            ];
+            let fg = self.colors.foreground;
+
+            // " > " + query + " [n/m]" を構築
+            let match_info = if search.matches.is_empty() {
+                if search.query.is_empty() { String::new() } else { " [0/0]".to_string() }
+            } else {
+                format!(" [{}/{}]", search.current_match + 1, search.matches.len())
+            };
+            let bar_text = format!(" > {}{}", search.query, match_info);
+
+            let atlas_size = ws.atlas.size() as f32;
+            let mut col = 0usize;
+            for ch in bar_text.chars() {
+                if col >= grid_cols {
+                    break;
+                }
+                let cell_width_count = char_cell_width(ch);
+
+                let (uv, glyph_offset, glyph_size) =
+                    if let Some(entry) = self.font_ctx.rasterize_glyph(ch, &mut ws.atlas) {
+                        let r = entry.region;
+                        let uv = [
+                            r.x as f32 / atlas_size,
+                            r.y as f32 / atlas_size,
+                            (r.x + r.width) as f32 / atlas_size,
+                            (r.y + r.height) as f32 / atlas_size,
+                        ];
+                        (
+                            uv,
+                            [entry.placement_left as f32, entry.placement_top as f32],
+                            [r.width as f32, r.height as f32],
+                        )
+                    } else {
+                        ([0.0_f32; 4], [0.0_f32; 2], [0.0_f32; 2])
+                    };
+
+                let vertex = CellVertex {
+                    bg: search_bg,
+                    fg,
+                    grid_pos: [col as f32, bar_row as f32],
+                    uv,
+                    glyph_offset,
+                    glyph_size,
+                    cell_width_scale: if cell_width_count == 2 { 2.0 } else { 1.0 },
+                };
+
+                let cell_index = bar_row * grid_cols + col;
+                ws.cell_pipeline.overwrite_cell(&ws.gpu.queue, cell_index, &vertex);
+                col += cell_width_count;
+            }
+
+            // 残りのセルを検索バー背景で埋める
+            while col < grid_cols {
+                let vertex = CellVertex {
+                    bg: search_bg,
+                    fg: [0.0; 4],
+                    grid_pos: [col as f32, bar_row as f32],
+                    uv: [0.0; 4],
+                    glyph_offset: [0.0; 2],
+                    glyph_size: [0.0; 2],
+                    cell_width_scale: 1.0,
+                };
+                let cell_index = bar_row * grid_cols + col;
+                ws.cell_pipeline.overwrite_cell(&ws.gpu.queue, cell_index, &vertex);
+                col += 1;
+            }
+
+            ws.atlas.upload_if_dirty(&ws.gpu.queue);
         }
 
         ws.window.request_redraw();

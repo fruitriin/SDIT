@@ -138,6 +138,42 @@ pub(crate) fn is_zoom_reset_shortcut(key: &Key, modifiers: ModifiersState) -> bo
     false
 }
 
+/// Cmd+F (macOS) / Ctrl+F で検索モード開始ショートカットかどうか。
+pub(crate) fn is_search_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
+    let is_f = matches!(key, Key::Character(s) if s.as_str() == "f" || s.as_str() == "F");
+    if !is_f {
+        return false;
+    }
+    if cfg!(target_os = "macos") && modifiers.super_key() {
+        return true;
+    }
+    modifiers.control_key()
+}
+
+/// Enter または Cmd+G で次のマッチへジャンプ。
+pub(crate) fn is_search_next(key: &Key, modifiers: ModifiersState) -> bool {
+    if matches!(key, Key::Named(NamedKey::Enter)) && !modifiers.shift_key() {
+        return true;
+    }
+    let is_g = matches!(key, Key::Character(s) if s.as_str() == "g" || s.as_str() == "G");
+    if is_g && cfg!(target_os = "macos") && modifiers.super_key() && !modifiers.shift_key() {
+        return true;
+    }
+    false
+}
+
+/// Shift+Enter または Cmd+Shift+G で前のマッチへジャンプ。
+pub(crate) fn is_search_prev(key: &Key, modifiers: ModifiersState) -> bool {
+    if matches!(key, Key::Named(NamedKey::Enter)) && modifiers.shift_key() {
+        return true;
+    }
+    let is_g = matches!(key, Key::Character(s) if s.as_str() == "g" || s.as_str() == "G");
+    if is_g && cfg!(target_os = "macos") && modifiers.super_key() && modifiers.shift_key() {
+        return true;
+    }
+    false
+}
+
 /// URL を開くモディファイアキーが押されているかどうか。
 ///
 /// macOS: Cmd、それ以外: Ctrl
@@ -353,6 +389,44 @@ mod tests {
     fn url_modifier_no_modifier() {
         let mods = ModifiersState::empty();
         assert!(!is_url_modifier(mods));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn search_shortcut_cmd_f() {
+        let mods = ModifiersState::SUPER;
+        assert!(is_search_shortcut(&char_key("f"), mods));
+        assert!(is_search_shortcut(&char_key("F"), mods));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn search_shortcut_no_modifier() {
+        let mods = ModifiersState::empty();
+        assert!(!is_search_shortcut(&char_key("f"), mods));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn search_next_enter() {
+        let mods = ModifiersState::empty();
+        assert!(is_search_next(&Key::Named(NamedKey::Enter), mods));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn search_prev_shift_enter() {
+        let mods = ModifiersState::SHIFT;
+        assert!(is_search_prev(&Key::Named(NamedKey::Enter), mods));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn search_shortcuts_no_overlap() {
+        // Cmd+F は他の検索ショートカットと重複しない
+        let mods = ModifiersState::SUPER;
+        assert!(!is_search_next(&char_key("f"), mods));
+        assert!(!is_search_prev(&char_key("f"), mods));
     }
 
     #[cfg(target_os = "macos")]

@@ -11,14 +11,15 @@ use sdit_core::selection::{Selection, SelectionType, selected_text};
 use sdit_core::terminal::TermMode;
 
 use crate::app::{
-    PreeditState, SditApp, SditEvent, UrlHoverState, ime_commit_to_bytes, wrap_bracketed_paste,
+    PreeditState, SditApp, SditEvent, SearchState, UrlHoverState, ime_commit_to_bytes,
+    wrap_bracketed_paste,
 };
 use crate::input::{
     is_add_session_shortcut, is_close_session_shortcut, is_copy_shortcut,
-    is_detach_session_shortcut, is_new_window_shortcut, is_paste_shortcut,
-    is_sidebar_toggle_shortcut, is_url_modifier, is_zoom_in_shortcut, is_zoom_out_shortcut,
-    is_zoom_reset_shortcut, key_to_bytes, mouse_report_sgr, mouse_report_x11, pixel_to_grid,
-    session_switch_direction,
+    is_detach_session_shortcut, is_new_window_shortcut, is_paste_shortcut, is_search_next,
+    is_search_prev, is_search_shortcut, is_sidebar_toggle_shortcut, is_url_modifier,
+    is_zoom_in_shortcut, is_zoom_out_shortcut, is_zoom_reset_shortcut, key_to_bytes,
+    mouse_report_sgr, mouse_report_x11, pixel_to_grid, session_switch_direction,
 };
 
 // ---------------------------------------------------------------------------
@@ -152,6 +153,73 @@ impl ApplicationHandler<SditEvent> for SditApp {
                             let sid = ws.active_session_id();
                             self.redraw_session(sid);
                         }
+                        return;
+                    }
+
+                    // --- Cmd+F で検索バートグル ---
+                    if is_search_shortcut(&key_event.logical_key, self.modifiers) {
+                        if self.search.is_some() {
+                            self.search = None;
+                        } else {
+                            self.search = Some(SearchState::new());
+                        }
+                        if let Some(ws) = self.windows.get(&id) {
+                            let sid = ws.active_session_id();
+                            self.redraw_session(sid);
+                        }
+                        return;
+                    }
+
+                    // --- 検索モード中のキー入力処理 ---
+                    if self.search.is_some() {
+                        use winit::keyboard::Key;
+
+                        // Escape で検索バーを閉じる
+                        if matches!(key_event.logical_key, Key::Named(NamedKey::Escape)) {
+                            self.search = None;
+                            if let Some(ws) = self.windows.get(&id) {
+                                let sid = ws.active_session_id();
+                                self.redraw_session(sid);
+                            }
+                            return;
+                        }
+
+                        // Shift+Enter で前のマッチへ
+                        if is_search_prev(&key_event.logical_key, self.modifiers) {
+                            self.search_navigate(-1, id);
+                            return;
+                        }
+
+                        // Enter で次のマッチへ
+                        if is_search_next(&key_event.logical_key, self.modifiers) {
+                            self.search_navigate(1, id);
+                            return;
+                        }
+
+                        // Backspace で検索クエリの最後の文字を削除
+                        if matches!(key_event.logical_key, Key::Named(NamedKey::Backspace)) {
+                            if let Some(ref mut search) = self.search {
+                                search.query.pop();
+                            }
+                            self.update_search(id);
+                            return;
+                        }
+
+                        // 通常文字入力
+                        if let Key::Character(ref s) = key_event.logical_key {
+                            // Cmd/Ctrl 修飾がある場合はスキップ
+                            if !self.modifiers.super_key() && !self.modifiers.control_key() {
+                                if let Some(ref mut search) = self.search {
+                                    if search.query.len() + s.len() <= 1000 {
+                                        search.query.push_str(s.as_str());
+                                    }
+                                }
+                                self.update_search(id);
+                                return;
+                            }
+                        }
+
+                        // 他のキーは無視（ターミナルに送らない）
                         return;
                     }
 
@@ -688,6 +756,17 @@ impl ApplicationHandler<SditEvent> for SditApp {
             }
 
             WindowEvent::Ime(winit::event::Ime::Commit(text)) => {
+                // 検索モード中は検索バーにテキストを追加
+                if self.search.is_some() {
+                    if let Some(ref mut search) = self.search {
+                        if search.query.len() + text.len() <= 1000 {
+                            search.query.push_str(&text);
+                        }
+                    }
+                    self.update_search(id);
+                    return;
+                }
+
                 let Some(ws) = self.windows.get(&id) else { return };
                 let sid = ws.active_session_id();
                 let Some(session) = self.session_mgr.get(sid) else { return };
@@ -790,6 +869,84 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 ws.window.request_redraw();
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 検索ヘルパー
+// ---------------------------------------------------------------------------
+
+impl SditApp {
+    /// 検索クエリでグリッドを検索し、結果を更新して再描画する。
+    pub(crate) fn update_search(&mut self, window_id: WindowId) {
+        let Some(ws) = self.windows.get(&window_id) else { return };
+        let sid = ws.active_session_id();
+        let Some(session) = self.session_mgr.get(sid) else { return };
+
+        {
+            let state =
+                session.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let grid = state.terminal.grid();
+
+            if let Some(ref mut search) = self.search {
+                use sdit_core::terminal::search::SearchEngine;
+                search.matches = SearchEngine::search(grid, &search.query);
+                if search.matches.is_empty() {
+                    search.current_match = 0;
+                } else {
+                    search.current_match =
+                        search.current_match.min(search.matches.len().saturating_sub(1));
+                }
+            }
+        }
+
+        self.redraw_session(sid);
+    }
+
+    /// 検索マッチ間をナビゲートする（direction: 1=次, -1=前）。
+    pub(crate) fn search_navigate(&mut self, direction: i32, window_id: WindowId) {
+        let Some(ws) = self.windows.get(&window_id) else { return };
+        let sid = ws.active_session_id();
+
+        if let Some(ref mut search) = self.search {
+            if search.matches.is_empty() {
+                return;
+            }
+            let len = search.matches.len();
+            if direction > 0 {
+                search.current_match = (search.current_match + 1) % len;
+            } else {
+                search.current_match =
+                    if search.current_match == 0 { len - 1 } else { search.current_match - 1 };
+            }
+
+            // マッチ位置にスクロール
+            let raw_row = search.matches[search.current_match].raw_row;
+            if let Some(session) = self.session_mgr.get(sid) {
+                use sdit_core::grid::{Dimensions, Scroll};
+                use sdit_core::terminal::search::SearchEngine;
+                let mut state =
+                    session.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                let history = state.terminal.grid().history_size();
+                let screen = state.terminal.grid().screen_lines();
+                let target_offset =
+                    SearchEngine::display_offset_for_match(raw_row, history, screen);
+                let current_offset = state.terminal.grid().display_offset();
+                if target_offset != current_offset {
+                    // まず Bottom（表示端）にして、必要ならデルタスクロールで調整
+                    state.terminal.grid_mut().scroll_display(Scroll::Bottom);
+                    if target_offset > 0 {
+                        #[allow(clippy::cast_possible_wrap)]
+                        state
+                            .terminal
+                            .grid_mut()
+                            .scroll_display(Scroll::Delta(target_offset as isize));
+                    }
+                }
+            }
+        }
+
+        self.redraw_session(sid);
     }
 }
 

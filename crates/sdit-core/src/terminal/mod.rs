@@ -5,6 +5,7 @@
 //! [`vte::Parser`] to feed raw bytes into a [`Terminal`].
 
 pub mod handler;
+pub mod search;
 pub mod url_detector;
 
 use std::ops::Range;

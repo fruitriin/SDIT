@@ -4,6 +4,7 @@
 //! - `CellVertex`: 1セル分のインスタンスデータ
 //! - `CellPipeline`: ターミナルグリッドをセル単位でレンダリングするパイプライン
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::grid::Grid;
@@ -396,6 +397,8 @@ impl CellPipeline {
     /// `cursor_pos` はカーソル位置 `(column, row)` で、該当セルの fg/bg を反転描画する。
     /// `selection` は選択範囲 `(start, end)` で、範囲内のセルの fg/bg を反転描画する。
     /// `url_hover` は `(row, start_col, end_col)` で、範囲内のセルを青色で描画する。
+    /// `search_matches` は `(row, start_col, end_col)` のスライスで、マッチセルを黄色ハイライトする。
+    /// `current_search_match` は現在フォーカス中のマッチで、オレンジ色でハイライトする。
     #[allow(clippy::too_many_arguments)]
     pub fn update_from_grid(
         &mut self,
@@ -409,6 +412,8 @@ impl CellPipeline {
         cursor_pos: Option<(usize, usize)>,
         selection: Option<((usize, usize), (usize, usize))>,
         url_hover: Option<(usize, usize, usize)>,
+        search_matches: Option<&[(usize, usize, usize)]>,
+        current_search_match: Option<(usize, usize, usize)>,
     ) {
         let rows = grid.screen_lines();
         let cols = grid.columns();
@@ -423,6 +428,13 @@ impl CellPipeline {
             atlas_size,
             0.0,
         );
+
+        // 検索マッチセルの高速ルックアップ用 HashSet を構築（M-3: O(N×M) → O(1)）。
+        let match_set: HashSet<(usize, usize)> = search_matches
+            .map(|matches| {
+                matches.iter().flat_map(|&(mr, ms, me)| (ms..me).map(move |c| (mr, c))).collect()
+            })
+            .unwrap_or_default();
 
         let mut vertices: Vec<CellVertex> = Vec::with_capacity(rows * cols);
 
@@ -451,9 +463,18 @@ impl CellPipeline {
                 let is_selected = selection.is_some_and(|sel| is_in_selection(col, row, sel));
                 let is_url_hovered =
                     url_hover.is_some_and(|(hr, hs, he)| row == hr && col >= hs && col < he);
+                let is_current_match = current_search_match
+                    .is_some_and(|(mr, ms, me)| row == mr && col >= ms && col < me);
+                let is_search_match = match_set.contains(&(row, col));
                 let (bg, fg) = if is_cursor || is_selected {
                     // カーソル位置 or 選択範囲: fg/bg を反転
                     (color_to_rgba(cell.fg), color_to_rgba(cell.bg))
+                } else if is_current_match {
+                    // 現在のマッチ: Catppuccin Mocha Peach (#fab387)
+                    (hex_rgba(0xfa, 0xb3, 0x87), [0.0, 0.0, 0.0, 1.0])
+                } else if is_search_match {
+                    // その他のマッチ: Catppuccin Mocha Yellow (#f9e2af)
+                    (hex_rgba(0xf9, 0xe2, 0xaf), [0.0, 0.0, 0.0, 1.0])
                 } else if is_url_hovered {
                     // URL ホバー: 前景色を青色に変更
                     (color_to_rgba(cell.bg), [0.4, 0.6, 1.0, 1.0])

@@ -50,6 +50,12 @@ impl<T: GridCell> Storage<T> {
         self.len == 0
     }
 
+    /// 物理的に割り当て済みの行数（= ring buffer の実容量）。
+    /// `len()` はこれを超えないが、`len > physical_len` になる場合は行が重複する。
+    pub fn physical_len(&self) -> usize {
+        self.inner.len()
+    }
+
     /// Map a logical row index to a physical index inside `inner`.
     fn compute_index(&self, logical: usize) -> usize {
         (self.zero + logical) % self.inner.len()

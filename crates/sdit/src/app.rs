@@ -33,6 +33,28 @@ pub(crate) struct UrlHoverState {
 }
 
 // ---------------------------------------------------------------------------
+// 検索状態
+// ---------------------------------------------------------------------------
+
+/// 検索バーの状態。
+#[derive(Debug, Clone)]
+pub(crate) struct SearchState {
+    /// ユーザーが入力した検索クエリ。
+    pub(crate) query: String,
+    /// 検索マッチ結果のリスト。
+    pub(crate) matches: Vec<sdit_core::terminal::search::SearchMatch>,
+    /// 現在フォーカスしているマッチのインデックス（0-indexed）。
+    pub(crate) current_match: usize,
+}
+
+impl SearchState {
+    /// 新しい空の検索状態を作成する。
+    pub(crate) fn new() -> Self {
+        Self { query: String::new(), matches: Vec::new(), current_match: 0 }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // IME プリエディット状態
 // ---------------------------------------------------------------------------
 
@@ -151,6 +173,8 @@ pub(crate) struct SditApp {
     pub(crate) url_detector: UrlDetector,
     /// 現在 URL ホバー中の状態（Cmd/Ctrl 押下中に URL 上にカーソルがある場合）。
     pub(crate) hovered_url: Option<UrlHoverState>,
+    /// 検索バーの状態。None = 検索バー非表示。
+    pub(crate) search: Option<SearchState>,
 }
 
 impl SditApp {
@@ -186,6 +210,7 @@ impl SditApp {
             default_font_size,
             url_detector: UrlDetector::new(),
             hovered_url: None,
+            search: None,
         }
     }
 

@@ -64,6 +64,11 @@ impl<T: GridCell> Row<T> {
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
+
+    /// 全セルのスライスを返す。
+    pub fn cells(&self) -> &[T] {
+        &self.inner
+    }
 }
 
 // --- Index by Column ---
