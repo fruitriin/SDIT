@@ -23,7 +23,10 @@ impl SditApp {
         }
 
         let window = match event_loop.create_window(attrs) {
-            Ok(w) => Arc::new(w),
+            Ok(w) => {
+                w.set_ime_allowed(true);
+                Arc::new(w)
+            }
             Err(e) => {
                 log::error!("Window creation failed: {e}");
                 return;
@@ -249,7 +252,10 @@ impl SditApp {
         }
 
         let new_window = match event_loop.create_window(attrs) {
-            Ok(w) => Arc::new(w),
+            Ok(w) => {
+                w.set_ime_allowed(true);
+                Arc::new(w)
+            }
             Err(e) => {
                 log::error!("Window creation failed for detach: {e}");
                 rollback!();

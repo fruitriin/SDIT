@@ -3,7 +3,7 @@
 `docs/plans/` の完了状態・優先度をトラックする。
 `docs/plans/` と TODO が一致しなければ TODO を編集する。
 
-## 現在のフェーズ: Phase 7（次に着手）
+## 現在のフェーズ: Phase 8（次に着手）
 
 ## バックログ
 
@@ -24,7 +24,7 @@
 | done | 5.9 | `docs/plans/phase5.9-main-rs-split.md` | **完了** |
 | done | 6.1 | `docs/plans/phase6.1-mouse-scroll.md` | **完了** |
 | done | 6.2 | `docs/plans/phase6.2-selection-clipboard.md` | **完了** |
-| 高 | 7 | `docs/plans/phase7-ime.md` | 未着手 |
+| done | 7 | `docs/plans/phase7-ime.md` | **完了** |
 | 中高 | 8.1 | `docs/plans/phase8.1-font-size.md` | 未着手 |
 | 中高 | 8.2 | `docs/plans/phase8.2-url-detection.md` | 未着手 |
 | 中 | 9.1 | `docs/plans/phase9.1-search.md` | 未着手 |

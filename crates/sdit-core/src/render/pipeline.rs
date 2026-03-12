@@ -507,6 +507,18 @@ impl CellPipeline {
         }
         self.cell_count = count as u32;
     }
+
+    /// 頂点バッファの指定インデックスのセルを1つ上書きする。
+    ///
+    /// プリエディット描画など、グリッドの一部だけを上書きしたい場合に使用する。
+    /// `index` が `cell_count` 以上の場合は何もしない（範囲外書き込み防止）。
+    pub fn overwrite_cell(&self, queue: &wgpu::Queue, index: usize, vertex: &CellVertex) {
+        if index as u32 >= self.cell_count {
+            return;
+        }
+        let byte_offset = (index * std::mem::size_of::<CellVertex>()) as wgpu::BufferAddress;
+        queue.write_buffer(&self.vertex_buffer, byte_offset, bytemuck::bytes_of(vertex));
+    }
 }
 
 // ---------------------------------------------------------------------------

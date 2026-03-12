@@ -17,6 +17,20 @@ use sdit_core::session::{
 use crate::window::{spawn_pty_reader, spawn_pty_writer};
 
 // ---------------------------------------------------------------------------
+// IME プリエディット状態
+// ---------------------------------------------------------------------------
+
+/// IME プリエディット（変換中テキスト）の状態。
+#[derive(Debug, Clone)]
+pub(crate) struct PreeditState {
+    /// 変換中のテキスト。
+    pub(crate) text: String,
+    /// カーソル位置（バイトオフセットの範囲）。将来のカーソル描画に使用する。
+    #[allow(dead_code)]
+    pub(crate) cursor_offset: Option<(usize, usize)>,
+}
+
+// ---------------------------------------------------------------------------
 // カスタムイベント型
 // ---------------------------------------------------------------------------
 
@@ -113,6 +127,8 @@ pub(crate) struct SditApp {
     pub(crate) cursor_blink_visible: bool,
     /// 最後にカーソル点滅状態を切り替えた時刻。
     pub(crate) cursor_blink_last_toggle: std::time::Instant,
+    /// IME プリエディット状態。
+    pub(crate) preedit: Option<PreeditState>,
 }
 
 impl SditApp {
@@ -143,6 +159,7 @@ impl SditApp {
                 .ok(),
             cursor_blink_visible: true,
             cursor_blink_last_toggle: std::time::Instant::now(),
+            preedit: None,
         }
     }
 

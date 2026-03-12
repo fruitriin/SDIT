@@ -1,5 +1,6 @@
 use sdit_core::grid::Dimensions;
 use sdit_core::pty::PtySize;
+use sdit_core::render::pipeline::CellVertex;
 use sdit_core::session::SessionId;
 use sdit_core::terminal::{CursorStyle, TermMode};
 use winit::window::WindowId;
@@ -11,6 +12,7 @@ impl SditApp {
     /// PTY 出力があったときに Terminal の Grid から GPU バッファを更新する。
     ///
     /// 非アクティブセッションの出力は描画をスキップする（Terminal には蓄積される）。
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn redraw_session(&mut self, session_id: SessionId) {
         let Some(&window_id) = self.session_to_window.get(&session_id) else { return };
         let Some(ws) = self.windows.get_mut(&window_id) else { return };
@@ -118,6 +120,84 @@ impl SditApp {
         }
 
         ws.atlas.upload_if_dirty(&ws.gpu.queue);
+
+        // IME カーソル位置を通知
+        {
+            let preedit_width: usize =
+                self.preedit.as_ref().map_or(0, |p| p.text.chars().map(char_cell_width).sum());
+            let ime_col = cursor_col + preedit_width;
+            let ime_x = sidebar_width_px + (ime_col as f32 * metrics.cell_width);
+            let ime_y = cursor_row as f32 * metrics.cell_height;
+            ws.window.set_ime_cursor_area(
+                winit::dpi::PhysicalPosition::new(f64::from(ime_x), f64::from(ime_y)),
+                winit::dpi::PhysicalSize::new(
+                    f64::from(metrics.cell_width * 2.0),
+                    f64::from(metrics.cell_height),
+                ),
+            );
+        }
+
+        // プリエディット描画: カーソル位置から文字を上書き
+        if let Some(ref preedit) = self.preedit.clone() {
+            if !preedit.text.is_empty() {
+                let atlas_size = ws.atlas.size() as f32;
+                let mut col_offset = cursor_col;
+                for ch in preedit.text.chars() {
+                    let cell_width_count = char_cell_width(ch);
+
+                    // グリッド範囲外なら描画しない
+                    if col_offset >= grid_cols {
+                        break;
+                    }
+
+                    // プリエディット背景色（通常背景より少し明るく）
+                    let bg = self.colors.background;
+                    let preedit_bg = [
+                        (bg[0] + 0.15).min(1.0),
+                        (bg[1] + 0.15).min(1.0),
+                        (bg[2] + 0.15).min(1.0),
+                        1.0,
+                    ];
+                    let fg = self.colors.foreground;
+
+                    // グリフをラスタライズしてアトラスに配置
+                    let (uv, glyph_offset, glyph_size) =
+                        if let Some(entry) = self.font_ctx.rasterize_glyph(ch, &mut ws.atlas) {
+                            let r = entry.region;
+                            let uv = [
+                                r.x as f32 / atlas_size,
+                                r.y as f32 / atlas_size,
+                                (r.x + r.width) as f32 / atlas_size,
+                                (r.y + r.height) as f32 / atlas_size,
+                            ];
+                            let offset = [entry.placement_left as f32, entry.placement_top as f32];
+                            let size = [r.width as f32, r.height as f32];
+                            (uv, offset, size)
+                        } else {
+                            ([0.0_f32; 4], [0.0_f32; 2], [0.0_f32; 2])
+                        };
+
+                    let vertex = CellVertex {
+                        bg: preedit_bg,
+                        fg,
+                        grid_pos: [col_offset as f32, cursor_row as f32],
+                        uv,
+                        glyph_offset,
+                        glyph_size,
+                        cell_width_scale: if cell_width_count == 2 { 2.0 } else { 1.0 },
+                    };
+
+                    // グリッド上のセルを上書き
+                    let cell_index = cursor_row * grid_cols + col_offset;
+                    ws.cell_pipeline.overwrite_cell(&ws.gpu.queue, cell_index, &vertex);
+
+                    col_offset += cell_width_count;
+                }
+                // アトラス更新を GPU に送信
+                ws.atlas.upload_if_dirty(&ws.gpu.queue);
+            }
+        }
+
         ws.window.request_redraw();
     }
 
@@ -148,4 +228,39 @@ impl SditApp {
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// ヘルパー関数
+// ---------------------------------------------------------------------------
+
+/// Unicode 文字のセル幅を返す（全角=2、それ以外=1）。
+///
+/// 簡易実装: CJK 統合漢字・ひらがな・カタカナ等の範囲を全角とみなす。
+/// 完全な実装には `unicode-width` クレートが必要だが、依存を追加せずに
+/// 主要な CJK 範囲をカバーする。
+fn char_cell_width(c: char) -> usize {
+    let cp = c as u32;
+    // 主要な全角文字の範囲
+    matches!(cp,
+        0x1100..=0x115F  // ハングル字母
+        | 0x2E80..=0x303E  // CJK ラジカルサプリメント、CJK 記号と句読点
+        | 0x3041..=0x33FF  // ひらがな、カタカナ、CJK
+        | 0x3400..=0x4DBF  // CJK 統合漢字拡張A
+        | 0x4E00..=0x9FFF  // CJK 統合漢字
+        | 0xA000..=0xA4CF  // 彝文字
+        | 0xAC00..=0xD7AF  // ハングル音節
+        | 0xF900..=0xFAFF  // CJK 互換漢字
+        | 0xFE10..=0xFE1F  // 縦書き形
+        | 0xFE30..=0xFE4F  // CJK 互換形
+        | 0xFF01..=0xFF60  // 全角英数字
+        | 0xFFE0..=0xFFE6  // 全角記号
+        | 0x1B000..=0x1B0FF  // 変体仮名
+        | 0x1F004..=0x1F0CF  // 麻雀牌
+        | 0x1F300..=0x1F9FF  // 絵文字
+        | 0x20000..=0x2FFFD  // CJK 統合漢字拡張B-F
+        | 0x30000..=0x3FFFD  // CJK 統合漢字拡張G-
+    )
+    .then_some(2)
+    .unwrap_or(1)
 }

@@ -10,7 +10,7 @@ use sdit_core::render::pipeline::CellPipeline;
 use sdit_core::selection::{Selection, SelectionType, selected_text};
 use sdit_core::terminal::TermMode;
 
-use crate::app::{SditApp, SditEvent};
+use crate::app::{PreeditState, SditApp, SditEvent};
 use crate::input::{
     is_add_session_shortcut, is_close_session_shortcut, is_copy_shortcut,
     is_detach_session_shortcut, is_new_window_shortcut, is_paste_shortcut,
@@ -571,6 +571,54 @@ impl ApplicationHandler<SditEvent> for SditApp {
                     log::info!("smoke_test: 1 frame rendered, exiting");
                     event_loop.exit();
                 }
+            }
+
+            WindowEvent::Ime(winit::event::Ime::Commit(text)) => {
+                let Some(ws) = self.windows.get(&id) else { return };
+                let sid = ws.active_session_id();
+                let Some(session) = self.session_mgr.get(sid) else { return };
+
+                let mode = session
+                    .term_state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .terminal
+                    .mode();
+
+                let bytes: Vec<u8> = if text.len() > 1 && mode.contains(TermMode::BRACKETED_PASTE) {
+                    // ブラケットペーストモード: インジェクション攻撃防止のためサニタイズ
+                    let sanitized = text.replace("\x1b[200~", "").replace("\x1b[201~", "");
+                    let mut v = b"\x1b[200~".to_vec();
+                    v.extend_from_slice(sanitized.as_bytes());
+                    v.extend_from_slice(b"\x1b[201~");
+                    v
+                } else {
+                    text.into_bytes()
+                };
+                if let Err(e) = session.pty_io.write_tx.try_send(bytes) {
+                    log::warn!("IME commit PTY write failed: {e}");
+                }
+                // プリエディットをクリア
+                self.preedit = None;
+                self.redraw_session(sid);
+            }
+
+            WindowEvent::Ime(winit::event::Ime::Preedit(text, cursor)) => {
+                if text.is_empty() {
+                    self.preedit = None;
+                } else {
+                    self.preedit = Some(PreeditState { text, cursor_offset: cursor });
+                }
+                // プリエディット変更時に再描画
+                if let Some(ws) = self.windows.get(&id) {
+                    let sid = ws.active_session_id();
+                    self.redraw_session(sid);
+                }
+            }
+
+            WindowEvent::Ime(winit::event::Ime::Enabled | winit::event::Ime::Disabled) => {
+                // IME 有効/無効状態の変更はログのみ
+                log::debug!("IME state changed for window {id:?}");
             }
 
             _ => {}

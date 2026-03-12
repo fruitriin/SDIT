@@ -14,6 +14,10 @@
 3. サブタスク着手時に `- [x]` でチェックしていく。並列可能なタスクはコンテナオーケストレーションを利用する
 4. 実装フェーズの最終サブタスク完了時、実装で得た知見を `/knowhow` で記録する（既存 knowhow の更新も含む）
 
+### エージェント起動時の共通ルール
+- エージェントチーム（TeamCreate）やサブエージェント（Agent）を作成するとき、各エージェントへのプロンプトに **最初に `/knowhow-index` を実行する** よう指示を含めること
+- これにより各エージェントがプロジェクトの知見ベースを把握した状態で作業を開始できる
+
 ### タスク完了時 — 2段階品質ゲート
 
 #### Stage 1: ビルド検証（ゲートキーパー）
@@ -58,6 +62,19 @@
 
 ---
 
-## タスク
+## タスク: Phase 7 — IME入力サポート（完了）
 
-（現在タスクなし）
+### 実装
+- [x] Step 1: IME 有効化 — `window_ops.rs` で `set_ime_allowed(true)` を追加
+- [x] Step 2: IME Commit 処理 — `event_loop.rs` で `Ime::Commit` → PTY 送信
+- [x] Step 3: PreeditState 構造体追加 — `app.rs` に preedit 状態管理を追加
+- [x] Step 4: IME Preedit イベント処理 — `event_loop.rs` で `Ime::Preedit` → 状態更新
+- [x] Step 5: IME カーソル位置通知 + プリエディット描画 — `render.rs`
+
+### 品質ゲート
+- [x] Stage 1: `cargo fmt --check && cargo clippy --all-targets && cargo test` — 全通過（警告0）
+
+### 完了処理
+- [x] Plan 更新 (`docs/plans/phase7-ime.md`)
+- [x] TODO 更新 (Phase 7 → done)
+- [x] knowhow 記録 (`docs/knowhow/ime-input-support.md`)
