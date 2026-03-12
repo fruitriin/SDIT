@@ -14,6 +14,11 @@ use vte::Perform;
 use crate::grid::{Cell, CellFlags, Color, Dimensions, Grid, GridCell, NamedColor};
 use crate::index::{Column, Line, Point};
 
+/// `pending_writes` バッファの最大サイズ（バイト）。
+/// 悪意あるプログラムが大量の DA/DSR/CPR リクエストを送信してメモリを枯渇させる
+/// ことを防ぐ。超過分は破棄される。
+const MAX_PENDING_WRITES: usize = 4096;
+
 // ---------------------------------------------------------------------------
 // CursorStyle
 // ---------------------------------------------------------------------------
@@ -88,11 +93,14 @@ pub struct Terminal {
     /// Window title, set via `OSC 0` / `OSC 2`.
     pub(super) title: Option<String>,
     /// 応答バイト列バッファ（DA/DSR/CPR等のPTYへの応答）。
+    /// `MAX_PENDING_WRITES` バイトを超えた応答は破棄される。
     pub(super) pending_writes: Vec<u8>,
     /// カーソルスタイル。
     pub(super) cursor_style: CursorStyle,
     /// カーソル点滅が有効か。
     pub(super) cursor_blinking: bool,
+    /// BEL (0x07) を受信したか。
+    pub(super) bell_pending: bool,
 }
 
 impl Terminal {
@@ -112,6 +120,7 @@ impl Terminal {
             pending_writes: Vec::new(),
             cursor_style: CursorStyle::default(),
             cursor_blinking: false,
+            bell_pending: false,
         }
     }
 
@@ -152,6 +161,11 @@ impl Terminal {
     /// カーソル点滅が有効かを返す。
     pub fn cursor_blinking(&self) -> bool {
         self.cursor_blinking
+    }
+
+    /// ベルが鳴った（BEL受信）かどうかを確認し、フラグをリセットする。
+    pub fn take_bell(&mut self) -> bool {
+        std::mem::take(&mut self.bell_pending)
     }
 
     /// Resize the terminal to `lines` rows and `columns` columns.
@@ -410,6 +424,10 @@ impl Perform for Terminal {
 
     fn execute(&mut self, byte: u8) {
         match byte {
+            // BEL
+            0x07 => {
+                self.bell_pending = true;
+            }
             // Backspace
             0x08 => {
                 let col = self.grid.cursor.point.column.0;
@@ -826,5 +844,20 @@ mod tests {
         proc.advance(&mut term, b"\x1b[1 q");
         assert_eq!(term.cursor_style(), CursorStyle::Block);
         assert!(term.cursor_blinking());
+    }
+
+    // pending_writes サイズ制限テスト
+    #[test]
+    fn pending_writes_respects_max_limit() {
+        let (mut proc, mut term) = make_proc_term(24, 80);
+        // DA1 応答は 11 バイト ("\x1b[?62;4c")。MAX_PENDING_WRITES / 11 回以上送れば上限に達する。
+        let repetitions = MAX_PENDING_WRITES / 11 + 100;
+        for _ in 0..repetitions {
+            proc.advance(&mut term, b"\x1b[c");
+        }
+        // バッファが MAX_PENDING_WRITES を超えていないこと。
+        assert!(term.pending_writes.len() <= MAX_PENDING_WRITES);
+        // 少なくとも何かは書き込まれていること。
+        assert!(!term.pending_writes.is_empty());
     }
 }

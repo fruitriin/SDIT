@@ -8,7 +8,7 @@ use vte::Params;
 use crate::grid::Dimensions;
 use crate::index::{Column, Line, Point};
 
-use super::{TermMode, Terminal};
+use super::{MAX_PENDING_WRITES, TermMode, Terminal};
 
 // ---------------------------------------------------------------------------
 // CSI dispatch
@@ -189,13 +189,13 @@ pub fn csi_dispatch(term: &mut Terminal, params: &Params, intermediates: &[u8], 
             if intermediates.first() == Some(&b'>') {
                 // CSI > c — DA2 (Secondary Device Attributes)
                 // CSI > 0 ; 0 ; 0 c — VT100 互換、バージョン 0
-                term.pending_writes.extend_from_slice(b"\x1b[>0;0;0c");
+                write_response(term, b"\x1b[>0;0;0c");
             } else if !is_private {
                 let p = first_param(params, 0);
                 if p == 0 {
                     // CSI c / CSI 0 c — DA1 (Primary Device Attributes)
                     // CSI ? 62 ; 4 c — VT220 互換、sixel なし
-                    term.pending_writes.extend_from_slice(b"\x1b[?62;4c");
+                    write_response(term, b"\x1b[?62;4c");
                 }
             }
         }
@@ -207,7 +207,7 @@ pub fn csi_dispatch(term: &mut Terminal, params: &Params, intermediates: &[u8], 
                 match p {
                     // CSI 5 n → CSI 0 n (端末OK)
                     5 => {
-                        term.pending_writes.extend_from_slice(b"\x1b[0n");
+                        write_response(term, b"\x1b[0n");
                     }
                     // CSI 6 n → CSI row ; col R (Cursor Position Report)
                     6 => {
@@ -215,7 +215,7 @@ pub fn csi_dispatch(term: &mut Terminal, params: &Params, intermediates: &[u8], 
                         let row = term.grid.cursor.point.line.as_viewport_idx() + 1;
                         let col = term.grid.cursor.point.column.0 + 1;
                         let response = format!("\x1b[{row};{col}R");
-                        term.pending_writes.extend_from_slice(response.as_bytes());
+                        write_response(term, response.as_bytes());
                     }
                     _ => {}
                 }
@@ -410,6 +410,13 @@ fn first_param(params: &Params, default: usize) -> usize {
         .next()
         .and_then(|p| p.first().copied())
         .map_or(default as u16, |v| if v == 0 { default as u16 } else { v }) as usize
+}
+
+/// `pending_writes` にデータを追加する。`MAX_PENDING_WRITES` を超える場合は破棄する。
+fn write_response(term: &mut Terminal, data: &[u8]) {
+    if term.pending_writes.len().saturating_add(data.len()) <= MAX_PENDING_WRITES {
+        term.pending_writes.extend_from_slice(data);
+    }
 }
 
 /// Return the Nth (0-indexed) top-level parameter, defaulting to `default`.

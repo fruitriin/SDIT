@@ -3,7 +3,7 @@
 `docs/plans/` の完了状態・優先度をトラックする。
 `docs/plans/` と TODO が一致しなければ TODO を編集する。
 
-## 現在のフェーズ: Phase 5.5 / 5.9（次に着手）
+## 現在のフェーズ: Phase 5.9（次に着手）
 
 ## バックログ
 
@@ -20,19 +20,19 @@
 | done | 4 | `docs/plans/phase4-session-sidebar.md` | **完了** |
 | done | 5 | `docs/plans/phase5-config-polish.md` | **完了** |
 | done | 5.8 | `docs/plans/phase5.8-crate-consolidation.md` | **完了** |
-| **★ 最高** | 5.5 | `docs/plans/phase6-roadmap.md` §Phase 5.5 | 未着手 |
+| done | 5.5 | `docs/plans/phase6-roadmap.md` §Phase 5.5 | **完了** |
 | **★ 最高** | 5.9 | `docs/plans/phase5.9-main-rs-split.md` | 未着手 |
-| 高 | 6.1 | `docs/plans/phase6-roadmap.md` §Phase 6.1 | 未着手 |
-| 高 | 6.2 | `docs/plans/phase6-roadmap.md` §Phase 6.2 | 未着手 |
-| 高 | 7 | `docs/plans/phase6-roadmap.md` §Phase 7 | 未着手 |
-| 中高 | 8.1 | `docs/plans/phase6-roadmap.md` §Phase 8.1 | 未着手 |
-| 中高 | 8.2 | `docs/plans/phase6-roadmap.md` §Phase 8.2 | 未着手 |
-| 中 | 9.1 | `docs/plans/phase6-roadmap.md` §Phase 9.1 | 未着手 |
-| 中 | 9.2 | `docs/plans/phase6-roadmap.md` §Phase 9.2 | 未着手 |
-| 中低 | 10.1 | `docs/plans/phase6-roadmap.md` §Phase 10.1 | 未着手 |
-| 中低 | 10.2 | `docs/plans/phase6-roadmap.md` §Phase 10.2 | 未着手（独立・任意タイミング） |
-| 中低 | 10.3 | `docs/plans/phase6-roadmap.md` §Phase 10.3 | 未着手（独立・任意タイミング） |
-| 中低 | 11.1 | `docs/plans/phase6-roadmap.md` §Phase 11.1 | 未着手 |
-| 中低 | 11.2 | `docs/plans/phase6-roadmap.md` §Phase 11.2 | 未着手 |
-| 中低 | 11.3 | `docs/plans/phase6-roadmap.md` §Phase 11.3 | 未着手 |
-| 低 | 12 | `docs/plans/phase6-roadmap.md` §Phase 12 | 未着手 |
+| 高 | 6.1 | `docs/plans/phase6.1-mouse-scroll.md` | 未着手 |
+| 高 | 6.2 | `docs/plans/phase6.2-selection-clipboard.md` | 未着手 |
+| 高 | 7 | `docs/plans/phase7-ime.md` | 未着手 |
+| 中高 | 8.1 | `docs/plans/phase8.1-font-size.md` | 未着手 |
+| 中高 | 8.2 | `docs/plans/phase8.2-url-detection.md` | 未着手 |
+| 中 | 9.1 | `docs/plans/phase9.1-search.md` | 未着手 |
+| 中 | 9.2 | `docs/plans/phase9.2-keybinds.md` | 未着手 |
+| 中低 | 10.1 | `docs/plans/phase10.1-hot-reload.md` | 未着手 |
+| 中低 | 10.2 | `docs/plans/phase10.2-window-persistence.md` | 未着手（独立・任意タイミング） |
+| 中低 | 10.3 | `docs/plans/phase10.3-ligature-emoji.md` | 未着手（独立・任意タイミング） |
+| 中低 | 11.1 | `docs/plans/phase11.1-macos-menubar.md` | 未着手 |
+| 中低 | 11.2 | `docs/plans/phase11.2-context-menu.md` | 未着手 |
+| 中低 | 11.3 | `docs/plans/phase11.3-gui-settings.md` | 未着手 |
+| 低 | 12 | `docs/plans/phase12-macos-release.md` | 未着手 |

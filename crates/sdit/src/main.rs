@@ -18,7 +18,7 @@ use sdit_core::render::pipeline::{CellPipeline, CellVertex, GpuContext};
 use sdit_core::session::{
     Session, SessionId, SessionManager, SidebarState, SpawnParams, TerminalState,
 };
-use sdit_core::terminal::{TermMode, Terminal};
+use sdit_core::terminal::{CursorStyle, TermMode, Terminal};
 
 // ---------------------------------------------------------------------------
 // カスタムイベント型
@@ -75,6 +75,7 @@ impl WindowState {
 // SditApp
 // ---------------------------------------------------------------------------
 
+#[allow(clippy::struct_excessive_bools)]
 struct SditApp {
     /// `WindowId` → ウィンドウ状態のマッピング。
     windows: HashMap<WindowId, WindowState>,
@@ -104,6 +105,10 @@ struct SditApp {
     selection_end: Option<(usize, usize)>,
     /// ターミナル領域でマウスドラッグ中かどうか。
     is_selecting: bool,
+    /// カーソル点滅状態（true = 表示中）。
+    cursor_blink_visible: bool,
+    /// 最後にカーソル点滅状態を切り替えた時刻。
+    cursor_blink_last_toggle: std::time::Instant,
 }
 
 impl SditApp {
@@ -127,6 +132,8 @@ impl SditApp {
             selection_start: None,
             selection_end: None,
             is_selecting: false,
+            cursor_blink_visible: true,
+            cursor_blink_last_toggle: std::time::Instant::now(),
         }
     }
 
@@ -160,8 +167,15 @@ impl SditApp {
                         let reader_proxy = event_proxy.clone();
                         let writer_proxy = event_proxy;
 
-                        let reader =
-                            spawn_pty_reader(pty, term_state, reader_proxy, sid, child_exited);
+                        let write_tx_for_reader = pty_write_tx.clone();
+                        let reader = spawn_pty_reader(
+                            pty,
+                            term_state,
+                            reader_proxy,
+                            sid,
+                            child_exited,
+                            write_tx_for_reader,
+                        );
                         let writer = spawn_pty_writer(pty_writer, pty_write_rx, writer_proxy, sid);
 
                         (reader, writer, pty_write_tx)
@@ -541,7 +555,22 @@ impl SditApp {
         let cursor_col = grid.cursor.point.column.0;
         #[allow(clippy::cast_sign_loss)]
         let cursor_row = grid.cursor.point.line.0 as usize;
-        let cursor_pos = Some((cursor_col, cursor_row));
+
+        // カーソルスタイルと点滅状態を取得
+        let cursor_style = state_lock.terminal.cursor_style();
+        let cursor_visible = state_lock.terminal.mode().contains(TermMode::SHOW_CURSOR)
+            && (!state_lock.terminal.cursor_blinking() || self.cursor_blink_visible);
+        let cursor_pos = if cursor_visible {
+            match cursor_style {
+                CursorStyle::Block => Some((cursor_col, cursor_row)),
+                _ => None, // Underline/Bar は将来 Phase で描画実装
+            }
+        } else {
+            None
+        };
+
+        // ウィンドウタイトルを取得（state_lock drop 前）
+        let title = state_lock.terminal.title().map(std::borrow::ToOwned::to_owned);
 
         let selection = match (self.selection_start, self.selection_end) {
             (Some(s), Some(e)) => Some((s, e)),
@@ -559,6 +588,11 @@ impl SditApp {
             selection,
         );
         drop(state_lock);
+
+        // ウィンドウタイトルを反映
+        if let Some(title) = title {
+            ws.window.set_title(&title);
+        }
 
         // ターミナルパイプラインの origin_x を設定
         let rows_f32 = grid_rows as f32;
@@ -905,7 +939,16 @@ impl ApplicationHandler<SditEvent> for SditApp {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        // PtyOutput イベント駆動で描画するため、ここでは何もしない。
+        // カーソル点滅のチェック（500ms間隔）
+        const BLINK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(500);
+        if self.cursor_blink_last_toggle.elapsed() >= BLINK_INTERVAL {
+            self.cursor_blink_visible = !self.cursor_blink_visible;
+            self.cursor_blink_last_toggle = std::time::Instant::now();
+            // 点滅中のウィンドウを再描画
+            for ws in self.windows.values() {
+                ws.window.request_redraw();
+            }
+        }
     }
 }
 
@@ -1016,6 +1059,7 @@ fn spawn_pty_reader(
     event_proxy: winit::event_loop::EventLoopProxy<SditEvent>,
     session_id: SessionId,
     child_exited: Arc<std::sync::atomic::AtomicBool>,
+    write_tx: mpsc::SyncSender<Vec<u8>>,
 ) -> JoinHandle<()> {
     std::thread::Builder::new()
         .name(format!("pty-reader-{}", session_id.0))
@@ -1035,6 +1079,14 @@ fn spawn_pty_reader(
                                 .unwrap_or_else(std::sync::PoisonError::into_inner);
                             let TerminalState { processor, terminal } = &mut *state;
                             processor.advance(terminal, &buf[..n]);
+                            // Terminal からの応答（DA/DSR/CPR等）を PTY に書き戻す
+                            if let Some(response) = terminal.drain_pending_writes() {
+                                let _ = write_tx.send(response);
+                            }
+                            // BEL 処理
+                            if terminal.take_bell() {
+                                log::info!("BEL received (session {})", session_id.0);
+                            }
                         }
                         let _ = event_proxy.send_event(SditEvent::PtyOutput(session_id));
                     }
@@ -1099,6 +1151,12 @@ fn key_to_bytes(key: &Key, modifiers: ModifiersState, mode: TermMode) -> Option<
                     b
                 };
                 return Some(vec![ctrl_byte]);
+            }
+            // Alt → ESC prefix
+            if modifiers.alt_key() {
+                let mut result = vec![0x1b]; // ESC
+                result.extend_from_slice(bytes);
+                return Some(result);
             }
             Some(bytes.to_vec())
         }

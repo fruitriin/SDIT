@@ -66,6 +66,23 @@ emacs の `M-x`、htop のメニュー操作等が全て使えない。
 
 **見積もり**: 全タスク合わせて数時間程度。工数に対してインパクトが極めて大きい。
 
+### Phase 5.5 実装結果（2026-03-12 完了）
+
+**実装内容:**
+- Phase 5.5.1: DA1/DA2/DSR/CPR 応答、CursorStyle enum + DECSCUSR、pending_writes バッファ、カーソルレンダリング（Block反転/Underline/Bar）、500ms ブリンクタイマー
+- Phase 5.5.2: Alt→ESC prefix（Ctrl+key より後に判定）、BEL (0x07) 検出 + ログ通知、ウィンドウタイトル反映（OSC 0/2）、Mode 12 カーソルブリンク制御
+- テスト: 111 テスト通過（DA1/DA2/DSR/CPR/DECSCUSR + pending_writes サイズ制限テスト追加）
+- macOS Option キー設定: 未実装（Phase 5.5.2 の一部として計画に残す）
+
+**セキュリティレビュー結果:**
+- **M-1（修正済み）**: `pending_writes` バッファにサイズ制限がなく、悪意あるプログラムが DA/DSR/CPR リクエストを大量送信してメモリを枯渇させる可能性。`MAX_PENDING_WRITES = 4096` の制限と `write_response()` ヘルパーで対策。
+- **M-2（記録のみ）**: CPR 応答の `format!` はカーソル位置（数値）のみを埋め込んでおり、現在は安全。将来 Terminal に任意文字列フィールドを追加する場合は再検証が必要。
+- **L-1**: `drain_pending_writes()` は `std::mem::take()` で Vec を空にするが、容量は解放されない。長時間稼働で緩やかなメモリ増加の可能性。→ 影響軽微、必要に応じて `shrink_to_fit()` 追加。
+- **L-2**: Alt→ESC prefix は全ての Alt+key に適用される。macOS Option キーで特殊文字入力したいユーザーへの影響。→ Phase 5.5.2 の macOS Option 設定で対応予定。
+- **L-3**: BEL 通知がログのみでビジュアルベル未実装。→ 将来フェーズで対応。
+- **I-1**: カーソルブリンク間隔 500ms がハードコード。設定可能にする場合は Config に追加。
+- **I-2**: Underline/Bar カーソルの描画が未実装（cursor_pos=None で非表示扱い）。→ Phase 6 以降で対応。
+
 ---
 
 ## Phase 6: マウス・選択・クリップボード基盤
