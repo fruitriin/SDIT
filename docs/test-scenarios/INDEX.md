@@ -22,3 +22,4 @@
 | [018-config-hot-reload](018-config-hot-reload.md) | 設定ファイル変更の動的反映（フォントサイズ・カラーテーマ・キーバインド）とエラー時 graceful fallback の確認 | - | - |
 | [019-window-persistence](019-window-persistence.md) | ウィンドウサイズ・位置の永続化（session.toml への保存と起動時復元）の確認 | 2026-03-13 | UNIT_ONLY |
 | [020-color-emoji](020-color-emoji.md) | Atlas RGBA 化とカラー絵文字描画（SwashContent 種別ごとの変換・is_color フラグ）の確認 | 2026-03-13 | PASS |
+| [021-context-menu](021-context-menu.md) | 右クリックコンテキストメニュー（ターミナル領域: Copy/Paste/Select All/Search、サイドバー領域: Close Session/Move to New Window）の表示・動作確認 | 2026-03-13 | UNIT_ONLY |

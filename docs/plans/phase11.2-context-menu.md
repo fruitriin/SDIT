@@ -23,18 +23,22 @@
 ### 変更ファイル
 
 - `crates/sdit/src/menu.rs`: `build_terminal_context_menu()`, `build_sidebar_context_menu()`, `show_context_menu_for_window()`, `make_shared_actions()` を追加。ファイル先頭に `#![allow(unsafe_code)]` を追加（`show_context_menu_for_nsview` が `unsafe fn` のため）。
-- `crates/sdit/src/app.rs`: `SditApp` に `menu_actions: SharedMenuActions` フィールドを追加（`#[cfg(target_os = "macos")]`）。`new()` に対応する引数を追加。
+- `crates/sdit/src/app.rs`: `SditApp` に `menu_actions`, `terminal_ctx_menu`, `sidebar_ctx_menu` フィールドを追加（`#[cfg(target_os = "macos")]`）。コンテキストメニューは初期化時に1回構築して再利用。
 - `crates/sdit/src/main.rs`: `make_shared_actions()` で共有マップを生成し `MenuEvent` ハンドラと `SditApp` で共有する構成に変更。
 - `crates/sdit/src/event_loop.rs`: `WindowEvent::MouseInput { MouseButton::Right }` ハンドラを追加（`#[cfg(target_os = "macos")]`）。
 
 ### アーキテクチャ判断
 
 - `MenuEvent::set_event_handler` はグローバルで1つしかないため、メニューバー用 id_map とコンテキストメニュー用 id_map を `Arc<Mutex<HashMap>>` で統一した。
-- 右クリック時にコンテキストメニューの id_map を共有マップに `extend()` することで、既存のメニューバーハンドラに変更を加えずに対応できる。
+- コンテキストメニューは `SditApp` 初期化時に1回だけ構築し、id_map を共有マップに追加。右クリック時は保持済みメニューを表示するだけ（M-1 修正）。
 - `unsafe_code = "deny"` の制約に対し、`menu.rs` ファイルのみ `#![allow(unsafe_code)]` でスコープを限定。
 
 ## セキュリティレビュー結果
 
-### Low
-
-- **L-1**: コンテキストメニュー id_map の `extend()` は累積する（古いコンテキストメニューの ID が残り続ける）。悪用面は限定的（同じ Action バリアントのみ追加）だが、メモリ消費は微増する。現時点では許容範囲。将来的に大量のメニュー追加がある場合はクリーンアップを検討する。
+| 重要度 | ID | 内容 | 対応 |
+|---|---|---|---|
+| Medium | M-1 | `extend()` による MenuId の無制限蓄積 | **修正済み**: コンテキストメニューを初期化時に1回構築して再利用 |
+| Low | L-1 | `menu.append().unwrap()` の一貫性不足 | `.expect()` への統一は将来対応 |
+| Low | L-2 | `hit_test` の境界チェックの微妙な不整合 | `hit_test` は `session_count` 未満を保証。実害なし |
+| Info | I-1 | `#![allow(unsafe_code)]` のファイル単位適用 | unsafe は1箇所のみ。スコープ限定済み |
+| Info | I-2 | `PoisonError::into_inner` の使用 | HashMap 操作は軽量で整合性リスクは低い |

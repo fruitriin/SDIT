@@ -520,30 +520,19 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                 if row < ws.sessions.len() {
                                     self.windows.get_mut(&id).unwrap().active_index = row;
                                 }
-                                let (ctx_menu, ctx_id_map) =
-                                    crate::menu::build_sidebar_context_menu();
-                                {
-                                    let mut guard = self
-                                        .menu_actions
-                                        .lock()
-                                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                                    guard.extend(ctx_id_map);
-                                }
                                 let window = self.windows[&id].window.clone();
-                                crate::menu::show_context_menu_for_window(&window, &ctx_menu);
+                                crate::menu::show_context_menu_for_window(
+                                    &window,
+                                    &self.sidebar_ctx_menu,
+                                );
                             }
                         } else {
                             // ターミナル領域: 標準コンテキストメニュー
-                            let (ctx_menu, ctx_id_map) = crate::menu::build_terminal_context_menu();
-                            {
-                                let mut guard = self
-                                    .menu_actions
-                                    .lock()
-                                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                                guard.extend(ctx_id_map);
-                            }
                             let window = self.windows[&id].window.clone();
-                            crate::menu::show_context_menu_for_window(&window, &ctx_menu);
+                            crate::menu::show_context_menu_for_window(
+                                &window,
+                                &self.terminal_ctx_menu,
+                            );
                         }
                     }
                 }

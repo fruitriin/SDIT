@@ -40,6 +40,12 @@
 |---|---|---|
 | [config-and-theming.md](config-and-theming.md) | TOML 設定基盤、f32 クランプの NaN 対策、WCAG コントラスト比検証、CJK 全角描画 | `#[serde(default)]`, `Config::load`, `dirs::config_dir`, `f32::is_finite`, `ResolvedColors`, `hex_to_rgba`, `WCAG 2.1`, `sRGB 線形化`, `WIDE_CHAR`, `WIDE_CHAR_SPACER`, `cell_width_scale: 2.0`, `atomic rename`, `TOCTOU` |
 
+## macOS GUI 統合
+
+| ファイル | 要約 | キーワード |
+|---|---|---|
+| [context-menu-macos.md](context-menu-macos.md) | macOS 右クリックコンテキストメニューの muda 統合、MenuEvent 共有マップ、unsafe スコープ限定パターン | `show_context_menu_for_nsview`, `#![allow(unsafe_code)]`, `SharedMenuActions`, `Arc<Mutex<HashMap<MenuId, Action>>>`, `extend()`, `MouseButton::Right`, `dead_code` |
+
 ## テスト・品質保証
 
 | ファイル | 要約 | キーワード |

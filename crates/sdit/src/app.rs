@@ -182,12 +182,21 @@ pub(crate) struct SditApp {
     /// 設定全体（キーバインド等）。
     pub(crate) config: sdit_core::config::Config,
     /// メニューバー + コンテキストメニューの共有 `MenuId` マップ。
-    /// `None` の場合は非 macOS または初期化前。
+    /// `MenuEvent` ハンドラのクロージャが `Arc` クローンを保持するため、
+    /// フィールドとしては直接読まれないが、ドロップ防止のため保持する。
     #[cfg(target_os = "macos")]
+    #[allow(dead_code)]
     pub(crate) menu_actions: crate::menu::SharedMenuActions,
+    /// ターミナル領域の右クリックメニュー（初期化時に1回構築）。
+    #[cfg(target_os = "macos")]
+    pub(crate) terminal_ctx_menu: muda::Menu,
+    /// サイドバー領域の右クリックメニュー（初期化時に1回構築）。
+    #[cfg(target_os = "macos")]
+    pub(crate) sidebar_ctx_menu: muda::Menu,
 }
 
 impl SditApp {
+    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn new(
         event_proxy: winit::event_loop::EventLoopProxy<SditEvent>,
         smoke_test: bool,
@@ -224,7 +233,19 @@ impl SditApp {
             search: None,
             config: config.clone(),
             #[cfg(target_os = "macos")]
-            menu_actions,
+            menu_actions: menu_actions.clone(),
+            #[cfg(target_os = "macos")]
+            terminal_ctx_menu: {
+                let (menu, ids) = crate::menu::build_terminal_context_menu();
+                menu_actions.lock().unwrap_or_else(std::sync::PoisonError::into_inner).extend(ids);
+                menu
+            },
+            #[cfg(target_os = "macos")]
+            sidebar_ctx_menu: {
+                let (menu, ids) = crate::menu::build_sidebar_context_menu();
+                menu_actions.lock().unwrap_or_else(std::sync::PoisonError::into_inner).extend(ids);
+                menu
+            },
         }
     }
 
