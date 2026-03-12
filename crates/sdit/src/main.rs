@@ -38,19 +38,28 @@ fn main() {
     // macOS メニューバーの初期化
     // _menu_bar をドロップするとメニューが消えるため変数に保持する。
     #[cfg(target_os = "macos")]
-    let _menu_bar = {
+    let (_menu_bar, menu_actions) = {
         let (menu_bar, id_map) = menu::build_menu_bar();
         menu_bar.init_for_nsapp();
 
+        let shared = menu::make_shared_actions(id_map);
+        let handler_actions = shared.clone();
         let menu_proxy = proxy.clone();
         muda::MenuEvent::set_event_handler(Some(move |event: muda::MenuEvent| {
-            if let Some(&action) = id_map.get(event.id()) {
+            if let Some(&action) = handler_actions
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .get(event.id())
+            {
                 let _ = menu_proxy.send_event(SditEvent::MenuAction(action));
             }
         }));
-        menu_bar
+        (menu_bar, shared)
     };
 
+    #[cfg(target_os = "macos")]
+    let mut app = SditApp::new(proxy, smoke_test, &config, menu_actions);
+    #[cfg(not(target_os = "macos"))]
     let mut app = SditApp::new(proxy, smoke_test, &config);
     event_loop.run_app(&mut app).unwrap();
 }

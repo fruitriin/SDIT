@@ -181,6 +181,10 @@ pub(crate) struct SditApp {
     pub(crate) search: Option<SearchState>,
     /// 設定全体（キーバインド等）。
     pub(crate) config: sdit_core::config::Config,
+    /// メニューバー + コンテキストメニューの共有 `MenuId` マップ。
+    /// `None` の場合は非 macOS または初期化前。
+    #[cfg(target_os = "macos")]
+    pub(crate) menu_actions: crate::menu::SharedMenuActions,
 }
 
 impl SditApp {
@@ -188,6 +192,7 @@ impl SditApp {
         event_proxy: winit::event_loop::EventLoopProxy<SditEvent>,
         smoke_test: bool,
         config: &sdit_core::config::Config,
+        #[cfg(target_os = "macos")] menu_actions: crate::menu::SharedMenuActions,
     ) -> Self {
         let default_font_size = config.font.clamped_size();
         Self {
@@ -218,6 +223,8 @@ impl SditApp {
             hovered_url: None,
             search: None,
             config: config.clone(),
+            #[cfg(target_os = "macos")]
+            menu_actions,
         }
     }
 

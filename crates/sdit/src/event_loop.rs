@@ -498,6 +498,57 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 }
             }
 
+            #[cfg(target_os = "macos")]
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Right,
+                ..
+            } => {
+                if let Some((x, y)) = self.cursor_position {
+                    if let Some(ws) = self.windows.get(&id) {
+                        let metrics = *self.font_ctx.metrics();
+                        let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+
+                        if ws.sidebar.visible && (x as f32) < sidebar_w {
+                            // サイドバー領域: セッションコンテキストメニュー
+                            if let Some(row) = ws.sidebar.hit_test(
+                                y as f32,
+                                metrics.cell_height,
+                                ws.sessions.len(),
+                            ) {
+                                // 右クリックしたセッションをアクティブにしてからメニュー表示
+                                if row < ws.sessions.len() {
+                                    self.windows.get_mut(&id).unwrap().active_index = row;
+                                }
+                                let (ctx_menu, ctx_id_map) =
+                                    crate::menu::build_sidebar_context_menu();
+                                {
+                                    let mut guard = self
+                                        .menu_actions
+                                        .lock()
+                                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                    guard.extend(ctx_id_map);
+                                }
+                                let window = self.windows[&id].window.clone();
+                                crate::menu::show_context_menu_for_window(&window, &ctx_menu);
+                            }
+                        } else {
+                            // ターミナル領域: 標準コンテキストメニュー
+                            let (ctx_menu, ctx_id_map) = crate::menu::build_terminal_context_menu();
+                            {
+                                let mut guard = self
+                                    .menu_actions
+                                    .lock()
+                                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                guard.extend(ctx_id_map);
+                            }
+                            let window = self.windows[&id].window.clone();
+                            crate::menu::show_context_menu_for_window(&window, &ctx_menu);
+                        }
+                    }
+                }
+            }
+
             WindowEvent::MouseInput {
                 state: ElementState::Released,
                 button: MouseButton::Left,

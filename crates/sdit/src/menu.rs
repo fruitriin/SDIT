@@ -1,11 +1,14 @@
 // macOS メニューバーの構築。
 // このファイルは macOS 専用。他プラットフォームではコンパイルされない。
 #![cfg(target_os = "macos")]
+// muda の show_context_menu_for_nsview は unsafe fn のため、このファイルのみ許可する。
+#![allow(unsafe_code)]
 
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use muda::accelerator::{Accelerator, Code, Modifiers};
-use muda::{Menu, MenuId, MenuItem, PredefinedMenuItem, Submenu};
+use muda::{ContextMenu as _, Menu, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 
 use sdit_core::config::keybinds::Action;
 
@@ -160,6 +163,87 @@ pub(crate) fn build_menu_bar() -> (Menu, HashMap<MenuId, Action>) {
 }
 
 // ---------------------------------------------------------------------------
+// コンテキストメニュービルダー
+// ---------------------------------------------------------------------------
+
+/// ターミナル領域の右クリックメニューを構築する。
+pub(crate) fn build_terminal_context_menu() -> (Menu, HashMap<MenuId, Action>) {
+    let menu = Menu::new();
+    let mut id_map: HashMap<MenuId, Action> = HashMap::new();
+
+    let copy = MenuItem::new("Copy", true, None::<Accelerator>);
+    id_map.insert(copy.id().clone(), Action::Copy);
+    menu.append(&copy).unwrap();
+
+    let paste = MenuItem::new("Paste", true, None::<Accelerator>);
+    id_map.insert(paste.id().clone(), Action::Paste);
+    menu.append(&paste).unwrap();
+
+    menu.append(&PredefinedMenuItem::separator()).unwrap();
+
+    let select_all = MenuItem::new("Select All", true, None::<Accelerator>);
+    id_map.insert(select_all.id().clone(), Action::SelectAll);
+    menu.append(&select_all).unwrap();
+
+    menu.append(&PredefinedMenuItem::separator()).unwrap();
+
+    let search = MenuItem::new("Search…", true, None::<Accelerator>);
+    id_map.insert(search.id().clone(), Action::Search);
+    menu.append(&search).unwrap();
+
+    (menu, id_map)
+}
+
+/// サイドバー領域の右クリックメニューを構築する。
+pub(crate) fn build_sidebar_context_menu() -> (Menu, HashMap<MenuId, Action>) {
+    let menu = Menu::new();
+    let mut id_map: HashMap<MenuId, Action> = HashMap::new();
+
+    let close = MenuItem::new("Close Session", true, None::<Accelerator>);
+    id_map.insert(close.id().clone(), Action::CloseSession);
+    menu.append(&close).unwrap();
+
+    let detach = MenuItem::new("Move to New Window", true, None::<Accelerator>);
+    id_map.insert(detach.id().clone(), Action::DetachSession);
+    menu.append(&detach).unwrap();
+
+    (menu, id_map)
+}
+
+/// `NSView` ポインタを取得して muda コンテキストメニューを表示する。
+///
+/// # Safety
+/// `ns_view` は有効な `NSView` インスタンスへのポインタでなければならない。
+/// winit の `Window::window_handle()` から取得した `AppKit` ハンドルを使用すること。
+pub(crate) fn show_context_menu_for_window(
+    window: &std::sync::Arc<winit::window::Window>,
+    menu: &Menu,
+) {
+    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    let Ok(handle) = window.window_handle() else { return };
+    let RawWindowHandle::AppKit(appkit) = handle.as_raw() else { return };
+    let ns_view = appkit.ns_view.as_ptr();
+    // SAFETY: winit が保証している通り、ns_view は有効な NSView ポインタ。
+    // macOS メインスレッド上で呼ばれるため問題ない。
+    unsafe {
+        menu.show_context_menu_for_nsview(ns_view.cast(), None);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 共有 MenuId マップ
+// ---------------------------------------------------------------------------
+
+/// `MenuEvent` ハンドラとコンテキストメニューの両方から参照できる共有マップを作成する。
+pub(crate) type SharedMenuActions = Arc<Mutex<HashMap<MenuId, Action>>>;
+
+/// `build_menu_bar` の返り値から共有マップを生成する。
+pub(crate) fn make_shared_actions(id_map: HashMap<MenuId, Action>) -> SharedMenuActions {
+    Arc::new(Mutex::new(id_map))
+}
+
+// ---------------------------------------------------------------------------
 // テスト
 // ---------------------------------------------------------------------------
 //
@@ -198,5 +282,17 @@ mod tests {
         ];
         // 全て異なる値であることを確認
         assert_eq!(actions.len(), 17);
+    }
+
+    /// コンテキストメニューで使用する Action バリアントが定義されていることを確認する。
+    #[test]
+    fn context_menu_actions_are_defined() {
+        // ターミナル領域コンテキストメニュー
+        let terminal_actions = [Action::Copy, Action::Paste, Action::SelectAll, Action::Search];
+        assert_eq!(terminal_actions.len(), 4);
+
+        // サイドバー領域コンテキストメニュー
+        let sidebar_actions = [Action::CloseSession, Action::DetachSession];
+        assert_eq!(sidebar_actions.len(), 2);
     }
 }
