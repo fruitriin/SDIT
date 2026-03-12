@@ -184,6 +184,66 @@ pub fn csi_dispatch(term: &mut Terminal, params: &Params, intermediates: &[u8], 
             }
         }
 
+        // ---- DA1 / DA2 — Device Attributes ----
+        'c' => {
+            if intermediates.first() == Some(&b'>') {
+                // CSI > c — DA2 (Secondary Device Attributes)
+                // CSI > 0 ; 0 ; 0 c — VT100 互換、バージョン 0
+                term.pending_writes.extend_from_slice(b"\x1b[>0;0;0c");
+            } else if !is_private {
+                let p = first_param(params, 0);
+                if p == 0 {
+                    // CSI c / CSI 0 c — DA1 (Primary Device Attributes)
+                    // CSI ? 62 ; 4 c — VT220 互換、sixel なし
+                    term.pending_writes.extend_from_slice(b"\x1b[?62;4c");
+                }
+            }
+        }
+
+        // ---- DSR — Device Status Report / CPR — Cursor Position Report ----
+        'n' => {
+            if !is_private {
+                let p = first_param(params, 0);
+                match p {
+                    // CSI 5 n → CSI 0 n (端末OK)
+                    5 => {
+                        term.pending_writes.extend_from_slice(b"\x1b[0n");
+                    }
+                    // CSI 6 n → CSI row ; col R (Cursor Position Report)
+                    6 => {
+                        // 1-based
+                        let row = term.grid.cursor.point.line.as_viewport_idx() + 1;
+                        let col = term.grid.cursor.point.column.0 + 1;
+                        let response = format!("\x1b[{row};{col}R");
+                        term.pending_writes.extend_from_slice(response.as_bytes());
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // ---- DECSCUSR — Set Cursor Style ----
+        'q' => {
+            if intermediates.first() == Some(&b' ') {
+                let style = first_param(params, 0);
+                match style {
+                    0..=2 => {
+                        term.cursor_style = super::CursorStyle::Block;
+                        term.cursor_blinking = style != 2;
+                    }
+                    3 | 4 => {
+                        term.cursor_style = super::CursorStyle::Underline;
+                        term.cursor_blinking = style == 3;
+                    }
+                    5 | 6 => {
+                        term.cursor_style = super::CursorStyle::Bar;
+                        term.cursor_blinking = style == 5;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         _ => {}
     }
 }
@@ -308,6 +368,9 @@ fn set_private_mode(term: &mut Terminal, param: u16, set: bool) {
     match param {
         1 => toggle_mode(term, TermMode::APP_CURSOR, set),
         7 => toggle_mode(term, TermMode::LINE_WRAP, set),
+        12 => {
+            term.cursor_blinking = set;
+        }
         25 => toggle_mode(term, TermMode::SHOW_CURSOR, set),
         1049 => {
             // Only swap if we're actually changing state.

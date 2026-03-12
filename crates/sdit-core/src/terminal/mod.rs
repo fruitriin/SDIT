@@ -15,6 +15,22 @@ use crate::grid::{Cell, CellFlags, Color, Dimensions, Grid, GridCell, NamedColor
 use crate::index::{Column, Line, Point};
 
 // ---------------------------------------------------------------------------
+// CursorStyle
+// ---------------------------------------------------------------------------
+
+/// カーソルの表示形状。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CursorStyle {
+    /// ブロックカーソル（■）。
+    #[default]
+    Block,
+    /// アンダーラインカーソル（_）。
+    Underline,
+    /// バーカーソル（|）。
+    Bar,
+}
+
+// ---------------------------------------------------------------------------
 // TermMode
 // ---------------------------------------------------------------------------
 
@@ -71,6 +87,12 @@ pub struct Terminal {
     pub(super) tabs: Vec<bool>,
     /// Window title, set via `OSC 0` / `OSC 2`.
     pub(super) title: Option<String>,
+    /// 応答バイト列バッファ（DA/DSR/CPR等のPTYへの応答）。
+    pub(super) pending_writes: Vec<u8>,
+    /// カーソルスタイル。
+    pub(super) cursor_style: CursorStyle,
+    /// カーソル点滅が有効か。
+    pub(super) cursor_blinking: bool,
 }
 
 impl Terminal {
@@ -87,6 +109,9 @@ impl Terminal {
             scroll_region: 0..lines,
             tabs,
             title: None,
+            pending_writes: Vec::new(),
+            cursor_style: CursorStyle::default(),
+            cursor_blinking: false,
         }
     }
 
@@ -108,6 +133,25 @@ impl Terminal {
     /// Window title as set by the most recent `OSC 0/2` sequence, or `None`.
     pub fn title(&self) -> Option<&str> {
         self.title.as_deref()
+    }
+
+    /// 蓄積された応答バイト列を取り出す。空なら `None` を返す。
+    pub fn drain_pending_writes(&mut self) -> Option<Vec<u8>> {
+        if self.pending_writes.is_empty() {
+            None
+        } else {
+            Some(std::mem::take(&mut self.pending_writes))
+        }
+    }
+
+    /// カーソルスタイルを返す。
+    pub fn cursor_style(&self) -> CursorStyle {
+        self.cursor_style
+    }
+
+    /// カーソル点滅が有効かを返す。
+    pub fn cursor_blinking(&self) -> bool {
+        self.cursor_blinking
     }
 
     /// Resize the terminal to `lines` rows and `columns` columns.
@@ -727,5 +771,60 @@ mod tests {
         assert_eq!(UnicodeWidthChar::width('漢'), Some(2));
         assert_eq!(UnicodeWidthChar::width('A'), Some(1));
         assert_eq!(UnicodeWidthChar::width('ｱ'), Some(1)); // 半角カタカナ
+    }
+
+    // DA1 応答テスト
+    #[test]
+    fn da1_response() {
+        let (mut proc, mut term) = make_proc_term(24, 80);
+        proc.advance(&mut term, b"\x1b[c");
+        let response = term.drain_pending_writes().unwrap();
+        assert_eq!(response, b"\x1b[?62;4c");
+    }
+
+    // DA2 応答テスト
+    #[test]
+    fn da2_response() {
+        let (mut proc, mut term) = make_proc_term(24, 80);
+        proc.advance(&mut term, b"\x1b[>c");
+        let response = term.drain_pending_writes().unwrap();
+        assert_eq!(response, b"\x1b[>0;0;0c");
+    }
+
+    // DSR 応答テスト
+    #[test]
+    fn dsr_status_ok() {
+        let (mut proc, mut term) = make_proc_term(24, 80);
+        proc.advance(&mut term, b"\x1b[5n");
+        let response = term.drain_pending_writes().unwrap();
+        assert_eq!(response, b"\x1b[0n");
+    }
+
+    // CPR 応答テスト
+    #[test]
+    fn cpr_cursor_position_report() {
+        let (mut proc, mut term) = make_proc_term(24, 80);
+        proc.advance(&mut term, b"\x1b[5;10H"); // move to (5,10) 1-based
+        proc.advance(&mut term, b"\x1b[6n");
+        let response = term.drain_pending_writes().unwrap();
+        assert_eq!(response, b"\x1b[5;10R");
+    }
+
+    // DECSCUSR テスト
+    #[test]
+    fn decscusr_cursor_style() {
+        let (mut proc, mut term) = make_proc_term(24, 80);
+        // Bar (blinking)
+        proc.advance(&mut term, b"\x1b[5 q");
+        assert_eq!(term.cursor_style(), CursorStyle::Bar);
+        assert!(term.cursor_blinking());
+        // Underline (steady)
+        proc.advance(&mut term, b"\x1b[4 q");
+        assert_eq!(term.cursor_style(), CursorStyle::Underline);
+        assert!(!term.cursor_blinking());
+        // Block (blinking)
+        proc.advance(&mut term, b"\x1b[1 q");
+        assert_eq!(term.cursor_style(), CursorStyle::Block);
+        assert!(term.cursor_blinking());
     }
 }
