@@ -54,3 +54,20 @@ crates/sdit/src/
 
 - `refs/alacritty/alacritty/src/` — `event.rs`, `input/mod.rs`, `window/mod.rs` に分離されている
 - `refs/ghostty/src/App.zig`, `src/Surface.zig` — App/Surface の明確な分離
+
+## 実装結果（2026-03-12 完了）
+
+1409行の main.rs を8ファイルに分割:
+
+| ファイル | 行数 | 内容 |
+|---|---|---|
+| main.rs | 30 | モジュール宣言 + fn main() |
+| app.rs | 208 | SditEvent, WindowState, SditApp 構造体 + new/spawn_session/cascade_position |
+| event_loop.rs | 300 | impl ApplicationHandler |
+| input.rs | 184 | ショートカット判定 + key_to_bytes |
+| window.rs | 182 | spawn_pty_reader/writer, calc_grid_size, build_sidebar_cells |
+| window_ops.rs | 322 | create_window, add_session, remove_session, switch_session, close_window, detach |
+| render.rs | 154 | redraw_session, handle_resize |
+| headless.rs | 87 | grid_contains, run_headless |
+
+セキュリティレビュー: 問題なし（純粋リファクタリング）

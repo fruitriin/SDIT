@@ -275,7 +275,15 @@ Zellijのタブ概念 → SDITの概念への変換表:
 sdit/
 ├── crates/
 │   ├── sdit/              # バイナリ。GUIループ・ウィンドウ生成
-│   │   └── src/main.rs
+│   │   └── src/
+│   │       ├── main.rs          # エントリーポイント
+│   │       ├── app.rs           # SditApp構造体・セッション生成
+│   │       ├── event_loop.rs    # ApplicationHandler実装
+│   │       ├── input.rs         # キー入力・ショートカット判定
+│   │       ├── window.rs        # PTYスレッド・グリッド計算
+│   │       ├── window_ops.rs    # ウィンドウ操作（生成/破棄/切替）
+│   │       ├── render.rs        # 描画・リサイズ処理
+│   │       └── headless.rs      # ヘッドレステスト用
 │   └── sdit-core/         # ライブラリ。PTY/VTE/Grid/Render/Session/Config
 │       └── src/
 │           ├── terminal/  # VTEステートマシン
@@ -294,15 +302,6 @@ sdit/
 ## 実装ロードマップ
 
 各フェーズの詳細タスクは `docs/plans/` を参照。進捗は `TODO.md` で追跡する。
-
-| Phase | 名称 | 概要 | 計画ファイル |
-|---|---|---|---|
-| 0 | リファレンス読解 | 4プロジェクトのソースを読み設計知見を蓄積 | `docs/plans/phase0-reference-reading.md` |
-| 1 | sdit-core MVP | PTY・VTE・グリッドのヘッドレス実装 | `docs/plans/phase1-core-mvp.md` |
-| 2 | 最初のSDIウィンドウ | winit + wgpu で1枚表示・PTY接続 | `docs/plans/phase2-first-sdi-window.md` |
-| 3 | SDI本実装 | 複数ウィンドウ・セッション管理 | `docs/plans/phase3-sdi-multi-window.md` |
-| 4 | 縦タブ（SessionSidebar） | Chrome-like 合体・切出しUX | `docs/plans/phase4-session-sidebar.md` |
-| 5 | 設定・仕上げ | TOML設定・永続化・フォント | `docs/plans/phase5-config-polish.md` |
 
 ---
 

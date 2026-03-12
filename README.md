@@ -27,13 +27,17 @@ cargo run --bin sdit
 
 ```
 crates/
-  sdit/           バイナリ。GUIループ・ウィンドウ管理
-  sdit-core/      PTY・VTE・グリッド・フォント（GUI非依存）
-  sdit-session/   SDIウィンドウレジストリ・縦タブ状態
-  sdit-render/    wgpu レンダーバックエンド
-  sdit-config/    TOML設定スキーマ
-refs/             リファレンスOSS（git submodule, 読み取り専用）
-docs/             読解メモ・計画ファイル
+  sdit/              バイナリ。GUIループ・ウィンドウ管理・イベントループ
+  sdit-core/         ライブラリ。GUI非依存のコア機能をすべて集約
+    terminal/          VTEステートマシン・ANSIシーケンス処理
+    grid/              セルグリッド・スクロールバック
+    pty/               PTYプロセス管理
+    font/              フォントラスタライズ
+    render/            wgpuレンダーパイプライン・テクスチャアトラス
+    session/           セッション管理・サイドバー状態
+    config/            TOML設定スキーマ・カラーテーマ
+refs/                リファレンスOSS（git submodule, 読み取り専用）
+docs/                読解メモ・計画ファイル
 ```
 
 ## リファレンスプロジェクト
