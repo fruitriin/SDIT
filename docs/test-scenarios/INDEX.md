@@ -21,3 +21,4 @@
 | [017-keybind-customization](017-keybind-customization.md) | デフォルト・カスタム・不正値フォールバック・プラットフォーム固有キーバインドの確認 | 2026-03-13 | PENDING |
 | [018-config-hot-reload](018-config-hot-reload.md) | 設定ファイル変更の動的反映（フォントサイズ・カラーテーマ・キーバインド）とエラー時 graceful fallback の確認 | - | - |
 | [019-window-persistence](019-window-persistence.md) | ウィンドウサイズ・位置の永続化（session.toml への保存と起動時復元）の確認 | 2026-03-13 | UNIT_ONLY |
+| [020-color-emoji](020-color-emoji.md) | Atlas RGBA 化とカラー絵文字描画（SwashContent 種別ごとの変換・is_color フラグ）の確認 | 2026-03-13 | PASS |
