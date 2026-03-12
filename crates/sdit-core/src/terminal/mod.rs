@@ -111,6 +111,8 @@ pub struct Terminal {
     pub(super) cursor_blinking: bool,
     /// BEL (0x07) を受信したか。
     pub(super) bell_pending: bool,
+    /// OSC 52 クリップボード書き込み要求。
+    pub(super) clipboard_write_pending: Option<String>,
 }
 
 impl Terminal {
@@ -131,6 +133,7 @@ impl Terminal {
             cursor_style: CursorStyle::default(),
             cursor_blinking: false,
             bell_pending: false,
+            clipboard_write_pending: None,
         }
     }
 
@@ -185,6 +188,13 @@ impl Terminal {
     /// ベルが鳴った（BEL受信）かどうかを確認し、フラグをリセットする。
     pub fn take_bell(&mut self) -> bool {
         std::mem::take(&mut self.bell_pending)
+    }
+
+    /// OSC 52 クリップボード書き込み要求を取り出す。
+    ///
+    /// 呼び出し後はフィールドが `None` になる（take セマンティクス）。
+    pub fn take_clipboard_write(&mut self) -> Option<String> {
+        self.clipboard_write_pending.take()
     }
 
     /// Resize the terminal to `lines` rows and `columns` columns.
@@ -506,6 +516,26 @@ impl Perform for Terminal {
                 self.title = Some(title.to_owned());
             }
         }
+        // OSC 52: クリップボード操作。
+        // 書き込み: \e]52;c;<base64_data>BEL
+        // 読み取り: \e]52;c;?BEL — セキュリティのため応答しない
+        if params.len() >= 3 && params[0] == b"52" {
+            // パラメータ 1: クリップボード選択 ("c" = 通常クリップボード)
+            // パラメータ 2: base64 データ または "?"
+            let data = params[2];
+            if data == b"?" {
+                // 読み取り要求: 悪意あるアプリによる窃取を防ぐため応答しない
+            } else {
+                // base64 デコード
+                if let Some(text) = decode_base64(data) {
+                    // クリップボード書き込み量の上限: 1 MiB
+                    const MAX_CLIPBOARD_BYTES: usize = 1024 * 1024;
+                    if text.len() <= MAX_CLIPBOARD_BYTES {
+                        self.clipboard_write_pending = Some(text);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -545,6 +575,42 @@ impl Default for Processor {
 /// Build a tab-stop vector for `columns` columns (stops every 8 characters).
 fn build_tabs(columns: usize) -> Vec<bool> {
     (0..columns).map(|c| c != 0 && c % 8 == 0).collect()
+}
+
+/// 標準的な Base64（RFC 4648）をデコードして UTF-8 文字列を返す。
+///
+/// デコードに失敗した場合は `None` を返す。
+fn decode_base64(input: &[u8]) -> Option<String> {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut decode_map = [0xffu8; 256];
+    for (i, &b) in TABLE.iter().enumerate() {
+        decode_map[b as usize] = i as u8;
+    }
+
+    let mut output: Vec<u8> = Vec::with_capacity(input.len() / 4 * 3);
+    let mut buf = 0u32;
+    let mut bits = 0u8;
+
+    for &b in input {
+        if b == b'=' {
+            break;
+        }
+        if b == b'\n' || b == b'\r' || b == b' ' {
+            continue;
+        }
+        let val = decode_map[b as usize];
+        if val == 0xff {
+            return None; // 不正な文字
+        }
+        buf = (buf << 6) | u32::from(val);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            output.push((buf >> bits) as u8);
+        }
+    }
+
+    String::from_utf8(output).ok()
 }
 
 // ---------------------------------------------------------------------------
@@ -907,6 +973,42 @@ mod tests {
         assert!(term.mode().contains(TermMode::MOUSE_REPORT_MOTION));
         proc.advance(&mut term, b"\x1b[?1005h");
         assert!(term.mode().contains(TermMode::UTF8_MOUSE));
+    }
+
+    // OSC 52: クリップボード書き込みテスト
+    #[test]
+    fn osc52_clipboard_write() {
+        let mut term = Terminal::new(24, 80, 0);
+        // "Hello" の Base64 は "SGVsbG8="
+        term.osc_dispatch(&[b"52", b"c", b"SGVsbG8="], false);
+        assert_eq!(term.take_clipboard_write(), Some("Hello".to_string()));
+        // 2回目は None（take セマンティクス）
+        assert_eq!(term.take_clipboard_write(), None);
+    }
+
+    #[test]
+    fn osc52_clipboard_read_request_ignored() {
+        let mut term = Terminal::new(24, 80, 0);
+        // 読み取り要求 "?" は無視する
+        term.osc_dispatch(&[b"52", b"c", b"?"], false);
+        assert_eq!(term.take_clipboard_write(), None);
+    }
+
+    #[test]
+    fn osc52_invalid_base64_ignored() {
+        let mut term = Terminal::new(24, 80, 0);
+        term.osc_dispatch(&[b"52", b"c", b"not!valid!base64!!!"], false);
+        // 不正な文字は None
+        assert_eq!(term.take_clipboard_write(), None);
+    }
+
+    #[test]
+    fn decode_base64_basic() {
+        // 内部ヘルパーを osc_dispatch 経由で間接テスト
+        let mut term = Terminal::new(24, 80, 0);
+        // "test" → "dGVzdA=="
+        term.osc_dispatch(&[b"52", b"c", b"dGVzdA=="], false);
+        assert_eq!(term.take_clipboard_write(), Some("test".to_string()));
     }
 
     // pending_writes サイズ制限テスト

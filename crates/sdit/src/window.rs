@@ -50,6 +50,10 @@ pub(crate) fn spawn_pty_reader(
                             if terminal.take_bell() {
                                 log::info!("BEL received (session {})", session_id.0);
                             }
+                            // OSC 52 クリップボード書き込み処理
+                            if let Some(text) = terminal.take_clipboard_write() {
+                                let _ = event_proxy.send_event(SditEvent::ClipboardWrite(text));
+                            }
                             // 新しい出力があったら display_offset を 0 にリセット（ライブビュー追従）
                             if terminal.grid().display_offset() > 0 {
                                 terminal.grid_mut().scroll_display(Scroll::Bottom);

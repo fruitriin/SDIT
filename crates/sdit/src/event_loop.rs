@@ -5,14 +5,17 @@ use winit::keyboard::NamedKey;
 use winit::window::WindowId;
 
 use sdit_core::grid::{Dimensions, Scroll};
+use sdit_core::index::{Column, Line, Point};
 use sdit_core::render::pipeline::CellPipeline;
+use sdit_core::selection::{Selection, SelectionType, selected_text};
 use sdit_core::terminal::TermMode;
 
 use crate::app::{SditApp, SditEvent};
 use crate::input::{
-    is_add_session_shortcut, is_close_session_shortcut, is_detach_session_shortcut,
-    is_new_window_shortcut, is_sidebar_toggle_shortcut, key_to_bytes, mouse_report_sgr,
-    mouse_report_x11, pixel_to_grid, session_switch_direction,
+    is_add_session_shortcut, is_close_session_shortcut, is_copy_shortcut,
+    is_detach_session_shortcut, is_new_window_shortcut, is_paste_shortcut,
+    is_sidebar_toggle_shortcut, key_to_bytes, mouse_report_sgr, mouse_report_x11, pixel_to_grid,
+    session_switch_direction,
 };
 
 // ---------------------------------------------------------------------------
@@ -139,9 +142,55 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         }
                     }
 
+                    // Cmd+C: テキストコピー
+                    if is_copy_shortcut(&key_event.logical_key, self.modifiers) {
+                        if let Some(sel) = &self.selection {
+                            let state = session
+                                .term_state
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                            let text = selected_text(state.terminal.grid(), sel);
+                            drop(state);
+                            if !text.is_empty() {
+                                if let Some(cb) = &mut self.clipboard {
+                                    if let Err(e) = cb.set_text(text) {
+                                        log::warn!("Clipboard set_text failed: {e}");
+                                    }
+                                }
+                            }
+                        }
+                        self.selection = None;
+                        let sid = ws.active_session_id();
+                        self.redraw_session(sid);
+                        return;
+                    }
+
+                    // Cmd+V: クリップボードからペースト
+                    if is_paste_shortcut(&key_event.logical_key, self.modifiers) {
+                        let text = self
+                            .clipboard
+                            .as_mut()
+                            .and_then(|cb| cb.get_text().ok())
+                            .unwrap_or_default();
+                        if !text.is_empty() {
+                            let bracketed = mode.contains(TermMode::BRACKETED_PASTE);
+                            let bytes: Vec<u8> = if bracketed {
+                                let mut v = b"\x1b[200~".to_vec();
+                                v.extend_from_slice(text.as_bytes());
+                                v.extend_from_slice(b"\x1b[201~");
+                                v
+                            } else {
+                                text.into_bytes()
+                            };
+                            if let Err(e) = session.pty_io.write_tx.try_send(bytes) {
+                                log::warn!("PTY paste write failed: {e}");
+                            }
+                        }
+                        return;
+                    }
+
                     // キー入力時に選択を解除
-                    self.selection_start = None;
-                    self.selection_end = None;
+                    self.selection = None;
 
                     if let Some(bytes) = key_to_bytes(&key_event.logical_key, self.modifiers, mode)
                     {
@@ -220,7 +269,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                 }
                             }
                         } else {
-                            // テキスト選択中: selection_end を更新
+                            // テキスト選択中: selection.end を更新
                             let (col, row) = pixel_to_grid(
                                 position.x,
                                 position.y,
@@ -228,7 +277,12 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                 metrics.cell_height,
                                 sidebar_w,
                             );
-                            self.selection_end = Some((col, row));
+                            if let Some(sel) = &mut self.selection {
+                                // row は screen_lines の範囲内なので i32 に収まる。
+                                #[allow(clippy::cast_possible_wrap)]
+                                let new_end = Point::new(Line(row as i32), Column(col));
+                                sel.end = new_end;
+                            }
                             self.redraw_session(sid);
                         }
                     }
@@ -294,7 +348,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                     }
                                 }
                             } else {
-                                // テキスト選択開始
+                                // テキスト選択開始（シングル/ダブル/トリプルクリック判定）
                                 let (col, row) = pixel_to_grid(
                                     x,
                                     y,
@@ -302,9 +356,62 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                     metrics.cell_height,
                                     sidebar_w,
                                 );
-                                self.selection_start = Some((col, row));
-                                self.selection_end = Some((col, row));
-                                self.is_selecting = true;
+                                let now = std::time::Instant::now();
+                                let is_same_pos = self.last_click_pos == Some((col, row));
+                                let is_fast = self
+                                    .last_click_time
+                                    .is_some_and(|t| t.elapsed().as_millis() < 400);
+                                if is_fast && is_same_pos {
+                                    self.click_count = self.click_count.saturating_add(1).min(3);
+                                } else {
+                                    self.click_count = 1;
+                                }
+                                self.last_click_time = Some(now);
+                                self.last_click_pos = Some((col, row));
+
+                                #[allow(clippy::cast_possible_wrap)]
+                                let point = Point::new(Line(row as i32), Column(col));
+                                let sel_type = match self.click_count {
+                                    3 => SelectionType::Lines,
+                                    2 => SelectionType::Word,
+                                    _ => SelectionType::Simple,
+                                };
+                                let mut sel = Selection::new(sel_type, point);
+
+                                // ダブルクリック: 単語境界まで選択を拡張
+                                if sel_type == SelectionType::Word {
+                                    let session =
+                                        self.session_mgr.get(sid).expect("session exists");
+                                    let state = session
+                                        .term_state
+                                        .lock()
+                                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                    let grid = state.terminal.grid();
+                                    let (start, end) = expand_word(grid, row, col);
+                                    #[allow(clippy::cast_possible_wrap)]
+                                    {
+                                        sel.start = Point::new(Line(row as i32), Column(start));
+                                        sel.end = Point::new(Line(row as i32), Column(end));
+                                    }
+                                }
+                                // トリプルクリック: 行全体を選択
+                                if sel_type == SelectionType::Lines {
+                                    #[allow(clippy::cast_possible_wrap)]
+                                    {
+                                        sel.start = Point::new(Line(row as i32), Column(0));
+                                        let session =
+                                            self.session_mgr.get(sid).expect("session exists");
+                                        let state = session
+                                            .term_state
+                                            .lock()
+                                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                        let max_col =
+                                            state.terminal.grid().columns().saturating_sub(1);
+                                        sel.end = Point::new(Line(row as i32), Column(max_col));
+                                    }
+                                }
+                                self.selection = Some(sel);
+                                self.is_selecting = sel_type == SelectionType::Simple;
                                 self.redraw_session(sid);
                             }
                         }
@@ -471,6 +578,13 @@ impl ApplicationHandler<SditEvent> for SditApp {
             SditEvent::PtyOutput(session_id) => {
                 self.redraw_session(session_id);
             }
+            SditEvent::ClipboardWrite(text) => {
+                if let Some(cb) = &mut self.clipboard {
+                    if let Err(e) = cb.set_text(text) {
+                        log::warn!("OSC 52 clipboard write failed: {e}");
+                    }
+                }
+            }
             SditEvent::ChildExit(session_id, code) => {
                 log::info!("Session {} child exited with code {code}", session_id.0);
                 if let Some(&window_id) = self.session_to_window.get(&session_id) {
@@ -520,4 +634,65 @@ impl ApplicationHandler<SditEvent> for SditApp {
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// 単語境界拡張ヘルパー
+// ---------------------------------------------------------------------------
+
+/// グリッドの `(row, col)` から単語の開始・終了列インデックスを返す。
+///
+/// 空白・記号を区切り文字として扱い、連続する英数字・その他の文字を「単語」とみなす。
+fn expand_word(
+    grid: &sdit_core::grid::Grid<sdit_core::grid::Cell>,
+    row: usize,
+    col: usize,
+) -> (usize, usize) {
+    use sdit_core::grid::Dimensions as _;
+    use sdit_core::index::{Column, Line};
+
+    let cols = grid.columns();
+    if cols == 0 {
+        return (col, col);
+    }
+    let col = col.min(cols - 1);
+
+    // 区切り文字セット
+    let is_separator =
+        |c: char| c.is_ascii_whitespace() || " \t!@#$%^&*()-=+[]{}|;:'\",.<>?/\\`~".contains(c);
+
+    // 起点セルの文字を取得
+    #[allow(clippy::cast_possible_wrap)]
+    let origin_cell = &grid[Point::new(Line(row as i32), Column(col))];
+    let origin_is_sep = is_separator(origin_cell.c);
+
+    // 左方向に拡張
+    let mut start = col;
+    loop {
+        if start == 0 {
+            break;
+        }
+        #[allow(clippy::cast_possible_wrap)]
+        let c = grid[Point::new(Line(row as i32), Column(start - 1))].c;
+        if is_separator(c) != origin_is_sep {
+            break;
+        }
+        start -= 1;
+    }
+
+    // 右方向に拡張
+    let mut end = col;
+    loop {
+        if end + 1 >= cols {
+            break;
+        }
+        #[allow(clippy::cast_possible_wrap)]
+        let c = grid[Point::new(Line(row as i32), Column(end + 1))].c;
+        if is_separator(c) != origin_is_sep {
+            break;
+        }
+        end += 1;
+    }
+
+    (start, end)
 }

@@ -99,6 +99,30 @@ pub(crate) fn session_switch_direction(key: &Key, modifiers: ModifiersState) -> 
     }
 }
 
+/// Cmd+C (macOS) または Ctrl+Shift+C でのコピーショートカットかどうか。
+pub(crate) fn is_copy_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
+    let is_c = matches!(key, Key::Character(s) if s.as_str() == "c" || s.as_str() == "C");
+    if !is_c {
+        return false;
+    }
+    if cfg!(target_os = "macos") && modifiers.super_key() && !modifiers.shift_key() {
+        return true;
+    }
+    modifiers.control_key() && modifiers.shift_key()
+}
+
+/// Cmd+V (macOS) または Ctrl+Shift+V でのペーストショートカットかどうか。
+pub(crate) fn is_paste_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
+    let is_v = matches!(key, Key::Character(s) if s.as_str() == "v" || s.as_str() == "V");
+    if !is_v {
+        return false;
+    }
+    if cfg!(target_os = "macos") && modifiers.super_key() && !modifiers.shift_key() {
+        return true;
+    }
+    modifiers.control_key() && modifiers.shift_key()
+}
+
 // ---------------------------------------------------------------------------
 // マウスイベント → PTY バイト列変換
 // ---------------------------------------------------------------------------

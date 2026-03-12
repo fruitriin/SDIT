@@ -61,10 +61,7 @@ impl SditApp {
         // ウィンドウタイトルを取得（state_lock drop 前）
         let title = state_lock.terminal.title().map(std::borrow::ToOwned::to_owned);
 
-        let selection = match (self.selection_start, self.selection_end) {
-            (Some(s), Some(e)) => Some((s, e)),
-            _ => None,
-        };
+        let selection = self.selection.as_ref().map(|sel| sel.to_tuple(grid_cols));
         ws.cell_pipeline.update_from_grid(
             &ws.gpu.queue,
             grid,

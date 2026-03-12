@@ -25,6 +25,23 @@ Phase 6.1（マウスモード判定。ON時はアプリ転送、OFF時に選択
 
 `arboard`
 
-## セキュリティ考慮事項
+## 実装完了
 
-- OSC 52 クリップボード操作は要注意。悪意あるエスケープシーケンスでクリップボードを書き換えるリスクあり → ユーザー確認ダイアログまたは設定で無効化可能にする
+2026-03-12 実装完了。
+
+### 実装内容
+
+- `crates/sdit-core/src/selection.rs`: `Selection` 型 (Simple/Word/Lines)、`selected_text()` 関数、`contains()`/`to_tuple()` メソッド
+- `crates/sdit-core/src/terminal/mod.rs`: OSC 52 クリップボード書き込み処理、`take_clipboard_write()`、`decode_base64()` ヘルパー
+- `crates/sdit/src/app.rs`: `selection: Option<Selection>`、クリップボードフィールド、クリック追跡フィールド
+- `crates/sdit/src/event_loop.rs`: Cmd+C（コピー）、Cmd+V（ペースト）、ダブル/トリプルクリック選択、`expand_word()` ヘルパー
+- `crates/sdit/src/input.rs`: `is_copy_shortcut()`、`is_paste_shortcut()` 追加
+- `crates/sdit/src/window.rs`: OSC 52 イベント発行
+- `crates/sdit/Cargo.toml`: `arboard = "3"` 追加
+
+### セキュリティ考慮事項
+
+- OSC 52 書き込みのみ許可（読み取り `?` は無応答）
+- クリップボード上限 1 MiB で制限
+- **Info I-1**: OSC 52 書き込みを config で無効化する設定を将来追加すること
+- **Info I-2**: `decode_base64` は padding なし Base64 を受け付けない場合がある（標準的な実装として許容）

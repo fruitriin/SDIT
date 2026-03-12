@@ -9,6 +9,7 @@ use sdit_core::pty::{Pty, PtyConfig, PtySize};
 use sdit_core::render::atlas::Atlas;
 use sdit_core::render::font::FontContext;
 use sdit_core::render::pipeline::{CellPipeline, GpuContext};
+use sdit_core::selection::Selection;
 use sdit_core::session::{
     Session, SessionId, SessionManager, SidebarState, SpawnParams, TerminalState,
 };
@@ -26,6 +27,8 @@ pub(crate) enum SditEvent {
     PtyOutput(SessionId),
     /// 子プロセスが終了した → 対応ウィンドウを閉じる。
     ChildExit(SessionId, i32),
+    /// OSC 52 クリップボード書き込み要求。
+    ClipboardWrite(String),
 }
 
 // ---------------------------------------------------------------------------
@@ -94,12 +97,18 @@ pub(crate) struct SditApp {
     pub(crate) cursor_position: Option<(f64, f64)>,
     /// サイドバー内ドラッグの開始行インデックス。
     pub(crate) drag_source_row: Option<usize>,
-    /// テキスト選択の開始点 (col, row)。
-    pub(crate) selection_start: Option<(usize, usize)>,
-    /// テキスト選択の終了点 (col, row)。ドラッグ中に更新される。
-    pub(crate) selection_end: Option<(usize, usize)>,
+    /// テキスト選択の現在の選択範囲。
+    pub(crate) selection: Option<Selection>,
     /// ターミナル領域でマウスドラッグ中かどうか。
     pub(crate) is_selecting: bool,
+    /// 最後のクリック時刻（ダブル/トリプルクリック判定用）。
+    pub(crate) last_click_time: Option<std::time::Instant>,
+    /// 最後のクリック位置（グリッド座標）。
+    pub(crate) last_click_pos: Option<(usize, usize)>,
+    /// 連続クリック回数（シングル=1、ダブル=2、トリプル=3）。
+    pub(crate) click_count: u8,
+    /// クリップボード操作コンテキスト。
+    pub(crate) clipboard: Option<arboard::Clipboard>,
     /// カーソル点滅状態（true = 表示中）。
     pub(crate) cursor_blink_visible: bool,
     /// 最後にカーソル点滅状態を切り替えた時刻。
@@ -124,9 +133,14 @@ impl SditApp {
             initialized: false,
             cursor_position: None,
             drag_source_row: None,
-            selection_start: None,
-            selection_end: None,
+            selection: None,
             is_selecting: false,
+            last_click_time: None,
+            last_click_pos: None,
+            click_count: 0,
+            clipboard: arboard::Clipboard::new()
+                .map_err(|e| log::warn!("Clipboard init failed: {e}"))
+                .ok(),
             cursor_blink_visible: true,
             cursor_blink_last_toggle: std::time::Instant::now(),
         }
