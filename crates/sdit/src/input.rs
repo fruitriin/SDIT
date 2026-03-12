@@ -1,196 +1,124 @@
 use winit::keyboard::{Key, ModifiersState, NamedKey};
 
+use sdit_core::config::keybinds::{
+    Action, KeybindConfig, MOD_BIT_ALT, MOD_BIT_CTRL, MOD_BIT_SHIFT, MOD_BIT_SUPER,
+};
 use sdit_core::terminal::TermMode;
 
 // ---------------------------------------------------------------------------
-// 新規ウィンドウショートカット判定
+// キーバインド解決
 // ---------------------------------------------------------------------------
 
-/// Cmd+\ (macOS) または Ctrl+\ でのサイドバートグルかどうか。
-pub(crate) fn is_sidebar_toggle_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
-    let is_backslash = matches!(key, Key::Character(s) if s.as_str() == "\\" || s.as_str() == "|");
-    if !is_backslash {
-        return false;
+/// バインディング定義の key 文字列が winit の `Key` にマッチするかどうかを返す。
+///
+/// - 1 文字の場合: `Key::Character` と大文字小文字無視で比較
+/// - `backslash` などのエイリアスは対応する文字に変換
+/// - `Tab`, `Enter`, `Backspace`, `Escape` などの名前付きキー: `Key::Named` にマッチ
+/// - `[`, `]`, `{`, `}` などの記号: `Key::Character` でマッチ（Shift 状態変化後の文字も許可）
+pub(crate) fn key_matches(binding_key: &str, input_key: &Key) -> bool {
+    match input_key {
+        Key::Character(s) => {
+            let input = s.as_str();
+            // バインディング定義の key を正規化
+            let normalized = normalize_key_alias(binding_key);
+            // 大文字小文字無視で比較
+            input.eq_ignore_ascii_case(normalized.as_str())
+                // Shift により文字が変化するケース: "]" と "}" は同じキー
+                || shifted_equivalent(normalized.as_str())
+                    .is_some_and(|alt| input.eq_ignore_ascii_case(alt))
+        }
+        Key::Named(named) => match binding_key.to_ascii_lowercase().as_str() {
+            "tab" => *named == NamedKey::Tab,
+            "enter" | "return" => *named == NamedKey::Enter,
+            "backspace" => *named == NamedKey::Backspace,
+            "escape" | "esc" => *named == NamedKey::Escape,
+            "space" => *named == NamedKey::Space,
+            "pageup" | "page_up" => *named == NamedKey::PageUp,
+            "pagedown" | "page_down" => *named == NamedKey::PageDown,
+            "home" => *named == NamedKey::Home,
+            "end" => *named == NamedKey::End,
+            "insert" => *named == NamedKey::Insert,
+            "delete" => *named == NamedKey::Delete,
+            "arrowup" | "up" => *named == NamedKey::ArrowUp,
+            "arrowdown" | "down" => *named == NamedKey::ArrowDown,
+            "arrowleft" | "left" => *named == NamedKey::ArrowLeft,
+            "arrowright" | "right" => *named == NamedKey::ArrowRight,
+            _ => false,
+        },
+        _ => false,
     }
-    if cfg!(target_os = "macos") && modifiers.super_key() {
-        return true;
-    }
-    modifiers.control_key()
 }
 
-/// Cmd+Shift+N (macOS) でのセッション切出しショートカットかどうか。
-pub(crate) fn is_detach_session_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
-    let is_n = matches!(key, Key::Character(s) if s.as_str() == "n" || s.as_str() == "N");
-    if !is_n {
-        return false;
+/// 特殊文字のエイリアスを正規化する。
+fn normalize_key_alias(key: &str) -> String {
+    match key.to_ascii_lowercase().as_str() {
+        "backslash" => "\\".to_owned(),
+        "plus" => "+".to_owned(),
+        other => other.to_owned(),
     }
-    // macOS: Cmd+Shift+N
-    if cfg!(target_os = "macos") && modifiers.super_key() && modifiers.shift_key() {
-        return true;
-    }
-    false
 }
 
-/// Cmd+N (macOS) または Ctrl+Shift+N でのウィンドウ生成ショートカットかどうか。
-pub(crate) fn is_new_window_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
-    let is_n = matches!(key, Key::Character(s) if s.as_str() == "n" || s.as_str() == "N");
-    if !is_n {
-        return false;
-    }
-    // macOS: Cmd+N
-    if cfg!(target_os = "macos") && modifiers.super_key() && !modifiers.shift_key() {
-        return true;
-    }
-    // Other: Ctrl+Shift+N
-    if modifiers.control_key() && modifiers.shift_key() {
-        return true;
-    }
-    false
-}
-
-/// Cmd+T (macOS) または Ctrl+Shift+T でのセッション追加ショートカットかどうか。
-pub(crate) fn is_add_session_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
-    let is_t = matches!(key, Key::Character(s) if s.as_str() == "t" || s.as_str() == "T");
-    if !is_t {
-        return false;
-    }
-    if cfg!(target_os = "macos") && modifiers.super_key() && !modifiers.shift_key() {
-        return true;
-    }
-    modifiers.control_key() && modifiers.shift_key()
-}
-
-/// Cmd+W (macOS) または Ctrl+Shift+W でのセッション閉じショートカットかどうか。
-pub(crate) fn is_close_session_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
-    let is_w = matches!(key, Key::Character(s) if s.as_str() == "w" || s.as_str() == "W");
-    if !is_w {
-        return false;
-    }
-    if cfg!(target_os = "macos") && modifiers.super_key() && !modifiers.shift_key() {
-        return true;
-    }
-    modifiers.control_key() && modifiers.shift_key()
-}
-
-/// セッション切替ショートカット。次: +1、前: -1 を返す。
-pub(crate) fn session_switch_direction(key: &Key, modifiers: ModifiersState) -> Option<i32> {
+/// Shift キーで変化する文字の代替形（例: `[` → `{`, `]` → `}`）を返す。
+fn shifted_equivalent(key: &str) -> Option<&'static str> {
     match key {
-        // Ctrl+Tab → 次、Ctrl+Shift+Tab → 前
-        Key::Named(NamedKey::Tab) if modifiers.control_key() => {
-            Some(if modifiers.shift_key() { -1 } else { 1 })
-        }
-        // Cmd+Shift+] → 次（macOS）
-        Key::Character(s) if s.as_str() == "]" || s.as_str() == "}" => {
-            if cfg!(target_os = "macos") && modifiers.super_key() && modifiers.shift_key() {
-                Some(1)
-            } else {
-                None
-            }
-        }
-        // Cmd+Shift+[ → 前（macOS）
-        Key::Character(s) if s.as_str() == "[" || s.as_str() == "{" => {
-            if cfg!(target_os = "macos") && modifiers.super_key() && modifiers.shift_key() {
-                Some(-1)
-            } else {
-                None
-            }
-        }
+        "[" => Some("{"),
+        "]" => Some("}"),
+        "{" => Some("["),
+        "}" => Some("]"),
         _ => None,
     }
 }
 
-/// Cmd+C (macOS) または Ctrl+Shift+C でのコピーショートカットかどうか。
-pub(crate) fn is_copy_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
-    let is_c = matches!(key, Key::Character(s) if s.as_str() == "c" || s.as_str() == "C");
-    if !is_c {
-        return false;
+/// winit の `ModifiersState` をビットフィールドに変換する。
+fn mods_to_bits(mods: ModifiersState) -> u8 {
+    let mut bits = 0u8;
+    if mods.super_key() {
+        bits |= MOD_BIT_SUPER;
     }
-    if cfg!(target_os = "macos") && modifiers.super_key() && !modifiers.shift_key() {
-        return true;
+    if mods.control_key() {
+        bits |= MOD_BIT_CTRL;
     }
-    modifiers.control_key() && modifiers.shift_key()
+    if mods.shift_key() {
+        bits |= MOD_BIT_SHIFT;
+    }
+    if mods.alt_key() {
+        bits |= MOD_BIT_ALT;
+    }
+    bits
 }
 
-/// Cmd+= または Cmd++ (macOS) でのズームインショートカットかどうか。
-pub(crate) fn is_zoom_in_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
-    let is_eq = matches!(key, Key::Character(s) if s.as_str() == "=" || s.as_str() == "+");
-    if cfg!(target_os = "macos") && modifiers.super_key() {
-        return is_eq;
+/// キーとモディファイアに対応する `Action` を設定から解決する。
+///
+/// モディファイアは完全一致で比較する（キャッシュ済みビットフィールド使用）。
+/// Character キーは大文字小文字無視で比較する。
+/// winit では Shift+"=" が Character("+") + SUPER|SHIFT として届くため、
+/// デフォルトバインディングで "plus" は `super|shift` として定義する。
+pub(crate) fn resolve_action(
+    key: &Key,
+    mods: ModifiersState,
+    config: &KeybindConfig,
+) -> Option<Action> {
+    let input_bits = mods_to_bits(mods);
+    for binding in &config.bindings {
+        if binding.cached_mods_bits != input_bits {
+            continue;
+        }
+        if key_matches(&binding.key, key) {
+            return Some(binding.action);
+        }
     }
-    false
+    None
 }
 
-/// Cmd+- または Cmd+_ (macOS) でのズームアウトショートカットかどうか。
-pub(crate) fn is_zoom_out_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
-    let is_minus = matches!(key, Key::Character(s) if s.as_str() == "-" || s.as_str() == "_");
-    if cfg!(target_os = "macos") && modifiers.super_key() {
-        return is_minus;
-    }
-    false
-}
-
-/// Cmd+0 (macOS) でのズームリセットショートカットかどうか。
-pub(crate) fn is_zoom_reset_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
-    let is_zero = matches!(key, Key::Character(s) if s.as_str() == "0");
-    if cfg!(target_os = "macos") && modifiers.super_key() {
-        return is_zero;
-    }
-    false
-}
-
-/// Cmd+F (macOS) / Ctrl+F で検索モード開始ショートカットかどうか。
-pub(crate) fn is_search_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
-    let is_f = matches!(key, Key::Character(s) if s.as_str() == "f" || s.as_str() == "F");
-    if !is_f {
-        return false;
-    }
-    if cfg!(target_os = "macos") && modifiers.super_key() {
-        return true;
-    }
-    modifiers.control_key()
-}
-
-/// Enter または Cmd+G で次のマッチへジャンプ。
-pub(crate) fn is_search_next(key: &Key, modifiers: ModifiersState) -> bool {
-    if matches!(key, Key::Named(NamedKey::Enter)) && !modifiers.shift_key() {
-        return true;
-    }
-    let is_g = matches!(key, Key::Character(s) if s.as_str() == "g" || s.as_str() == "G");
-    if is_g && cfg!(target_os = "macos") && modifiers.super_key() && !modifiers.shift_key() {
-        return true;
-    }
-    false
-}
-
-/// Shift+Enter または Cmd+Shift+G で前のマッチへジャンプ。
-pub(crate) fn is_search_prev(key: &Key, modifiers: ModifiersState) -> bool {
-    if matches!(key, Key::Named(NamedKey::Enter)) && modifiers.shift_key() {
-        return true;
-    }
-    let is_g = matches!(key, Key::Character(s) if s.as_str() == "g" || s.as_str() == "G");
-    if is_g && cfg!(target_os = "macos") && modifiers.super_key() && modifiers.shift_key() {
-        return true;
-    }
-    false
-}
+// ---------------------------------------------------------------------------
+// URL モディファイア（Action ではない状態チェック）
+// ---------------------------------------------------------------------------
 
 /// URL を開くモディファイアキーが押されているかどうか。
 ///
 /// macOS: Cmd、それ以外: Ctrl
 pub(crate) fn is_url_modifier(modifiers: ModifiersState) -> bool {
     if cfg!(target_os = "macos") { modifiers.super_key() } else { modifiers.control_key() }
-}
-
-/// Cmd+V (macOS) または Ctrl+Shift+V でのペーストショートカットかどうか。
-pub(crate) fn is_paste_shortcut(key: &Key, modifiers: ModifiersState) -> bool {
-    let is_v = matches!(key, Key::Character(s) if s.as_str() == "v" || s.as_str() == "V");
-    if !is_v {
-        return false;
-    }
-    if cfg!(target_os = "macos") && modifiers.super_key() && !modifiers.shift_key() {
-        return true;
-    }
-    modifiers.control_key() && modifiers.shift_key()
 }
 
 // ---------------------------------------------------------------------------
@@ -333,49 +261,187 @@ mod tests {
         Key::Character(SmolStr::new(c))
     }
 
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn zoom_in_shortcut_eq() {
-        let mods = ModifiersState::SUPER;
-        assert!(is_zoom_in_shortcut(&char_key("="), mods));
-        assert!(is_zoom_in_shortcut(&char_key("+"), mods));
+    /// テスト用: mods 文字列を `ModifiersState` にパースする。
+    fn parse_mods(s: &str) -> ModifiersState {
+        let mut state = ModifiersState::empty();
+        for token in s.split('|') {
+            match token.trim().to_ascii_lowercase().as_str() {
+                "super" | "cmd" | "logo" => state |= ModifiersState::SUPER,
+                "ctrl" | "control" => state |= ModifiersState::CONTROL,
+                "shift" => state |= ModifiersState::SHIFT,
+                "alt" | "option" => state |= ModifiersState::ALT,
+                _ => {}
+            }
+        }
+        state
     }
 
-    #[cfg(target_os = "macos")]
+    // --- parse_mods ---
+
     #[test]
-    fn zoom_in_shortcut_no_super() {
-        let mods = ModifiersState::empty();
-        assert!(!is_zoom_in_shortcut(&char_key("="), mods));
+    fn parse_mods_empty() {
+        assert_eq!(parse_mods(""), ModifiersState::empty());
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
-    fn zoom_out_shortcut_minus() {
-        let mods = ModifiersState::SUPER;
-        assert!(is_zoom_out_shortcut(&char_key("-"), mods));
-        assert!(is_zoom_out_shortcut(&char_key("_"), mods));
+    fn parse_mods_super() {
+        assert_eq!(parse_mods("super"), ModifiersState::SUPER);
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
-    fn zoom_out_shortcut_no_super() {
-        let mods = ModifiersState::empty();
-        assert!(!is_zoom_out_shortcut(&char_key("-"), mods));
+    fn parse_mods_ctrl() {
+        assert_eq!(parse_mods("ctrl"), ModifiersState::CONTROL);
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
-    fn zoom_reset_shortcut_zero() {
-        let mods = ModifiersState::SUPER;
-        assert!(is_zoom_reset_shortcut(&char_key("0"), mods));
+    fn parse_mods_super_shift() {
+        let expected = ModifiersState::SUPER | ModifiersState::SHIFT;
+        assert_eq!(parse_mods("super|shift"), expected);
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
-    fn zoom_reset_shortcut_no_super() {
-        let mods = ModifiersState::empty();
-        assert!(!is_zoom_reset_shortcut(&char_key("0"), mods));
+    fn parse_mods_ctrl_shift() {
+        let expected = ModifiersState::CONTROL | ModifiersState::SHIFT;
+        assert_eq!(parse_mods("ctrl|shift"), expected);
     }
+
+    #[test]
+    fn parse_mods_case_insensitive() {
+        assert_eq!(parse_mods("SUPER"), ModifiersState::SUPER);
+        assert_eq!(parse_mods("CTRL|SHIFT"), ModifiersState::CONTROL | ModifiersState::SHIFT);
+    }
+
+    #[test]
+    fn parse_mods_alias_cmd() {
+        assert_eq!(parse_mods("cmd"), ModifiersState::SUPER);
+    }
+
+    // --- key_matches ---
+
+    #[test]
+    fn key_matches_character() {
+        assert!(key_matches("n", &char_key("n")));
+        assert!(key_matches("n", &char_key("N"))); // 大文字小文字無視
+        assert!(!key_matches("n", &char_key("t")));
+    }
+
+    #[test]
+    fn key_matches_backslash_alias() {
+        assert!(key_matches("backslash", &char_key("\\")));
+    }
+
+    #[test]
+    fn key_matches_plus_alias() {
+        assert!(key_matches("plus", &char_key("+")));
+    }
+
+    #[test]
+    fn key_matches_bracket_shifted_equivalent() {
+        // "]" バインディングは "}" (Shift+]) にもマッチ
+        assert!(key_matches("]", &char_key("}")));
+        assert!(key_matches("[", &char_key("{")));
+    }
+
+    #[test]
+    fn key_matches_tab() {
+        assert!(key_matches("Tab", &Key::Named(NamedKey::Tab)));
+        assert!(!key_matches("Tab", &char_key("t")));
+    }
+
+    #[test]
+    fn key_matches_enter() {
+        assert!(key_matches("Enter", &Key::Named(NamedKey::Enter)));
+        assert!(key_matches("enter", &Key::Named(NamedKey::Enter)));
+    }
+
+    #[test]
+    fn key_matches_escape() {
+        assert!(key_matches("Escape", &Key::Named(NamedKey::Escape)));
+        assert!(key_matches("esc", &Key::Named(NamedKey::Escape)));
+    }
+
+    // --- resolve_action ---
+
+    fn make_config(bindings: Vec<(String, String, Action)>) -> KeybindConfig {
+        use sdit_core::config::keybinds::KeyBinding;
+        let mut config = KeybindConfig {
+            bindings: bindings
+                .into_iter()
+                .map(|(key, mods, action)| KeyBinding { key, mods, action, cached_mods_bits: 0 })
+                .collect(),
+        };
+        config.validate();
+        config
+    }
+
+    #[test]
+    fn resolve_action_basic() {
+        let config = make_config(vec![("n".to_owned(), "super".to_owned(), Action::NewWindow)]);
+        let result = resolve_action(&char_key("n"), ModifiersState::SUPER, &config);
+        assert_eq!(result, Some(Action::NewWindow));
+    }
+
+    #[test]
+    fn resolve_action_no_match() {
+        let config = make_config(vec![("n".to_owned(), "super".to_owned(), Action::NewWindow)]);
+        // モディファイアが違う
+        let result = resolve_action(&char_key("n"), ModifiersState::CONTROL, &config);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn resolve_action_shift_super_n_vs_super_n() {
+        // super+n と super+shift+n は区別される
+        let config = make_config(vec![
+            ("n".to_owned(), "super".to_owned(), Action::NewWindow),
+            ("n".to_owned(), "super|shift".to_owned(), Action::DetachSession),
+        ]);
+        let new_win = resolve_action(&char_key("n"), ModifiersState::SUPER, &config);
+        let detach =
+            resolve_action(&char_key("N"), ModifiersState::SUPER | ModifiersState::SHIFT, &config);
+        assert_eq!(new_win, Some(Action::NewWindow));
+        assert_eq!(detach, Some(Action::DetachSession));
+    }
+
+    #[test]
+    fn resolve_action_zoom_in_with_plus_binding() {
+        // "plus" バインディングは "super|shift" で、"+" キー (SUPER|SHIFT) にマッチ
+        let config =
+            make_config(vec![("plus".to_owned(), "super|shift".to_owned(), Action::ZoomIn)]);
+        // "+" は Shift+"=" なので SUPER|SHIFT で来る
+        let result =
+            resolve_action(&char_key("+"), ModifiersState::SUPER | ModifiersState::SHIFT, &config);
+        assert_eq!(result, Some(Action::ZoomIn));
+    }
+
+    #[test]
+    fn resolve_action_zoom_in_eq_no_shift() {
+        // "=" バインディングは SUPER のみでマッチ
+        let config = make_config(vec![("=".to_owned(), "super".to_owned(), Action::ZoomIn)]);
+        let result = resolve_action(&char_key("="), ModifiersState::SUPER, &config);
+        assert_eq!(result, Some(Action::ZoomIn));
+        // "+" (SUPER|SHIFT) は "=" バインディングにはマッチしない
+        let result_plus =
+            resolve_action(&char_key("+"), ModifiersState::SUPER | ModifiersState::SHIFT, &config);
+        assert_eq!(result_plus, None);
+    }
+
+    #[test]
+    fn resolve_action_tab_named_key() {
+        let config = make_config(vec![("Tab".to_owned(), "ctrl".to_owned(), Action::NextSession)]);
+        let result = resolve_action(&Key::Named(NamedKey::Tab), ModifiersState::CONTROL, &config);
+        assert_eq!(result, Some(Action::NextSession));
+    }
+
+    #[test]
+    fn resolve_action_backslash_alias() {
+        let config =
+            make_config(vec![("backslash".to_owned(), "super".to_owned(), Action::SidebarToggle)]);
+        let result = resolve_action(&char_key("\\"), ModifiersState::SUPER, &config);
+        assert_eq!(result, Some(Action::SidebarToggle));
+    }
+
+    // --- is_url_modifier ---
 
     #[cfg(target_os = "macos")]
     #[test]
@@ -391,54 +457,18 @@ mod tests {
         assert!(!is_url_modifier(mods));
     }
 
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn search_shortcut_cmd_f() {
-        let mods = ModifiersState::SUPER;
-        assert!(is_search_shortcut(&char_key("f"), mods));
-        assert!(is_search_shortcut(&char_key("F"), mods));
-    }
+    // --- デフォルトバインディングの重複チェック ---
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn search_shortcut_no_modifier() {
-        let mods = ModifiersState::empty();
-        assert!(!is_search_shortcut(&char_key("f"), mods));
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn search_next_enter() {
-        let mods = ModifiersState::empty();
-        assert!(is_search_next(&Key::Named(NamedKey::Enter), mods));
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn search_prev_shift_enter() {
-        let mods = ModifiersState::SHIFT;
-        assert!(is_search_prev(&Key::Named(NamedKey::Enter), mods));
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn search_shortcuts_no_overlap() {
-        // Cmd+F は他の検索ショートカットと重複しない
-        let mods = ModifiersState::SUPER;
-        assert!(!is_search_next(&char_key("f"), mods));
-        assert!(!is_search_prev(&char_key("f"), mods));
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn zoom_shortcuts_do_not_overlap() {
-        // ズームイン・アウト・リセットが互いに誤検知しないこと
-        let mods = ModifiersState::SUPER;
-        assert!(!is_zoom_in_shortcut(&char_key("-"), mods));
-        assert!(!is_zoom_in_shortcut(&char_key("0"), mods));
-        assert!(!is_zoom_out_shortcut(&char_key("="), mods));
-        assert!(!is_zoom_out_shortcut(&char_key("0"), mods));
-        assert!(!is_zoom_reset_shortcut(&char_key("="), mods));
-        assert!(!is_zoom_reset_shortcut(&char_key("-"), mods));
+    fn default_bindings_zoom_actions_exist() {
+        use sdit_core::config::keybinds::default_bindings;
+        let bindings = default_bindings();
+        let has_zoom_in = bindings.iter().any(|b| b.action == Action::ZoomIn);
+        let has_zoom_out = bindings.iter().any(|b| b.action == Action::ZoomOut);
+        let has_zoom_reset = bindings.iter().any(|b| b.action == Action::ZoomReset);
+        assert!(has_zoom_in, "ZoomIn バインディングが存在しない");
+        assert!(has_zoom_out, "ZoomOut バインディングが存在しない");
+        assert!(has_zoom_reset, "ZoomReset バインディングが存在しない");
     }
 }

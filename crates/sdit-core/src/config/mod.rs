@@ -1,5 +1,6 @@
 pub mod color;
 pub mod font;
+pub mod keybinds;
 
 use std::path::{Path, PathBuf};
 
@@ -7,6 +8,7 @@ use serde::Deserialize;
 
 use self::color::ColorConfig;
 use self::font::FontConfig;
+use self::keybinds::KeybindConfig;
 
 /// SDIT 設定全体。
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -16,6 +18,8 @@ pub struct Config {
     pub font: FontConfig,
     /// カラー設定。
     pub colors: ColorConfig,
+    /// キーバインド設定。
+    pub keybinds: KeybindConfig,
 }
 
 impl Config {
@@ -26,7 +30,8 @@ impl Config {
     pub fn load(path: &Path) -> Self {
         match std::fs::read_to_string(path) {
             Ok(contents) => match toml::from_str::<Config>(&contents) {
-                Ok(config) => {
+                Ok(mut config) => {
+                    config.keybinds.validate();
                     log::info!("Loaded config from {}", path.display());
                     config
                 }

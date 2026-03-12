@@ -18,3 +18,4 @@
 | [014-font-size-change](014-font-size-change.md) | フォントサイズ動的変更（Cmd+=/Cmd+-/Cmd+0）の確認 | 2026-03-13 | PASS |
 | [015-url-detection](015-url-detection.md) | URL 検出・Cmd+クリック・ホバーハイライトの確認 | 2026-03-13 | UNIT_ONLY |
 | [016-scrollback-search](016-scrollback-search.md) | スクロールバック内検索（Cmd+F）の確認 | - | - |
+| [017-keybind-customization](017-keybind-customization.md) | デフォルト・カスタム・不正値フォールバック・プラットフォーム固有キーバインドの確認 | 2026-03-13 | PENDING |

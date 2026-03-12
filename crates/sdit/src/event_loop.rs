@@ -7,19 +7,18 @@ use winit::window::WindowId;
 use sdit_core::grid::{Dimensions, Scroll};
 use sdit_core::index::{Column, Line, Point};
 use sdit_core::render::pipeline::CellPipeline;
-use sdit_core::selection::{Selection, SelectionType, selected_text};
+use sdit_core::selection::{Selection, SelectionType};
 use sdit_core::terminal::TermMode;
 
 use crate::app::{
     PreeditState, SditApp, SditEvent, SearchState, UrlHoverState, ime_commit_to_bytes,
     wrap_bracketed_paste,
 };
+use sdit_core::config::keybinds::Action;
+
 use crate::input::{
-    is_add_session_shortcut, is_close_session_shortcut, is_copy_shortcut,
-    is_detach_session_shortcut, is_new_window_shortcut, is_paste_shortcut, is_search_next,
-    is_search_prev, is_search_shortcut, is_sidebar_toggle_shortcut, is_url_modifier,
-    is_zoom_in_shortcut, is_zoom_out_shortcut, is_zoom_reset_shortcut, key_to_bytes,
-    mouse_report_sgr, mouse_report_x11, pixel_to_grid, session_switch_direction,
+    is_url_modifier, key_to_bytes, mouse_report_sgr, mouse_report_x11, pixel_to_grid,
+    resolve_action,
 };
 
 // ---------------------------------------------------------------------------
@@ -70,106 +69,6 @@ impl ApplicationHandler<SditEvent> for SditApp {
 
             WindowEvent::KeyboardInput { event: key_event, .. } => {
                 if key_event.state == ElementState::Pressed {
-                    // Cmd+Shift+N (macOS) でアクティブセッションを新ウィンドウに切出し
-                    if is_detach_session_shortcut(&key_event.logical_key, self.modifiers) {
-                        self.detach_session_to_new_window(id, event_loop);
-                        return;
-                    }
-
-                    // Cmd+N (macOS) / Ctrl+Shift+N で新規ウィンドウ
-                    if is_new_window_shortcut(&key_event.logical_key, self.modifiers) {
-                        self.create_window(event_loop);
-                        return;
-                    }
-
-                    // Cmd+\ (macOS) / Ctrl+\ でサイドバートグル
-                    if is_sidebar_toggle_shortcut(&key_event.logical_key, self.modifiers) {
-                        if let Some(ws) = self.windows.get_mut(&id) {
-                            ws.sidebar.toggle();
-                            let sid = ws.active_session_id();
-                            self.redraw_session(sid);
-                        }
-                        return;
-                    }
-
-                    // Cmd+T (macOS) / Ctrl+Shift+T で同一ウィンドウに新規セッション追加
-                    if is_add_session_shortcut(&key_event.logical_key, self.modifiers) {
-                        self.add_session_to_window(id);
-                        return;
-                    }
-
-                    // Cmd+W (macOS) / Ctrl+Shift+W でアクティブセッションを閉じる
-                    if is_close_session_shortcut(&key_event.logical_key, self.modifiers) {
-                        let window_closed = self.remove_active_session(id);
-                        if window_closed && self.windows.is_empty() {
-                            event_loop.exit();
-                        }
-                        return;
-                    }
-
-                    // Ctrl+Tab / Cmd+Shift+] で次のセッション
-                    // Ctrl+Shift+Tab / Cmd+Shift+[ で前のセッション
-                    if let Some(dir) =
-                        session_switch_direction(&key_event.logical_key, self.modifiers)
-                    {
-                        self.switch_session(id, dir);
-                        return;
-                    }
-
-                    // Cmd+= / Cmd++ でズームイン
-                    if is_zoom_in_shortcut(&key_event.logical_key, self.modifiers) {
-                        self.change_font_size(Some(1.0));
-                        for ws in self.windows.values() {
-                            ws.window.request_redraw();
-                        }
-                        // アクティブセッションを再描画（GPU バッファ更新のため）
-                        if let Some(ws) = self.windows.get(&id) {
-                            let sid = ws.active_session_id();
-                            self.redraw_session(sid);
-                        }
-                        return;
-                    }
-
-                    // Cmd+- / Cmd+_ でズームアウト
-                    if is_zoom_out_shortcut(&key_event.logical_key, self.modifiers) {
-                        self.change_font_size(Some(-1.0));
-                        for ws in self.windows.values() {
-                            ws.window.request_redraw();
-                        }
-                        if let Some(ws) = self.windows.get(&id) {
-                            let sid = ws.active_session_id();
-                            self.redraw_session(sid);
-                        }
-                        return;
-                    }
-
-                    // Cmd+0 でデフォルトフォントサイズにリセット
-                    if is_zoom_reset_shortcut(&key_event.logical_key, self.modifiers) {
-                        self.change_font_size(None);
-                        for ws in self.windows.values() {
-                            ws.window.request_redraw();
-                        }
-                        if let Some(ws) = self.windows.get(&id) {
-                            let sid = ws.active_session_id();
-                            self.redraw_session(sid);
-                        }
-                        return;
-                    }
-
-                    // --- Cmd+F で検索バートグル ---
-                    if is_search_shortcut(&key_event.logical_key, self.modifiers) {
-                        if self.search.is_some() {
-                            self.search = None;
-                        } else {
-                            self.search = Some(SearchState::new());
-                        }
-                        if let Some(ws) = self.windows.get(&id) {
-                            let sid = ws.active_session_id();
-                            self.redraw_session(sid);
-                        }
-                        return;
-                    }
-
                     // --- 検索モード中のキー入力処理 ---
                     if self.search.is_some() {
                         use winit::keyboard::Key;
@@ -184,14 +83,18 @@ impl ApplicationHandler<SditEvent> for SditApp {
                             return;
                         }
 
-                        // Shift+Enter で前のマッチへ
-                        if is_search_prev(&key_event.logical_key, self.modifiers) {
+                        // Shift+Enter で前のマッチへ（ハードコード）
+                        if matches!(key_event.logical_key, Key::Named(NamedKey::Enter))
+                            && self.modifiers.shift_key()
+                        {
                             self.search_navigate(-1, id);
                             return;
                         }
 
-                        // Enter で次のマッチへ
-                        if is_search_next(&key_event.logical_key, self.modifiers) {
+                        // Enter で次のマッチへ（ハードコード）
+                        if matches!(key_event.logical_key, Key::Named(NamedKey::Enter))
+                            && !self.modifiers.shift_key()
+                        {
                             self.search_navigate(1, id);
                             return;
                         }
@@ -203,6 +106,25 @@ impl ApplicationHandler<SditEvent> for SditApp {
                             }
                             self.update_search(id);
                             return;
+                        }
+
+                        // Cmd+G / Cmd+Shift+G は設定駆動（SearchNext/SearchPrev）
+                        if let Some(action) = resolve_action(
+                            &key_event.logical_key,
+                            self.modifiers,
+                            &self.config.keybinds,
+                        ) {
+                            match action {
+                                Action::SearchNext => {
+                                    self.search_navigate(1, id);
+                                    return;
+                                }
+                                Action::SearchPrev => {
+                                    self.search_navigate(-1, id);
+                                    return;
+                                }
+                                _ => {}
+                            }
                         }
 
                         // 通常文字入力
@@ -220,6 +142,145 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         }
 
                         // 他のキーは無視（ターミナルに送らない）
+                        return;
+                    }
+
+                    // --- Action-based ショートカット dispatch ---
+                    if let Some(action) = resolve_action(
+                        &key_event.logical_key,
+                        self.modifiers,
+                        &self.config.keybinds,
+                    ) {
+                        match action {
+                            Action::DetachSession => {
+                                self.detach_session_to_new_window(id, event_loop);
+                            }
+                            Action::NewWindow => {
+                                self.create_window(event_loop);
+                            }
+                            Action::SidebarToggle => {
+                                if let Some(ws) = self.windows.get_mut(&id) {
+                                    ws.sidebar.toggle();
+                                    let sid = ws.active_session_id();
+                                    self.redraw_session(sid);
+                                }
+                            }
+                            Action::AddSession => {
+                                self.add_session_to_window(id);
+                            }
+                            Action::CloseSession => {
+                                let window_closed = self.remove_active_session(id);
+                                if window_closed && self.windows.is_empty() {
+                                    event_loop.exit();
+                                }
+                            }
+                            Action::NextSession => {
+                                self.switch_session(id, 1);
+                            }
+                            Action::PrevSession => {
+                                self.switch_session(id, -1);
+                            }
+                            Action::ZoomIn => {
+                                self.change_font_size(Some(1.0));
+                                for ws in self.windows.values() {
+                                    ws.window.request_redraw();
+                                }
+                                if let Some(ws) = self.windows.get(&id) {
+                                    let sid = ws.active_session_id();
+                                    self.redraw_session(sid);
+                                }
+                            }
+                            Action::ZoomOut => {
+                                self.change_font_size(Some(-1.0));
+                                for ws in self.windows.values() {
+                                    ws.window.request_redraw();
+                                }
+                                if let Some(ws) = self.windows.get(&id) {
+                                    let sid = ws.active_session_id();
+                                    self.redraw_session(sid);
+                                }
+                            }
+                            Action::ZoomReset => {
+                                self.change_font_size(None);
+                                for ws in self.windows.values() {
+                                    ws.window.request_redraw();
+                                }
+                                if let Some(ws) = self.windows.get(&id) {
+                                    let sid = ws.active_session_id();
+                                    self.redraw_session(sid);
+                                }
+                            }
+                            Action::Search => {
+                                if self.search.is_some() {
+                                    self.search = None;
+                                } else {
+                                    self.search = Some(SearchState::new());
+                                }
+                                if let Some(ws) = self.windows.get(&id) {
+                                    let sid = ws.active_session_id();
+                                    self.redraw_session(sid);
+                                }
+                            }
+                            // 検索モード外では SearchNext/SearchPrev は無視
+                            Action::SearchNext | Action::SearchPrev => {}
+                            Action::Copy => {
+                                let Some(ws) = self.windows.get(&id) else { return };
+                                let Some(session) = self.session_mgr.get(ws.active_session_id())
+                                else {
+                                    return;
+                                };
+                                if let Some(sel) = &self.selection {
+                                    let state = session
+                                        .term_state
+                                        .lock()
+                                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                    let text = sdit_core::selection::selected_text(
+                                        state.terminal.grid(),
+                                        sel,
+                                    );
+                                    drop(state);
+                                    if !text.is_empty() {
+                                        if let Some(cb) = &mut self.clipboard {
+                                            if let Err(e) = cb.set_text(text) {
+                                                log::warn!("Clipboard set_text failed: {e}");
+                                            }
+                                        }
+                                    }
+                                }
+                                self.selection = None;
+                                let sid = ws.active_session_id();
+                                self.redraw_session(sid);
+                            }
+                            Action::Paste => {
+                                let Some(ws) = self.windows.get(&id) else { return };
+                                let Some(session) = self.session_mgr.get(ws.active_session_id())
+                                else {
+                                    return;
+                                };
+                                let mode = session
+                                    .term_state
+                                    .lock()
+                                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                                    .terminal
+                                    .mode();
+                                let text = self
+                                    .clipboard
+                                    .as_mut()
+                                    .and_then(|cb| cb.get_text().ok())
+                                    .unwrap_or_default();
+                                if !text.is_empty() {
+                                    let bracketed = mode.contains(TermMode::BRACKETED_PASTE);
+                                    let bytes: Vec<u8> = if bracketed {
+                                        wrap_bracketed_paste(&text)
+                                    } else {
+                                        text.into_bytes()
+                                    };
+                                    if let Err(e) = session.pty_io.write_tx.try_send(bytes) {
+                                        log::warn!("PTY paste write failed: {e}");
+                                    }
+                                }
+                            }
+                        }
                         return;
                     }
 
@@ -261,50 +322,6 @@ impl ApplicationHandler<SditEvent> for SditApp {
                             self.redraw_session(sid);
                             return;
                         }
-                    }
-
-                    // Cmd+C: テキストコピー
-                    if is_copy_shortcut(&key_event.logical_key, self.modifiers) {
-                        if let Some(sel) = &self.selection {
-                            let state = session
-                                .term_state
-                                .lock()
-                                .unwrap_or_else(std::sync::PoisonError::into_inner);
-                            let text = selected_text(state.terminal.grid(), sel);
-                            drop(state);
-                            if !text.is_empty() {
-                                if let Some(cb) = &mut self.clipboard {
-                                    if let Err(e) = cb.set_text(text) {
-                                        log::warn!("Clipboard set_text failed: {e}");
-                                    }
-                                }
-                            }
-                        }
-                        self.selection = None;
-                        let sid = ws.active_session_id();
-                        self.redraw_session(sid);
-                        return;
-                    }
-
-                    // Cmd+V: クリップボードからペースト
-                    if is_paste_shortcut(&key_event.logical_key, self.modifiers) {
-                        let text = self
-                            .clipboard
-                            .as_mut()
-                            .and_then(|cb| cb.get_text().ok())
-                            .unwrap_or_default();
-                        if !text.is_empty() {
-                            let bracketed = mode.contains(TermMode::BRACKETED_PASTE);
-                            let bytes: Vec<u8> = if bracketed {
-                                wrap_bracketed_paste(&text)
-                            } else {
-                                text.into_bytes()
-                            };
-                            if let Err(e) = session.pty_io.write_tx.try_send(bytes) {
-                                log::warn!("PTY paste write failed: {e}");
-                            }
-                        }
-                        return;
                     }
 
                     // キー入力時に選択を解除

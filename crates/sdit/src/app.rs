@@ -175,6 +175,8 @@ pub(crate) struct SditApp {
     pub(crate) hovered_url: Option<UrlHoverState>,
     /// 検索バーの状態。None = 検索バー非表示。
     pub(crate) search: Option<SearchState>,
+    /// 設定全体（キーバインド等）。
+    pub(crate) config: sdit_core::config::Config,
 }
 
 impl SditApp {
@@ -211,6 +213,7 @@ impl SditApp {
             url_detector: UrlDetector::new(),
             hovered_url: None,
             search: None,
+            config: config.clone(),
         }
     }
 
