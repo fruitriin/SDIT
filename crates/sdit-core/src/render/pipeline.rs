@@ -162,6 +162,8 @@ pub struct CellVertex {
     pub glyph_size: [f32; 2],
     /// セル幅の倍率。通常 1.0、全角文字は 2.0。
     pub cell_width_scale: f32,
+    /// カラーグリフフラグ。1.0 = カラー絵文字（fg 色を無視してテクスチャ色を使用）、0.0 = 通常グリフ。
+    pub is_color_glyph: f32,
 }
 
 impl CellVertex {
@@ -179,6 +181,7 @@ impl CellVertex {
                 wgpu::VertexAttribute { shader_location: 4, offset: 56, format: F::Float32x2 },
                 wgpu::VertexAttribute { shader_location: 5, offset: 64, format: F::Float32x2 },
                 wgpu::VertexAttribute { shader_location: 6, offset: 72, format: F::Float32 },
+                wgpu::VertexAttribute { shader_location: 7, offset: 76, format: F::Float32 },
             ],
         }
     }
@@ -455,6 +458,7 @@ impl CellPipeline {
                         glyph_offset: [0.0; 2],
                         glyph_size: [0.0; 2],
                         cell_width_scale: 1.0,
+                        is_color_glyph: 0.0,
                     });
                     continue;
                 }
@@ -484,7 +488,7 @@ impl CellPipeline {
                 let is_wide = cell.flags.contains(CellFlags::WIDE_CHAR);
 
                 // グリフをラスタライズしてアトラスに配置。
-                let (uv, glyph_offset, glyph_size) =
+                let (uv, glyph_offset, glyph_size, is_color_glyph) =
                     if let Some(entry) = font_ctx.rasterize_glyph(cell.c, atlas) {
                         let r = entry.region;
                         let uv = [
@@ -495,10 +499,11 @@ impl CellPipeline {
                         ];
                         let offset = [entry.placement_left as f32, entry.placement_top as f32];
                         let size = [r.width as f32, r.height as f32];
-                        (uv, offset, size)
+                        let color_flag = if entry.is_color { 1.0_f32 } else { 0.0_f32 };
+                        (uv, offset, size, color_flag)
                     } else {
                         // スペース or グリフなし: ゼロサイズで背景のみ描画。
-                        ([0.0_f32; 4], [0.0_f32; 2], [0.0_f32; 2])
+                        ([0.0_f32; 4], [0.0_f32; 2], [0.0_f32; 2], 0.0_f32)
                     };
 
                 // WIDE_CHAR は2セル幅で描画。
@@ -511,6 +516,7 @@ impl CellPipeline {
                     glyph_offset,
                     glyph_size,
                     cell_width_scale,
+                    is_color_glyph,
                 });
             }
         }

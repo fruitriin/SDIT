@@ -2,7 +2,8 @@
 // 各ターミナルセルを 6 頂点（2 triangles）のインスタンスで描画する。
 //
 // 1 パスで背景 + テキストを描く:
-//   - フラグメントシェーダーがグリフ領域内ならアトラスのアルファを読んで fg 色
+//   - 通常グリフ: アトラスの alpha チャンネルをマスクとして fg 色と bg 色をブレンド
+//   - カラーグリフ（絵文字等）: アトラスの RGBA をそのまま使用（プリマルチプライドアルファ合成）
 //   - グリフ領域外なら bg 色
 
 // ── Uniforms ──────────────────────────────────────────────────────────────
@@ -41,6 +42,8 @@ struct CellInput {
     @location(5) glyph_size: vec2<f32>,
     /// セル幅の倍率（通常 1.0、全角文字 2.0）
     @location(6) cell_width_scale: f32,
+    /// カラーグリフフラグ（1.0 = カラー絵文字、0.0 = 通常グリフ）
+    @location(7) is_color_glyph: f32,
 }
 
 // ── Vertex output ─────────────────────────────────────────────────────────
@@ -59,6 +62,8 @@ struct VsOut {
     @location(4) glyph_start: vec2<f32>,
     /// グリフサイズ（ピクセル）
     @location(5) glyph_size: vec2<f32>,
+    /// カラーグリフフラグ（1.0 = カラー絵文字、0.0 = 通常グリフ）
+    @location(6) is_color_glyph: f32,
 }
 
 // ── Vertex shader ─────────────────────────────────────────────────────────
@@ -123,6 +128,7 @@ fn vs_main(
     out.uv = instance.uv;
     out.glyph_start = glyph_start;
     out.glyph_size = instance.glyph_size;
+    out.is_color_glyph = instance.is_color_glyph;
     return out;
 }
 
@@ -148,8 +154,15 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         mix(in.uv.y, in.uv.w, glyph_local.y),
     );
 
-    let alpha = textureSample(atlas_tex, atlas_sampler, atlas_uv).r;
+    let texel = textureSample(atlas_tex, atlas_sampler, atlas_uv);
 
-    // アルファブレンド: bg と fg を alpha で混ぜる。
-    return mix(in.bg, in.fg, alpha);
+    if in.is_color_glyph > 0.5 {
+        // カラーグリフ（絵文字等）: テクスチャの RGBA をそのまま使用。
+        // アルファで bg と合成する（プリマルチプライドアルファを前提）。
+        return mix(in.bg, texel, texel.a);
+    } else {
+        // 通常グリフ: alpha チャンネルをマスクとして fg/bg をブレンド。
+        let alpha = texel.a;
+        return mix(in.bg, in.fg, alpha);
+    }
 }

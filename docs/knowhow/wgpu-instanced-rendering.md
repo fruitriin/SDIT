@@ -14,14 +14,19 @@
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CellVertex {
-    pub bg: [f32; 4],           // 背景色 RGBA
-    pub fg: [f32; 4],           // 前景色 RGBA
-    pub grid_pos: [f32; 2],     // グリッド位置 (col, row)
-    pub uv: [f32; 4],           // アトラス UV (min_u, min_v, max_u, max_v)
-    pub glyph_offset: [f32; 2], // グリフオフセット (placement_left, placement_top)
-    pub glyph_size: [f32; 2],   // グリフサイズ (width, height) px
+    pub bg: [f32; 4],             // 背景色 RGBA               @location(0)
+    pub fg: [f32; 4],             // 前景色 RGBA               @location(1)
+    pub grid_pos: [f32; 2],       // グリッド位置 (col, row)   @location(2)
+    pub uv: [f32; 4],             // アトラス UV               @location(3)
+    pub glyph_offset: [f32; 2],   // グリフオフセット           @location(4)
+    pub glyph_size: [f32; 2],     // グリフサイズ (w, h) px    @location(5)
+    pub cell_width_scale: f32,    // セル幅倍率 (1.0 or 2.0)  @location(6)
+    pub is_color_glyph: f32,      // カラーグリフフラグ         @location(7)
 }
 ```
+
+`is_color_glyph` フィールドはカラー絵文字対応（Phase 10.3a）で追加。
+1.0 = カラー絵文字（テクスチャ RGBA をそのまま使用）、0.0 = 通常グリフ（alpha マスク）。
 
 ## WGSL シェーダーの quad 生成
 

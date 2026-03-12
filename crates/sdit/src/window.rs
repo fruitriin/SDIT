@@ -183,6 +183,7 @@ pub(crate) fn build_sidebar_cells(
                 glyph_offset,
                 glyph_size,
                 cell_width_scale: 1.0,
+                is_color_glyph: 0.0,
             });
         }
     }

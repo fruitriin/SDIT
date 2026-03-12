@@ -15,9 +15,9 @@
 
 | ファイル | 要約 | キーワード |
 |---|---|---|
-| [wgpu-instanced-rendering.md](wgpu-instanced-rendering.md) | wgpu インスタンス描画による全セル一括レンダリングと CellVertex/WGSL シェーダー設計 | `CellVertex`, `draw(0..6, 0..cell_count)`, `Instance` step mode, `vertex_index`, `QUAD_UV`, `R8Unorm`, `ALPHA_BLENDING`, `bytemuck::Pod`, `grid_pos`, `uv`, `glyph_offset`, `glyph_size` |
+| [wgpu-instanced-rendering.md](wgpu-instanced-rendering.md) | wgpu インスタンス描画による全セル一括レンダリングと CellVertex/WGSL シェーダー設計（is_color_glyph フラグ含む） | `CellVertex`, `draw(0..6, 0..cell_count)`, `Instance` step mode, `vertex_index`, `QUAD_UV`, `Rgba8Unorm`, `ALPHA_BLENDING`, `bytemuck::Pod`, `grid_pos`, `uv`, `glyph_offset`, `glyph_size`, `is_color_glyph` |
 | [wgpu-winit-integration.md](wgpu-winit-integration.md) | wgpu 0.20 + winit 0.30 の Surface ライフタイム管理、アトラス、GPU バッファ動的リサイズ | `Surface<'static>`, `Arc<Window>`, `GpuContext`, `ApplicationHandler`, `resumed`, `window_event`, `user_event`, `SurfaceError::Lost`, `ensure_capacity`, `shelf algorithm`, `upload_if_dirty`, `SwashCache::get_image_uncached` |
-| [cosmic-text-glyph-rasterize.md](cosmic-text-glyph-rasterize.md) | cosmic-text によるグリフラスタライズフローとキャッシュキー設計 | `FontSystem::new`, `Buffer`, `Metrics`, `Shaping::Advanced`, `shape_until_scroll`, `LayoutRun`, `PhysicalGlyph`, `SwashImage`, `Placement`, `monospace_em_width`, `fontdb::ID`, `GlyphCacheKey`, `Content::Mask` |
+| [cosmic-text-glyph-rasterize.md](cosmic-text-glyph-rasterize.md) | cosmic-text によるグリフラスタライズフローとキャッシュキー設計（SwashContent RGBA 変換含む） | `FontSystem::new`, `Buffer`, `Metrics`, `Shaping::Advanced`, `shape_until_scroll`, `LayoutRun`, `PhysicalGlyph`, `SwashImage`, `Placement`, `monospace_em_width`, `fontdb::ID`, `GlyphCacheKey`, `SwashContent::Mask`, `SwashContent::Color`, `BGRA→RGBA`, `is_color` |
 | [session-sidebar-rendering.md](session-sidebar-rendering.md) | サイドバーの origin_x レイアウト分割、CellPipeline 再利用、セッション切出しロールバック | `origin_x`, `sidebar_width_px`, `build_sidebar_cells`, `CellPipeline`, `detach_session_to_new_window`, `insert(original_index)`, `CursorMoved`, `MouseInput`, `sessions.swap`, `active_index`, `calc_grid_size` |
 
 ## PTY・スレッド管理

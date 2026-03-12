@@ -3,7 +3,8 @@
 //! シェルフアルゴリズムで矩形を配置する。同じ高さのグリフを横に並べてシェルフを構成し、
 //! シェルフが満杯になったら新しいシェルフを作る。
 //!
-//! テクスチャフォーマットは `R8Unorm`（グレースケール Alpha マスク）。
+//! テクスチャフォーマットは `Rgba8Unorm`（RGBA 4bytes/pixel）。
+//! カラー絵文字と通常グリフの両方を格納できる。
 
 /// アトラス内のグリフ領域。UV 座標計算に使用する。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,11 +25,12 @@ struct Shelf {
     cursor_x: u32,
 }
 
-/// `R8Unorm` テクスチャアトラス。
+/// `Rgba8Unorm` テクスチャアトラス。
 ///
 /// CPU 側の `data` バッファに書き込み、`upload_if_dirty` で GPU テクスチャに転送する。
+/// データは RGBA 4 bytes/pixel。通常グリフ（グレースケール昇格）とカラー絵文字の両方に対応。
 pub struct Atlas {
-    /// CPU ピクセルデータ（R8: 1 byte/pixel）。
+    /// CPU ピクセルデータ（RGBA: 4 bytes/pixel）。
     data: Vec<u8>,
     /// テクスチャの一辺（正方形）。
     size: u32,
@@ -54,14 +56,14 @@ impl Atlas {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R8Unorm,
+            format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
         let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         Self {
-            data: vec![0u8; (size * size) as usize],
+            data: vec![0u8; (size * size * 4) as usize],
             size,
             shelves: Vec::new(),
             next_shelf_y: 0,
@@ -106,11 +108,11 @@ impl Atlas {
         Some(region)
     }
 
-    /// `region` に `data`（R8 ピクセル列）を書き込む。
+    /// `region` に `data`（RGBA ピクセル列、4 bytes/pixel）を書き込む。
     ///
-    /// `data.len()` は `region.width * region.height` と等しくなければならない。
+    /// `data.len()` は `region.width * region.height * 4` と等しくなければならない。
     pub fn write(&mut self, region: AtlasRegion, data: &[u8]) {
-        let expected = (region.width * region.height) as usize;
+        let expected = (region.width * region.height * 4) as usize;
         if data.len() != expected {
             log::error!(
                 "atlas::write: data length mismatch (expected {expected}, got {})",
@@ -119,11 +121,11 @@ impl Atlas {
             return;
         }
         for row in 0..region.height {
-            let dst_start = ((region.y + row) * self.size + region.x) as usize;
-            let src_start = (row * region.width) as usize;
-            let src_end = src_start + region.width as usize;
-            self.data[dst_start..dst_start + region.width as usize]
-                .copy_from_slice(&data[src_start..src_end]);
+            let dst_start = ((region.y + row) * self.size * 4 + region.x * 4) as usize;
+            let src_start = (row * region.width * 4) as usize;
+            let row_bytes = (region.width * 4) as usize;
+            self.data[dst_start..dst_start + row_bytes]
+                .copy_from_slice(&data[src_start..src_start + row_bytes]);
         }
         self.dirty = true;
     }
@@ -143,7 +145,7 @@ impl Atlas {
             &self.data,
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: Some(self.size),
+                bytes_per_row: Some(self.size * 4),
                 rows_per_image: Some(self.size),
             },
             wgpu::Extent3d { width: self.size, height: self.size, depth_or_array_layers: 1 },
@@ -182,6 +184,7 @@ mod tests {
 
     /// wgpu デバイスが不要なインメモリテスト用のダミーアトラス。
     /// テクスチャ操作なしで reserve/write のロジックだけを検証する。
+    /// データは RGBA 4 bytes/pixel。
     struct InMemAtlas {
         data: Vec<u8>,
         size: u32,
@@ -192,7 +195,7 @@ mod tests {
     impl InMemAtlas {
         fn new(size: u32) -> Self {
             Self {
-                data: vec![0u8; (size * size) as usize],
+                data: vec![0u8; (size * size * 4) as usize],
                 size,
                 shelves: Vec::new(),
                 next_shelf_y: 0,
@@ -223,11 +226,16 @@ mod tests {
         }
 
         fn write(&mut self, region: AtlasRegion, data: &[u8]) {
+            let expected = (region.width * region.height * 4) as usize;
+            if data.len() != expected {
+                return;
+            }
             for row in 0..region.height {
-                let dst_start = ((region.y + row) * self.size + region.x) as usize;
-                let src_start = (row * region.width) as usize;
-                self.data[dst_start..dst_start + region.width as usize]
-                    .copy_from_slice(&data[src_start..src_start + region.width as usize]);
+                let dst_start = ((region.y + row) * self.size * 4 + region.x * 4) as usize;
+                let src_start = (row * region.width * 4) as usize;
+                let row_bytes = (region.width * 4) as usize;
+                self.data[dst_start..dst_start + row_bytes]
+                    .copy_from_slice(&data[src_start..src_start + row_bytes]);
             }
         }
 
@@ -269,9 +277,9 @@ mod tests {
     #[test]
     fn clear_resets_atlas() {
         let mut atlas = InMemAtlas::new(32);
-        // 領域を確保してデータを書き込む
+        // 領域を確保してデータを書き込む（RGBA: 8x8x4 = 256 bytes）
         let region = atlas.reserve(8, 8).unwrap();
-        atlas.write(region, &[255u8; 64]);
+        atlas.write(region, &[255u8; 256]);
         assert!(atlas.data.iter().any(|&b| b != 0));
 
         // クリア後はゼロに戻り、新規確保できる
@@ -286,13 +294,44 @@ mod tests {
     }
 
     #[test]
-    fn write_stores_pixels_correctly() {
+    fn write_stores_rgba_pixels_correctly() {
         let mut atlas = InMemAtlas::new(16);
         let region = atlas.reserve(2, 2).unwrap();
-        atlas.write(region, &[10, 20, 30, 40]);
-        // (0,0) = 10, (1,0) = 20, (0,1) = 30, (1,1) = 40
-        assert_eq!(atlas.data[(region.y * atlas.size + region.x) as usize], 10);
-        assert_eq!(atlas.data[(region.y * atlas.size + region.x + 1) as usize], 20);
-        assert_eq!(atlas.data[((region.y + 1) * atlas.size + region.x) as usize], 30);
+        // 2x2 RGBA: 4 pixels × 4 bytes = 16 bytes
+        // pixel (0,0): [10, 20, 30, 40]
+        // pixel (1,0): [50, 60, 70, 80]
+        // pixel (0,1): [90, 100, 110, 120]
+        // pixel (1,1): [130, 140, 150, 160]
+        let data = [
+            10u8, 20, 30, 40, // pixel (0,0)
+            50, 60, 70, 80, // pixel (1,0)
+            90, 100, 110, 120, // pixel (0,1)
+            130, 140, 150, 160, // pixel (1,1)
+        ];
+        atlas.write(region, &data);
+        // (0,0) の R チャンネル = 10
+        let base = ((region.y * atlas.size + region.x) * 4) as usize;
+        assert_eq!(atlas.data[base], 10);
+        assert_eq!(atlas.data[base + 1], 20);
+        assert_eq!(atlas.data[base + 2], 30);
+        assert_eq!(atlas.data[base + 3], 40);
+        // (1,0) の先頭 = base + 4
+        assert_eq!(atlas.data[base + 4], 50);
+        // (0,1) の先頭 = base + size*4
+        let row1_base = base + (atlas.size * 4) as usize;
+        assert_eq!(atlas.data[row1_base], 90);
+        assert_eq!(atlas.data[row1_base + 1], 100);
+    }
+
+    #[test]
+    fn write_rejects_wrong_size() {
+        let mut atlas = InMemAtlas::new(16);
+        let region = atlas.reserve(2, 2).unwrap();
+        // 正しいサイズは 2*2*4 = 16。古い R8 サイズ(4)は拒否される。
+        let old_data = [10u8, 20, 30, 40]; // 4 bytes: 昔の R8 サイズ
+        atlas.write(region, &old_data);
+        // データが書き込まれていないはず（先頭はゼロのまま）
+        let base = ((region.y * atlas.size + region.x) * 4) as usize;
+        assert_eq!(atlas.data[base], 0, "wrong-size write should be rejected");
     }
 }

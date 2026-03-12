@@ -40,9 +40,39 @@ struct GlyphCacheKey {
 }
 ```
 
+## SwashContent の種類と RGBA 変換（Phase 10.3a で実装）
+
+`image.content` には3種類あり、それぞれ異なる変換が必要。Atlas は `Rgba8Unorm`（4 bytes/pixel）を使用。
+
+```rust
+use cosmic_text::SwashContent;
+
+let rgba_data: Vec<u8> = match image.content {
+    SwashContent::Mask => {
+        // グレースケール Alpha → RGBA: R=G=B=255, A=alpha
+        image.data.iter().flat_map(|&a| [255u8, 255, 255, a]).collect()
+    }
+    SwashContent::Color => {
+        // カラー絵文字: swash は BGRA 順で返す → RGBA に並び替え
+        image.data.chunks_exact(4)
+            .flat_map(|bgra| [bgra[2], bgra[1], bgra[0], bgra[3]])
+            .collect()
+    }
+    SwashContent::SubpixelMask => {
+        // サブピクセル: RGB → RGBA（A = max(R,G,B)）
+        image.data.chunks_exact(3)
+            .flat_map(|rgb| { let a = rgb[0].max(rgb[1]).max(rgb[2]); [rgb[0], rgb[1], rgb[2], a] })
+            .collect()
+    }
+};
+```
+
+カラー絵文字かどうかは `GlyphEntry.is_color` フラグで保持し、シェーダーに渡す。
+シェーダー側では `is_color_glyph > 0.5` の場合にテクスチャの RGBA をそのまま使用する（`mix(bg, texel, texel.a)`）。
+
 ## 注意点
 
 - `FontSystem::new()` はデバッグビルドで数秒かかる。アプリ起動時に1回だけ呼ぶ。
 - `Buffer` はシェーピング毎に作り直しても問題ないが、重い場合はキャッシュする。
 - `SwashCache::get_image_uncached` はキャッシュしない版。ラスタライズ後は atlas に書き込んで atlas レベルでキャッシュする。
-- `image.content` が `Content::Mask` のみを想定（Alpha フォーマット）。カラー絵文字は別途対応が必要。
+- `image.content` の種別チェックが必要。`SwashContent::Color` の場合は BGRA 順なので注意。

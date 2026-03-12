@@ -9,7 +9,8 @@ use std::collections::HashMap;
 
 use crate::config::font::FontConfig;
 use cosmic_text::{
-    Attrs, Buffer, Family, FontSystem, Metrics, Placement, Shaping, SwashCache, fontdb,
+    Attrs, Buffer, Family, FontSystem, Metrics, Placement, Shaping, SwashCache, SwashContent,
+    fontdb,
 };
 
 use super::atlas::{Atlas, AtlasRegion};
@@ -36,6 +37,9 @@ pub struct GlyphEntry {
     pub placement_left: i32,
     /// ベースラインからの Y オフセット（ピクセル）。正値 = 上方向。
     pub placement_top: i32,
+    /// カラーグリフ（絵文字等）かどうか。
+    /// `true` の場合、シェーダーは fg 色を使わずテクスチャの RGBA をそのまま描画する。
+    pub is_color: bool,
 }
 
 /// グリフキャッシュのキー。
@@ -166,11 +170,44 @@ impl FontContext {
         }
 
         // アトラスに確保して書き込む。
-        let region = atlas.reserve(w, h)?;
-        atlas.write(region, &image.data);
+        // Atlas は RGBA 4bytes/pixel を期待するため、コンテンツ種別に応じて変換する。
+        let is_color = matches!(image.content, SwashContent::Color);
+        let rgba_data: Vec<u8> = match image.content {
+            SwashContent::Mask => {
+                // グレースケール Alpha マスク → RGBA: R=G=B=255, A=alpha
+                image.data.iter().flat_map(|&a| [255u8, 255, 255, a]).collect()
+            }
+            SwashContent::Color => {
+                // カラー絵文字: swash が返す BGRA を RGBA に並び替える。
+                // swash の Color ビットマップは BGRA 順。
+                image
+                    .data
+                    .chunks_exact(4)
+                    .flat_map(|bgra| [bgra[2], bgra[1], bgra[0], bgra[3]])
+                    .collect()
+            }
+            SwashContent::SubpixelMask => {
+                // サブピクセル: RGB → RGBA（A = max(R,G,B)）
+                image
+                    .data
+                    .chunks_exact(3)
+                    .flat_map(|rgb| {
+                        let a = rgb[0].max(rgb[1]).max(rgb[2]);
+                        [rgb[0], rgb[1], rgb[2], a]
+                    })
+                    .collect()
+            }
+        };
 
-        let entry =
-            GlyphEntry { region, placement_left: placement.left, placement_top: placement.top };
+        let region = atlas.reserve(w, h)?;
+        atlas.write(region, &rgba_data);
+
+        let entry = GlyphEntry {
+            region,
+            placement_left: placement.left,
+            placement_top: placement.top,
+            is_color,
+        };
         self.glyph_cache.insert(cache_key_raw.clone(), entry);
         self.glyph_cache.get(&cache_key_raw)
     }

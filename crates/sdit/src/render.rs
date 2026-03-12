@@ -219,6 +219,7 @@ impl SditApp {
                         glyph_offset,
                         glyph_size,
                         cell_width_scale: if cell_width_count == 2 { 2.0 } else { 1.0 },
+                        is_color_glyph: 0.0,
                     };
 
                     // グリッド上のセルを上書き
@@ -285,6 +286,7 @@ impl SditApp {
                     glyph_offset,
                     glyph_size,
                     cell_width_scale: if cell_width_count == 2 { 2.0 } else { 1.0 },
+                    is_color_glyph: 0.0,
                 };
 
                 let cell_index = bar_row * grid_cols + col;
@@ -302,6 +304,7 @@ impl SditApp {
                     glyph_offset: [0.0; 2],
                     glyph_size: [0.0; 2],
                     cell_width_scale: 1.0,
+                    is_color_glyph: 0.0,
                 };
                 let cell_index = bar_row * grid_cols + col;
                 ws.cell_pipeline.overwrite_cell(&ws.gpu.queue, cell_index, &vertex);
