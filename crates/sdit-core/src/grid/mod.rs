@@ -120,6 +120,12 @@ impl<T: GridCell> Grid<T> {
         self.raw.len().saturating_sub(self.lines)
     }
 
+    /// 現在のビューポートスクロールオフセットを返す。
+    /// 0 = ライブビューポート。正値 = 履歴方向にスクロール中。
+    pub fn display_offset(&self) -> usize {
+        self.display_offset
+    }
+
     /// Scroll the *terminal buffer* up by `count` lines within `region`.
     ///
     /// Lines scrolled above `region.start` are pushed into scrollback history

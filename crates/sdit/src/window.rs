@@ -3,6 +3,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
+use sdit_core::grid::Scroll;
 use sdit_core::pty::Pty;
 use sdit_core::render::atlas::Atlas;
 use sdit_core::render::font::FontContext;
@@ -48,6 +49,10 @@ pub(crate) fn spawn_pty_reader(
                             // BEL 処理
                             if terminal.take_bell() {
                                 log::info!("BEL received (session {})", session_id.0);
+                            }
+                            // 新しい出力があったら display_offset を 0 にリセット（ライブビュー追従）
+                            if terminal.grid().display_offset() > 0 {
+                                terminal.grid_mut().scroll_display(Scroll::Bottom);
                             }
                         }
                         let _ = event_proxy.send_event(SditEvent::PtyOutput(session_id));

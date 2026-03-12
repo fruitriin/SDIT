@@ -100,6 +100,48 @@ pub(crate) fn session_switch_direction(key: &Key, modifiers: ModifiersState) -> 
 }
 
 // ---------------------------------------------------------------------------
+// マウスイベント → PTY バイト列変換
+// ---------------------------------------------------------------------------
+
+/// マウスイベントをSGR形式（`CSI < Cb ; Cx ; Cy M/m`）のバイト列に変換する。
+///
+/// `button`: 0=左, 1=中, 2=右, 32+=ドラッグ修飾, `64`=`scroll_up`, `65`=`scroll_down`
+/// `col`, `row`: 0-indexed グリッド座標
+/// `pressed`: true=press(M), false=release(m)
+pub(crate) fn mouse_report_sgr(button: u8, col: usize, row: usize, pressed: bool) -> Vec<u8> {
+    let suffix = if pressed { 'M' } else { 'm' };
+    format!("\x1b[<{button};{};{}{suffix}", col.saturating_add(1), row.saturating_add(1))
+        .into_bytes()
+}
+
+/// マウスイベントをX11形式（`CSI M Cb Cx Cy`）のバイト列に変換する。
+///
+/// X11形式は座標が 0〜222 の範囲（+33 エンコード）。範囲外は 255 にクランプ。
+/// `col`, `row`: 0-indexed グリッド座標
+pub(crate) fn mouse_report_x11(button: u8, col: usize, row: usize) -> Vec<u8> {
+    let cb = button.saturating_add(32);
+    let cx = (col.min(222) as u8).saturating_add(33);
+    let cy = (row.min(222) as u8).saturating_add(33);
+    vec![b'\x1b', b'[', b'M', cb, cx, cy]
+}
+
+/// ピクセル座標をグリッド座標 (col, row) に変換する。
+///
+/// `sidebar_width_px`: サイドバーの幅（ピクセル）
+pub(crate) fn pixel_to_grid(
+    x: f64,
+    y: f64,
+    cell_width: f32,
+    cell_height: f32,
+    sidebar_width_px: f32,
+) -> (usize, usize) {
+    let term_x = (x as f32 - sidebar_width_px).max(0.0);
+    let col = if cell_width > 0.0 { (term_x / cell_width).floor() as usize } else { 0 };
+    let row = if cell_height > 0.0 { (y as f32 / cell_height).floor() as usize } else { 0 };
+    (col, row)
+}
+
+// ---------------------------------------------------------------------------
 // キー入力 → PTY バイト列変換
 // ---------------------------------------------------------------------------
 

@@ -368,10 +368,15 @@ fn set_private_mode(term: &mut Terminal, param: u16, set: bool) {
     match param {
         1 => toggle_mode(term, TermMode::APP_CURSOR, set),
         7 => toggle_mode(term, TermMode::LINE_WRAP, set),
+        9 | 1000 => toggle_mode(term, TermMode::MOUSE_REPORT_CLICK, set), // X10 / X11 mouse
         12 => {
             term.cursor_blinking = set;
         }
         25 => toggle_mode(term, TermMode::SHOW_CURSOR, set),
+        1002 => toggle_mode(term, TermMode::MOUSE_REPORT_DRAG, set), // button-event
+        1003 => toggle_mode(term, TermMode::MOUSE_REPORT_MOTION, set), // any-event
+        1005 => toggle_mode(term, TermMode::UTF8_MOUSE, set),        // UTF-8 mode
+        1006 => toggle_mode(term, TermMode::SGR_MOUSE, set),         // SGR extended
         1049 => {
             // Only swap if we're actually changing state.
             let currently_alt = term.mode.contains(TermMode::ALT_SCREEN);

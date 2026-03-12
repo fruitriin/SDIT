@@ -61,6 +61,16 @@ bitflags! {
         const BRACKETED_PASTE  = 0b0000_1000_0000;
         /// LF also moves cursor to column 0 (LNM).
         const LINE_FEED_NEW_LINE = 0b0001_0000_0000;
+        /// X10/X11 mouse click reporting (?9 / ?1000).
+        const MOUSE_REPORT_CLICK  = 0b0010_0000_0000;
+        /// Button-event mouse tracking (?1002).
+        const MOUSE_REPORT_DRAG   = 0b0100_0000_0000;
+        /// Any-event mouse tracking (?1003).
+        const MOUSE_REPORT_MOTION = 0b1000_0000_0000;
+        /// SGR extended mouse coordinates (?1006).
+        const SGR_MOUSE           = 0b0001_0000_0000_0000;
+        /// UTF-8 mouse mode (?1005).
+        const UTF8_MOUSE          = 0b0010_0000_0000_0000;
     }
 }
 
@@ -161,6 +171,15 @@ impl Terminal {
     /// カーソル点滅が有効かを返す。
     pub fn cursor_blinking(&self) -> bool {
         self.cursor_blinking
+    }
+
+    /// いずれかのマウス報告モードがアクティブかどうかを返す。
+    pub fn mouse_mode_active(&self) -> bool {
+        self.mode.intersects(
+            TermMode::MOUSE_REPORT_CLICK
+                | TermMode::MOUSE_REPORT_DRAG
+                | TermMode::MOUSE_REPORT_MOTION,
+        )
     }
 
     /// ベルが鳴った（BEL受信）かどうかを確認し、フラグをリセットする。
@@ -844,6 +863,50 @@ mod tests {
         proc.advance(&mut term, b"\x1b[1 q");
         assert_eq!(term.cursor_style(), CursorStyle::Block);
         assert!(term.cursor_blinking());
+    }
+
+    // マウスモード: CSI ? 1000 h で MOUSE_REPORT_CLICK がセットされる
+    #[test]
+    fn mouse_mode_click_set() {
+        let (mut proc, mut term) = make_proc_term(24, 80);
+        proc.advance(&mut term, b"\x1b[?1000h");
+        assert!(term.mode().contains(TermMode::MOUSE_REPORT_CLICK));
+        assert!(term.mouse_mode_active());
+    }
+
+    // マウスモード: CSI ? 1006 h で SGR_MOUSE がセットされる
+    #[test]
+    fn mouse_mode_sgr_set() {
+        let (mut proc, mut term) = make_proc_term(24, 80);
+        proc.advance(&mut term, b"\x1b[?1006h");
+        assert!(term.mode().contains(TermMode::SGR_MOUSE));
+    }
+
+    // マウスモード: CSI ? 1000 l でリセットされる
+    #[test]
+    fn mouse_mode_click_reset() {
+        let (mut proc, mut term) = make_proc_term(24, 80);
+        proc.advance(&mut term, b"\x1b[?1000h");
+        assert!(term.mode().contains(TermMode::MOUSE_REPORT_CLICK));
+        proc.advance(&mut term, b"\x1b[?1000l");
+        assert!(!term.mode().contains(TermMode::MOUSE_REPORT_CLICK));
+        assert!(!term.mouse_mode_active());
+    }
+
+    // マウスモード: X10 (?9) / drag (?1002) / motion (?1003) も設定できる
+    #[test]
+    fn mouse_mode_variants() {
+        let (mut proc, mut term) = make_proc_term(24, 80);
+        proc.advance(&mut term, b"\x1b[?9h");
+        assert!(term.mode().contains(TermMode::MOUSE_REPORT_CLICK));
+        proc.advance(&mut term, b"\x1b[?9l");
+        proc.advance(&mut term, b"\x1b[?1002h");
+        assert!(term.mode().contains(TermMode::MOUSE_REPORT_DRAG));
+        assert!(term.mouse_mode_active());
+        proc.advance(&mut term, b"\x1b[?1003h");
+        assert!(term.mode().contains(TermMode::MOUSE_REPORT_MOTION));
+        proc.advance(&mut term, b"\x1b[?1005h");
+        assert!(term.mode().contains(TermMode::UTF8_MOUSE));
     }
 
     // pending_writes サイズ制限テスト

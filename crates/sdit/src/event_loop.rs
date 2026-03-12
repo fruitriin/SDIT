@@ -1,14 +1,18 @@
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::NamedKey;
 use winit::window::WindowId;
 
+use sdit_core::grid::{Dimensions, Scroll};
 use sdit_core::render::pipeline::CellPipeline;
+use sdit_core::terminal::TermMode;
 
 use crate::app::{SditApp, SditEvent};
 use crate::input::{
     is_add_session_shortcut, is_close_session_shortcut, is_detach_session_shortcut,
-    is_new_window_shortcut, is_sidebar_toggle_shortcut, key_to_bytes, session_switch_direction,
+    is_new_window_shortcut, is_sidebar_toggle_shortcut, key_to_bytes, mouse_report_sgr,
+    mouse_report_x11, pixel_to_grid, session_switch_direction,
 };
 
 // ---------------------------------------------------------------------------
@@ -107,6 +111,34 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         .terminal
                         .mode();
 
+                    // Shift+PageUp / Shift+PageDown でビューポートスクロール
+                    if self.modifiers.shift_key() {
+                        let sid = ws.active_session_id();
+                        let is_page_up = matches!(
+                            key_event.logical_key,
+                            winit::keyboard::Key::Named(NamedKey::PageUp)
+                        );
+                        let is_page_down = matches!(
+                            key_event.logical_key,
+                            winit::keyboard::Key::Named(NamedKey::PageDown)
+                        );
+                        if is_page_up || is_page_down {
+                            if let Some(session) = self.session_mgr.get(sid) {
+                                let mut state = session
+                                    .term_state
+                                    .lock()
+                                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                let half = (state.terminal.grid().screen_lines() / 2).max(1);
+                                #[allow(clippy::cast_possible_wrap)]
+                                let delta: isize =
+                                    if is_page_up { half as isize } else { -(half as isize) };
+                                state.terminal.grid_mut().scroll_display(Scroll::Delta(delta));
+                            }
+                            self.redraw_session(sid);
+                            return;
+                        }
+                    }
+
                     // キー入力時に選択を解除
                     self.selection_start = None;
                     self.selection_end = None;
@@ -148,18 +180,57 @@ impl ApplicationHandler<SditEvent> for SditApp {
                     }
                 }
 
-                // テキスト選択中: selection_end を更新
+                // マウスドラッグ報告（DRAG/MOTION モード）
                 if self.is_selecting {
                     if let Some(ws) = self.windows.get(&id) {
                         let metrics = *self.font_ctx.metrics();
                         let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
-                        let term_x = position.x as f32 - sidebar_w;
-                        let col = (term_x / metrics.cell_width).floor().max(0.0) as usize;
-                        let row =
-                            (position.y as f32 / metrics.cell_height).floor().max(0.0) as usize;
-                        self.selection_end = Some((col, row));
                         let sid = ws.active_session_id();
-                        self.redraw_session(sid);
+                        let mouse_drag;
+                        let use_sgr;
+                        {
+                            let session = self.session_mgr.get(sid).expect("session exists");
+                            let state = session
+                                .term_state
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                            let mode = state.terminal.mode();
+                            mouse_drag = mode.intersects(
+                                TermMode::MOUSE_REPORT_DRAG | TermMode::MOUSE_REPORT_MOTION,
+                            );
+                            use_sgr = mode.contains(TermMode::SGR_MOUSE);
+                        }
+                        if mouse_drag {
+                            let (col, row) = pixel_to_grid(
+                                position.x,
+                                position.y,
+                                metrics.cell_width,
+                                metrics.cell_height,
+                                sidebar_w,
+                            );
+                            // button=32 = 左ボタン押しながらドラッグ
+                            let bytes = if use_sgr {
+                                mouse_report_sgr(32, col, row, true)
+                            } else {
+                                mouse_report_x11(32, col, row)
+                            };
+                            if let Some(session) = self.session_mgr.get(sid) {
+                                if let Err(e) = session.pty_io.write_tx.try_send(bytes) {
+                                    log::warn!("Mouse drag PTY write failed: {e}");
+                                }
+                            }
+                        } else {
+                            // テキスト選択中: selection_end を更新
+                            let (col, row) = pixel_to_grid(
+                                position.x,
+                                position.y,
+                                metrics.cell_width,
+                                metrics.cell_height,
+                                sidebar_w,
+                            );
+                            self.selection_end = Some((col, row));
+                            self.redraw_session(sid);
+                        }
                     }
                 }
             }
@@ -191,15 +262,51 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                 }
                             }
                         } else {
-                            // ターミナル領域: テキスト選択開始
-                            let term_x = x as f32 - sidebar_w;
-                            let col = (term_x / metrics.cell_width).floor().max(0.0) as usize;
-                            let row = (y as f32 / metrics.cell_height).floor().max(0.0) as usize;
-                            self.selection_start = Some((col, row));
-                            self.selection_end = Some((col, row));
-                            self.is_selecting = true;
+                            // ターミナル領域: マウスモード確認
                             let sid = ws.active_session_id();
-                            self.redraw_session(sid);
+                            let mouse_active;
+                            let use_sgr;
+                            {
+                                let session = self.session_mgr.get(sid).expect("session exists");
+                                let state = session
+                                    .term_state
+                                    .lock()
+                                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                mouse_active = state.terminal.mouse_mode_active();
+                                use_sgr = state.terminal.mode().contains(TermMode::SGR_MOUSE);
+                            }
+                            if mouse_active {
+                                let (col, row) = pixel_to_grid(
+                                    x,
+                                    y,
+                                    metrics.cell_width,
+                                    metrics.cell_height,
+                                    sidebar_w,
+                                );
+                                let bytes = if use_sgr {
+                                    mouse_report_sgr(0, col, row, true)
+                                } else {
+                                    mouse_report_x11(0, col, row)
+                                };
+                                if let Some(session) = self.session_mgr.get(sid) {
+                                    if let Err(e) = session.pty_io.write_tx.try_send(bytes) {
+                                        log::warn!("Mouse PTY write failed: {e}");
+                                    }
+                                }
+                            } else {
+                                // テキスト選択開始
+                                let (col, row) = pixel_to_grid(
+                                    x,
+                                    y,
+                                    metrics.cell_width,
+                                    metrics.cell_height,
+                                    sidebar_w,
+                                );
+                                self.selection_start = Some((col, row));
+                                self.selection_end = Some((col, row));
+                                self.is_selecting = true;
+                                self.redraw_session(sid);
+                            }
                         }
                     }
                 }
@@ -210,8 +317,124 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 button: MouseButton::Left,
                 ..
             } => {
+                // マウスモード ON の場合は release イベントを SGR 形式で報告
+                if let Some((x, y)) = self.cursor_position {
+                    if let Some(ws) = self.windows.get(&id) {
+                        let metrics = *self.font_ctx.metrics();
+                        let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+                        if !ws.sidebar.visible || (x as f32) >= sidebar_w {
+                            let sid = ws.active_session_id();
+                            let mouse_active;
+                            let use_sgr;
+                            {
+                                let session = self.session_mgr.get(sid).expect("session exists");
+                                let state = session
+                                    .term_state
+                                    .lock()
+                                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                mouse_active = state.terminal.mouse_mode_active();
+                                use_sgr = state.terminal.mode().contains(TermMode::SGR_MOUSE);
+                            }
+                            if mouse_active && use_sgr {
+                                let (col, row) = pixel_to_grid(
+                                    x,
+                                    y,
+                                    metrics.cell_width,
+                                    metrics.cell_height,
+                                    sidebar_w,
+                                );
+                                let bytes = mouse_report_sgr(0, col, row, false);
+                                if let Some(session) = self.session_mgr.get(sid) {
+                                    if let Err(e) = session.pty_io.write_tx.try_send(bytes) {
+                                        log::warn!("Mouse release PTY write failed: {e}");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 self.drag_source_row = None;
                 self.is_selecting = false;
+            }
+
+            WindowEvent::MouseWheel { delta, .. } => {
+                // スクロール量を行数に変換
+                let lines: isize = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => {
+                        if y > 0.0 {
+                            -(y.ceil() as isize)
+                        } else {
+                            (-y).ceil() as isize
+                        }
+                    }
+                    MouseScrollDelta::PixelDelta(pos) => {
+                        let y = pos.y;
+                        if y > 0.0 {
+                            // 上方向スクロール（履歴へ）: 正の delta
+                            1
+                        } else if y < 0.0 {
+                            // 下方向スクロール（最新へ）: 負の delta
+                            -1
+                        } else {
+                            0
+                        }
+                    }
+                };
+                if lines == 0 {
+                    // noop
+                } else if let Some(ws) = self.windows.get(&id) {
+                    let sid = ws.active_session_id();
+                    let mouse_active;
+                    let use_sgr;
+                    {
+                        let session = self.session_mgr.get(sid).expect("session exists");
+                        let state = session
+                            .term_state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        mouse_active = state.terminal.mouse_mode_active();
+                        use_sgr = state.terminal.mode().contains(TermMode::SGR_MOUSE);
+                    }
+                    if mouse_active {
+                        // マウスモード ON: スクロールを PTY に報告
+                        if let Some((x, y)) = self.cursor_position {
+                            let metrics = *self.font_ctx.metrics();
+                            let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+                            let (col, row) = pixel_to_grid(
+                                x,
+                                y,
+                                metrics.cell_width,
+                                metrics.cell_height,
+                                sidebar_w,
+                            );
+                            let count = lines.unsigned_abs().max(1);
+                            for _ in 0..count {
+                                // lines > 0 = 上スクロール(64), lines < 0 = 下スクロール(65)
+                                let button: u8 = if lines > 0 { 65 } else { 64 };
+                                let bytes = if use_sgr {
+                                    mouse_report_sgr(button, col, row, true)
+                                } else {
+                                    mouse_report_x11(button, col, row)
+                                };
+                                if let Some(session) = self.session_mgr.get(sid) {
+                                    if let Err(e) = session.pty_io.write_tx.try_send(bytes) {
+                                        log::warn!("Mouse scroll PTY write failed: {e}");
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // マウスモード OFF: ビューポートスクロール
+                        if let Some(session) = self.session_mgr.get(sid) {
+                            let mut state = session
+                                .term_state
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                            state.terminal.grid_mut().scroll_display(Scroll::Delta(lines));
+                        }
+                        self.redraw_session(sid);
+                    }
+                }
             }
 
             WindowEvent::RedrawRequested => {
