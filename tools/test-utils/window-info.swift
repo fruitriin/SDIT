@@ -4,6 +4,7 @@
 /// AXUIElement API を使って指定プロセスのウィンドウ属性を JSON 出力する。
 ///
 /// Usage: window-info <process-name>
+///        window-info --pid <pid>
 /// Exit codes:
 ///   0 — 成功（JSON を stdout に出力）
 ///   1 — ウィンドウが見つからない、または引数不正
@@ -13,12 +14,25 @@ import Foundation
 
 // MARK: - 引数チェック
 
-guard CommandLine.arguments.count == 2 else {
+// --pid <pid> または <process-name>
+let targetName: String?
+let directPid: pid_t?
+
+if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--pid" {
+    guard let p = pid_t(CommandLine.arguments[2]) else {
+        fputs("Error: invalid PID '\(CommandLine.arguments[2])'\n", stderr)
+        exit(1)
+    }
+    directPid = p
+    targetName = nil
+} else if CommandLine.arguments.count == 2 {
+    targetName = CommandLine.arguments[1]
+    directPid = nil
+} else {
     fputs("Usage: window-info <process-name>\n", stderr)
+    fputs("       window-info --pid <pid>\n", stderr)
     exit(1)
 }
-
-let targetName = CommandLine.arguments[1]
 
 // MARK: - プロセス検索
 
@@ -57,8 +71,13 @@ func findPid(named name: String) -> pid_t? {
     return nil
 }
 
-guard let pid = findPid(named: targetName) else {
-    fputs("Error: process '\(targetName)' not found\n", stderr)
+let pid: pid_t
+if let dp = directPid {
+    pid = dp
+} else if let foundPid = findPid(named: targetName!) {
+    pid = foundPid
+} else {
+    fputs("Error: process '\(targetName!)' not found\n", stderr)
     exit(1)
 }
 
@@ -73,7 +92,7 @@ guard result == .success,
       let windows = windowsRef as? [AXUIElement],
       let window = windows.first
 else {
-    fputs("Error: no windows found for '\(targetName)' (pid=\(pid))\n", stderr)
+    fputs("Error: no windows found for '\(targetName ?? "pid:\(pid)")' (pid=\(pid))\n", stderr)
     exit(1)
 }
 

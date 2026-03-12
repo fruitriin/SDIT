@@ -104,7 +104,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
 
                     // Cmd+= / Cmd++ でズームイン
                     if is_zoom_in_shortcut(&key_event.logical_key, self.modifiers) {
-                        self.change_font_size(1.0);
+                        self.change_font_size(Some(1.0));
                         for ws in self.windows.values() {
                             ws.window.request_redraw();
                         }
@@ -118,7 +118,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
 
                     // Cmd+- / Cmd+_ でズームアウト
                     if is_zoom_out_shortcut(&key_event.logical_key, self.modifiers) {
-                        self.change_font_size(-1.0);
+                        self.change_font_size(Some(-1.0));
                         for ws in self.windows.values() {
                             ws.window.request_redraw();
                         }
@@ -131,7 +131,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
 
                     // Cmd+0 でデフォルトフォントサイズにリセット
                     if is_zoom_reset_shortcut(&key_event.logical_key, self.modifiers) {
-                        self.change_font_size(0.0);
+                        self.change_font_size(None);
                         for ws in self.windows.values() {
                             ws.window.request_redraw();
                         }

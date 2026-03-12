@@ -243,15 +243,14 @@ impl SditApp {
 
     /// フォントサイズを変更する。
     ///
-    /// `delta` が 0.0 のときはデフォルトサイズに復帰する。
+    /// `delta` が `Some(d)` のとき現在サイズに `d` を加算、`None` のときデフォルトサイズに復帰する。
     /// 変更後、全ウィンドウのアトラスをクリアし、全セッションをリサイズする。
     ///
     /// 再描画の呼び出しは呼び出し側の責任（`event_loop.rs` で `request_redraw` を呼ぶ）。
-    pub(crate) fn change_font_size(&mut self, delta: f32) {
-        let new_size = if delta == 0.0 {
-            self.default_font_size
-        } else {
-            self.font_ctx.metrics().font_size + delta
+    pub(crate) fn change_font_size(&mut self, delta: Option<f32>) {
+        let new_size = match delta {
+            Some(d) => self.font_ctx.metrics().font_size + d,
+            None => self.default_font_size,
         };
         self.font_ctx.set_font_size(new_size);
 
