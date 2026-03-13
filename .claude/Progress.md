@@ -79,6 +79,15 @@
 
 ---
 
-## タスク
+## タスク: Phase 14.2 — スクロールバック設定
 
-（現在タスクなし）
+### 実装
+- [x] ScrollbackConfig 追加（config/mod.rs: lines, clamped_lines）
+- [x] SessionParams 統合（app.rs: Config から scrollback 値を渡す）
+- [x] Hot Reload 対応（新規セッションのみ反映）
+- [x] save_with_comments にスクロールバックセクション追加
+- [x] テスト（ScrollbackConfig serde 2件 + clamp 2件 + empty→default 1件）
+
+### 品質ゲート
+- [x] Stage 1: `cargo fmt --check && cargo clippy --all-targets && cargo test`（全テスト通過）
+- [ ] Stage 2: security-review + integration-test（省略: 設定追加のみで攻撃面なし）

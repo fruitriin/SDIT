@@ -151,6 +151,27 @@ impl Default for PasteConfig {
     }
 }
 
+/// スクロールバック設定。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ScrollbackConfig {
+    /// スクロールバック履歴の最大行数。
+    pub lines: u32,
+}
+
+impl Default for ScrollbackConfig {
+    fn default() -> Self {
+        Self { lines: 10_000 }
+    }
+}
+
+impl ScrollbackConfig {
+    /// lines を安全な範囲にクランプする（0-1,000,000）。
+    pub fn clamped_lines(&self) -> usize {
+        (self.lines as usize).min(1_000_000)
+    }
+}
+
 /// SDIT 設定全体。
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default)]
@@ -177,6 +198,8 @@ pub struct Config {
     pub notification: NotificationConfig,
     /// カーソル設定。
     pub cursor: CursorConfig,
+    /// スクロールバック設定。
+    pub scrollback: ScrollbackConfig,
 }
 
 impl Config {
@@ -310,6 +333,12 @@ impl Config {
                 );
                 content.push_str("# blinking: enable cursor blinking (default: false)\n");
                 content.push_str("# color: cursor color as hex string (e.g. \"#ff6600\"); omit to use theme foreground\n");
+            } else if line == "[scrollback]" {
+                content.push('\n');
+                content.push_str("# ── Scrollback ──────────────────────────────────────────\n");
+                content.push_str(
+                    "# lines: maximum number of scrollback lines (default: 10000, range: 0-1000000)\n",
+                );
             }
             content.push_str(line);
             content.push('\n');
@@ -598,5 +627,40 @@ line_height = 1.3
         assert_eq!(CursorStyle::from(CursorStyleConfig::Block), CursorStyle::Block);
         assert_eq!(CursorStyle::from(CursorStyleConfig::Underline), CursorStyle::Underline);
         assert_eq!(CursorStyle::from(CursorStyleConfig::Bar), CursorStyle::Bar);
+    }
+
+    // -----------------------------------------------------------------------
+    // ScrollbackConfig テスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn scrollback_config_default() {
+        let sc = ScrollbackConfig::default();
+        assert_eq!(sc.lines, 10_000);
+    }
+
+    #[test]
+    fn scrollback_config_deserialize() {
+        let toml_str = "[scrollback]\nlines = 50000\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.scrollback.lines, 50_000);
+    }
+
+    #[test]
+    fn scrollback_clamped_lines_zero() {
+        let sc = ScrollbackConfig { lines: 0 };
+        assert_eq!(sc.clamped_lines(), 0);
+    }
+
+    #[test]
+    fn scrollback_clamped_lines_over_max() {
+        let sc = ScrollbackConfig { lines: 2_000_000 };
+        assert_eq!(sc.clamped_lines(), 1_000_000);
+    }
+
+    #[test]
+    fn scrollback_config_empty_uses_default() {
+        let config: Config = toml::from_str("").unwrap();
+        assert_eq!(config.scrollback.lines, 10_000);
     }
 }

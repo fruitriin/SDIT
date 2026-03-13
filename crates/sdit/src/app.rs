@@ -343,7 +343,7 @@ impl SditApp {
                 pty_size,
                 terminal_rows: rows,
                 terminal_cols: cols,
-                scrollback: 10_000,
+                scrollback: self.config.scrollback.clamped_lines(),
                 default_cursor_style,
                 default_cursor_blinking,
                 spawn_reader:
