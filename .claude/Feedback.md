@@ -10,7 +10,11 @@
 
 ## 問題の記録
 
-（なし）
+worktree 内の統合テストエージェントがフックエラーでブロックされた
+CLAUDE.md に `cp -r .claude <worktree>/.claude` ルールがあるが、自動的に実行されていないケースがある。worktree 作成後の .claude コピーが漏れた場合、全ツール（Bash/Edit/Write）が使えなくなる。さらに、残存 worktree が本体のフック実行にも影響した（hook の相対パスが worktree ディレクトリから解決されるため）。
+
+古い worktree の残存がメインプロセスのフック実行をブロックした
+`.claude/worktrees/` に不要な worktree ディレクトリが残ると、PreToolUse フックが worktree 側の .claude/hooks を参照しようとしてエラーになる。チーム完了後は worktree を確実に削除する必要がある。
 
 ## 改善アクション
 

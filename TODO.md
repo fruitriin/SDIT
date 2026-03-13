@@ -3,7 +3,7 @@
 `docs/plans/` の完了状態・優先度をトラックする。
 `docs/plans/` と TODO が一致しなければ TODO を編集する。
 
-## 現在のフェーズ: Phase 14.4（次に着手）
+## 現在のフェーズ: Phase 14.5（次に着手）
 
 ## バックログ
 
@@ -45,7 +45,7 @@
 | done | 14.1 | `docs/plans/phase14.1-cursor-config.md` | **完了** |
 | done | 14.2 | `docs/plans/phase14.2-scrollback-config.md` | **完了** |
 | done | 14.3 | `docs/plans/phase14.3-window-padding.md` | **完了** |
-| 中 | 14.4 | `docs/plans/phase14.4-initial-window-size.md` | 未着手 |
+| done | 14.4 | `docs/plans/phase14.4-initial-window-size.md` | **完了** |
 | 中 | 14.5 | `docs/plans/phase14.5-shell-integration.md` | 未着手 |
 | 中 | 14.6 | `docs/plans/phase14.6-quick-select.md` | 未着手 |
 
