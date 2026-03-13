@@ -47,8 +47,41 @@ fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Option<ExitStatus>
 
 - `window-info`: AXUIElement (Accessibility API) でウィンドウ属性取得
 - `capture-window`: ScreenCaptureKit (macOS 15+) でウィンドウ単位キャプチャ
+- `render-text`: CoreText で対照群テキスト画像を生成（`--mono` でターミナル風等幅）
+- `verify-text`: OCR + 輝度分析 + SSIM の3層一括検証（テキストレポートのみ返す）
 - `send-keys.sh`: osascript の System Events でキーストローク送信
   - **重要**: AppleScript に変数を埋め込む際はバックスラッシュと二重引用符のエスケープが必須
+
+## テキスト描画の自動検証パターン
+
+**目的**: エージェントが画像を読まずにテキストレポートだけで描画品質を判定する（トークン節約）
+
+### パターン A: ASCII テキスト存在確認（最小コスト）
+```bash
+verify-text tmp/capture.png "EXPECTED_TEXT"
+# OCR のみ。--cells/--reference 不要
+```
+用途: 001-basic-echo, 014-font-size-change
+
+### パターン B: CJK 全角文字の品質検証（3層フル）
+```bash
+render-text --mono --cell-info "テスト文字列" tmp/ref.png | tail -n +2 > tmp/cells.json
+verify-text tmp/capture.png "テスト文字列" --cells tmp/cells.json --reference tmp/ref.png
+```
+用途: 009-cjk-display
+
+### パターン C: 特殊文字（絵文字・リガチャ）の品質検証
+```bash
+render-text --mono --cell-info "🎉 -> =>" tmp/ref.png | tail -n +2 > tmp/cells.json
+verify-text tmp/capture.png "🎉 -> =>" --cells tmp/cells.json --reference tmp/ref.png
+```
+用途: 020-color-emoji, 023-opentype-ligature
+注意: OCR は絵文字/リガチャの認識精度が低い場合がある → SSIM スコアで補完判定
+
+### exit code の解釈
+- `0`: 全チェック PASS
+- `1`: ツールエラー（引数不正等）
+- `3`: いずれかのチェック FAIL → レポートの `[RESULT]` 行で詳細を確認
 
 ## macOS 権限モデル
 

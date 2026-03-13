@@ -52,12 +52,26 @@ Cmd+= でフォントサイズ拡大、Cmd+- でフォントサイズ縮小、Cm
 4. send-keys で `echo STILL_ALIVE` を入力して Return キーを送信する
 5. 1 秒待機してスクリーンショットを撮る（`tmp/014-stress.png`）
 
+## 自動検証（verify-text）
+
+```bash
+# ベースラインテキスト確認
+./tools/test-utils/verify-text tmp/014-base.png "FONT_SIZE_BASE"
+
+# ストレステスト後の生存確認
+./tools/test-utils/verify-text tmp/014-stress.png "STILL_ALIVE"
+```
+
+- フォントサイズ変更の前後で OCR が通れば、テキストが正常に描画されていることが確定する
+- `--cells` / `--reference` は不要（ASCII テキストの存在確認が目的）
+
 ## 期待結果
 
 ### 014-1
 - `tmp/014-zoom-in.png` のファイルサイズが 10 KiB 以上（空白でない）
 - ベースライン画像（`tmp/014-base.png`）と拡大後の画像でファイルサイズが異なる
   （フォントが大きくなり描画内容が変化している）
+- **verify-text が exit 0**（OCR で "FONT_SIZE_BASE" が認識される）
 - SDIT プロセスがクラッシュしていない（window-info が exit 0）
 
 ### 014-2
@@ -72,7 +86,7 @@ Cmd+= でフォントサイズ拡大、Cmd+- でフォントサイズ縮小、Cm
 ### 014-4
 - window-info が exit 0（ウィンドウが生存している）
 - `tmp/014-stress.png` のファイルサイズが 10 KiB 以上
-- スクリーンショット内に "STILL_ALIVE" が表示されていることが確認できる（目視）
+- **verify-text が exit 0**（OCR で "STILL_ALIVE" が認識される）
 
 ## クリーンアップ
 

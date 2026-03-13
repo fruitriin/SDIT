@@ -17,16 +17,33 @@
 5. 2 秒待機する（PTY 出力 → 描画の伝搬を待つ）
 6. capture-window でスクリーンショットを撮る（`tmp/009-cjk.png`）
 
+## 自動検証（verify-text + render-text）
+
+```bash
+# 1. 対照群画像 + セル境界 JSON を生成
+./tools/test-utils/render-text --mono --cell-info "こんにちは世界" tmp/009-ref.png \
+    | tail -n +2 > tmp/009-cells.json
+
+# 2. 3層一括検証
+./tools/test-utils/verify-text tmp/009-cjk.png "こんにちは世界" \
+    --cells tmp/009-cells.json \
+    --reference tmp/009-ref.png
+# exit 0 = 全チェック PASS
+```
+
+**検証内容:**
+- **OCR 照合**: 「こんにちは世界」が豆腐（□）にならず実際の文字として認識される
+- **輝度分析**: 各文字セルにインクが存在し、右端クリッピングがない
+- **SSIM 比較**: CoreText の正解レンダリングと構造が類似している
+
 ## 期待結果
 - ウィンドウが表示されている（window-info が exit 0）
 - スクリーンショットのファイルサイズが 10 KiB 以上（空白でない）
-- （将来）AI 視覚分析で以下を検証する:
-  - 「こんにちは世界」が豆腐（□）にならず実際の文字として描画されていること
-  - 全角文字が半角文字の 2 倍の幅で描画されており、文字同士が重なっていないこと
+- **verify-text が exit 0**（OCR + 輝度 + SSIM 全 PASS）
 
 ## クリーンアップ
 - SDIT プロセスを終了する
-- `tmp/009-cjk.png` を削除する
+- `tmp/009-cjk.png` `tmp/009-ref.png` `tmp/009-cells.json` を削除する
 
 ## 関連
 - Phase 5.3: 日本語フォント対応

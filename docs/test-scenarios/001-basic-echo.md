@@ -17,10 +17,21 @@ SDIT の GUI ウィンドウでキー入力が PTY に送信され、echo の結
 5. 2 秒待機する（PTY 出力 → 描画の伝搬を待つ）
 6. capture-window でスクリーンショットを撮る（`tmp/001-echo.png`）
 
+## 自動検証（verify-text）
+
+```bash
+# キャプチャ後に実行
+./tools/test-utils/verify-text tmp/001-echo.png "SDIT_ECHO_TEST"
+# OCR で表示テキストを自動照合。exit 0 = PASS
+```
+
+- `--cells` / `--reference` は不要（ASCII テキストの存在確認のみ）
+- OCR PASS なら「画面に文字が描画されている」ことが確定する
+
 ## 期待結果
 - ウィンドウが表示されている（window-info が exit 0）
 - スクリーンショットのファイルサイズが 10 KiB 以上（空白でない）
-- （将来）AI 視覚分析でスクリーンショットに "SDIT_ECHO_TEST" が描画されていることを確認
+- **verify-text が exit 0**（OCR で "SDIT_ECHO_TEST" が認識される）
 
 ## クリーンアップ
 - SDIT プロセスを終了する

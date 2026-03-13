@@ -59,7 +59,25 @@
 **テスト**: ユニットテスト（font.rs `rasterize_glyph` 内のロジック）
 ※ SwashContent::Color はフォント依存のため環境次第でスキップされる可能性がある
 
-**注意**: 絵文字の実際のレンダリングは GUI テスト環境が必要。ユニットテストでは変換ロジックの正確性を確認する。
+**GUI 自動検証（verify-text）:**
+
+```bash
+# SDIT で絵文字を表示してキャプチャ
+./tools/test-utils/send-keys.sh sdit "echo '🎉🚀❤️'"
+# ... capture-window ...
+
+# 対照群生成（render-text は絵文字の等幅グリッドを生成）
+./tools/test-utils/render-text --mono --cell-info "🎉🚀❤️" tmp/020-ref.png \
+    | tail -n +2 > tmp/020-cells.json
+
+# 3層検証
+./tools/test-utils/verify-text tmp/020-emoji.png "🎉🚀❤️" \
+    --cells tmp/020-cells.json \
+    --reference tmp/020-ref.png
+```
+
+- OCR は絵文字の認識精度が低い場合がある → SSIM 比較が主要な判定手段
+- 輝度分析でセル内にカラーピクセルが存在することを確認
 
 **最終実行**: 2026-03-13
 **結果**: UNIT_ONLY（GUI テスト環境なし）

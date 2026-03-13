@@ -149,7 +149,28 @@ fn update_from_grid_ligature_vertices() {
 // 代わりに、パイプラインの `update_from_grid()` が cell_width_scale を正しく生成することで間接検証。
 ```
 
-**視覚確認項目**（GUI 環境が整えば）:
+**GUI 自動検証（verify-text）:**
+
+```bash
+# SDIT でリガチャ含むテキストを表示してキャプチャ
+./tools/test-utils/send-keys.sh sdit "echo 'a -> b => c'"
+# ... capture-window tmp/023-ligature.png ...
+
+# 対照群生成（リガチャ対応フォントで）
+./tools/test-utils/render-text --mono --cell-info "a -> b => c" tmp/023-ref.png \
+    | tail -n +2 > tmp/023-cells.json
+
+# 検証: OCR でテキスト内容確認 + SSIM でリガチャ描画品質確認
+./tools/test-utils/verify-text tmp/023-ligature.png "a -> b => c" \
+    --cells tmp/023-cells.json \
+    --reference tmp/023-ref.png
+```
+
+- OCR は `->` / `=>` をリガチャとして認識する場合と個別文字として認識する場合がある
+  → OCR FAIL 時は SSIM スコアで補完判定する
+- 輝度分析で各セルにインクが存在することを確認
+
+**視覚確認項目**:
 - `->` リガチャが 2 セル幅で描画される
 - `=>` リガチャが 2 セル幅で描画される
 - リガチャと通常グリフの混在行が正しく配置される
