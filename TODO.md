@@ -3,7 +3,7 @@
 `docs/plans/` の完了状態・優先度をトラックする。
 `docs/plans/` と TODO が一致しなければ TODO を編集する。
 
-## 現在のフェーズ: Phase 13.6（次に着手）
+## 現在のフェーズ: 完了（次タスクなし）
 
 ## バックログ
 
@@ -41,7 +41,7 @@
 | done | 13.3 | `docs/plans/phase13.3-window-opacity.md` | **完了** |
 | done | 13.4 | `docs/plans/phase13.4-unsafe-paste.md` | **完了** |
 | done | 13.5 | `docs/plans/phase13.5-kitty-keyboard.md` | **完了** |
-| 中 | 13.6 | `docs/plans/phase13.6-desktop-notification.md` | 未着手 |
+| done | 13.6 | `docs/plans/phase13.6-desktop-notification.md` | **完了** |
 
 
 オーナーリクエスト:
