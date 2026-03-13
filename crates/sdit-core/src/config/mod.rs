@@ -187,6 +187,20 @@ pub struct ScrollbackConfig {
     pub lines: u32,
 }
 
+/// シェルインテグレーション設定。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ShellIntegrationConfig {
+    /// OSC 133 シェルインテグレーションを有効にする（プロンプトジャンプ等）。デフォルト: true。
+    pub enabled: bool,
+}
+
+impl Default for ShellIntegrationConfig {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
 impl Default for ScrollbackConfig {
     fn default() -> Self {
         Self { lines: 10_000 }
@@ -228,6 +242,8 @@ pub struct Config {
     pub cursor: CursorConfig,
     /// スクロールバック設定。
     pub scrollback: ScrollbackConfig,
+    /// シェルインテグレーション設定。
+    pub shell_integration: ShellIntegrationConfig,
 }
 
 impl Config {
@@ -377,6 +393,10 @@ impl Config {
                 content.push_str(
                     "# lines: maximum number of scrollback lines (default: 10000, range: 0-1000000)\n",
                 );
+            } else if line == "[shell_integration]" {
+                content.push('\n');
+                content.push_str("# ── Shell Integration ──────────────────────────────────────\n");
+                content.push_str("# enabled: enable OSC 133 shell integration for prompt navigation (default: true)\n");
             }
             content.push_str(line);
             content.push('\n');

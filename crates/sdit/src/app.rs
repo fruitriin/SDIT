@@ -377,6 +377,13 @@ impl SditApp {
             }
         };
 
+        // shell_integration_enabled をセッションの Terminal に反映する
+        {
+            let mut state =
+                session.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            state.terminal.shell_integration_enabled = self.config.shell_integration.enabled;
+        }
+
         self.session_mgr.insert(session);
         Some(session_id)
     }
@@ -560,7 +567,19 @@ impl SditApp {
             }
         }
 
-        // 10. 設定を置換
+        // 10. shell_integration 変更チェック
+        let shell_integration_changed =
+            self.config.shell_integration.enabled != new_config.shell_integration.enabled;
+        if shell_integration_changed {
+            let enabled = new_config.shell_integration.enabled;
+            for session in self.session_mgr.all() {
+                let mut state =
+                    session.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                state.terminal.shell_integration_enabled = enabled;
+            }
+        }
+
+        // 11. 設定を置換
         self.config = new_config;
 
         log::info!("Config reloaded successfully");

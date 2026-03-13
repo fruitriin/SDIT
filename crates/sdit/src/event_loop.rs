@@ -1095,6 +1095,59 @@ impl SditApp {
                 // 全テキスト選択は将来実装。現時点ではログのみ。
                 log::info!("SelectAll action triggered (not yet implemented)");
             }
+            Action::PrevPrompt => {
+                let Some(ws) = self.windows.get(&window_id) else { return };
+                let Some(session) = self.session_mgr.get(ws.active_session_id()) else {
+                    return;
+                };
+                let sid = ws.active_session_id();
+                {
+                    let mut state = session
+                        .term_state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    if let Some(target_line) = state.terminal.prev_prompt() {
+                        // target_line はビューポート内の行番号（0-based）。
+                        // ビューポートの上端を target_line に合わせる:
+                        //   新しい display_offset = history - target_line
+                        let history = state.terminal.grid().history_size() as isize;
+                        let current_offset = state.terminal.grid().display_offset() as isize;
+                        let new_offset =
+                            (history - target_line as isize).max(0).min(history) as usize;
+                        let delta = new_offset as isize - current_offset;
+                        state
+                            .terminal
+                            .grid_mut()
+                            .scroll_display(sdit_core::grid::Scroll::Delta(delta));
+                    }
+                }
+                self.redraw_session(sid);
+            }
+            Action::NextPrompt => {
+                let Some(ws) = self.windows.get(&window_id) else { return };
+                let Some(session) = self.session_mgr.get(ws.active_session_id()) else {
+                    return;
+                };
+                let sid = ws.active_session_id();
+                {
+                    let mut state = session
+                        .term_state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    if let Some(target_line) = state.terminal.next_prompt() {
+                        let history = state.terminal.grid().history_size() as isize;
+                        let current_offset = state.terminal.grid().display_offset() as isize;
+                        let new_offset =
+                            (history - target_line as isize).max(0).min(history) as usize;
+                        let delta = new_offset as isize - current_offset;
+                        state
+                            .terminal
+                            .grid_mut()
+                            .scroll_display(sdit_core::grid::Scroll::Delta(delta));
+                    }
+                }
+                self.redraw_session(sid);
+            }
         }
     }
 }

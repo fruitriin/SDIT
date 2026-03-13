@@ -673,3 +673,88 @@ fn osc_9_notification_truncates_utf8_safely() {
     // UTF-8 として有効であることを確認
     assert!(std::str::from_utf8(body.as_bytes()).is_ok());
 }
+
+// ---------------------------------------------------------------------------
+// OSC 133 シェルインテグレーション テスト
+// ---------------------------------------------------------------------------
+
+// OSC 133;A でプロンプト開始マーカーが記録される
+#[test]
+fn osc_133_prompt_start() {
+    let (mut proc, mut term) = make_proc_term(24, 80);
+    proc.advance(&mut term, b"\x1b]133;A\x07");
+    assert_eq!(term.semantic_markers.len(), 1);
+    assert_eq!(term.semantic_markers[0].zone, SemanticZone::PromptStart);
+}
+
+// OSC 133;B でコマンド入力開始マーカーが記録される
+#[test]
+fn osc_133_command_start() {
+    let (mut proc, mut term) = make_proc_term(24, 80);
+    proc.advance(&mut term, b"\x1b]133;B\x07");
+    assert_eq!(term.semantic_markers.len(), 1);
+    assert_eq!(term.semantic_markers[0].zone, SemanticZone::CommandStart);
+}
+
+// OSC 133;C でコマンド出力開始マーカーが記録される
+#[test]
+fn osc_133_output_start() {
+    let (mut proc, mut term) = make_proc_term(24, 80);
+    proc.advance(&mut term, b"\x1b]133;C\x07");
+    assert_eq!(term.semantic_markers.len(), 1);
+    assert_eq!(term.semantic_markers[0].zone, SemanticZone::OutputStart);
+}
+
+// OSC 133;D;0 でコマンド終了マーカー（終了コード付き）が記録される
+#[test]
+fn osc_133_command_end_with_exit_code() {
+    // vte の osc_dispatch を直接呼んで検証（vte パーサー経由では ';' でパラメータ分割される）
+    let mut term = Terminal::new(24, 80, 100);
+    term.osc_dispatch(&[b"133", b"D", b"0"], false);
+    assert_eq!(term.semantic_markers.len(), 1);
+    assert_eq!(term.semantic_markers[0].zone, SemanticZone::CommandEnd(Some(0)));
+}
+
+// OSC 133;D（終了コードなし）でコマンド終了マーカーが記録される
+#[test]
+fn osc_133_command_end_no_exit_code() {
+    let mut term = Terminal::new(24, 80, 100);
+    term.osc_dispatch(&[b"133", b"D"], false);
+    assert_eq!(term.semantic_markers.len(), 1);
+    assert_eq!(term.semantic_markers[0].zone, SemanticZone::CommandEnd(None));
+}
+
+// prev_prompt / next_prompt のナビゲーション
+#[test]
+fn prompt_navigation() {
+    let mut term = Terminal::new(24, 80, 100);
+    // 行0, 5, 10 にプロンプトマーカーを配置
+    term.semantic_markers.push(SemanticMarker { line: 0, zone: SemanticZone::PromptStart });
+    term.semantic_markers.push(SemanticMarker { line: 5, zone: SemanticZone::PromptStart });
+    term.semantic_markers.push(SemanticMarker { line: 10, zone: SemanticZone::PromptStart });
+    // カーソルを行7に移動
+    term.grid.cursor.point.line = Line(7);
+    // prev_prompt → 行5
+    assert_eq!(term.prev_prompt(), Some(5));
+    // next_prompt → 行10
+    assert_eq!(term.next_prompt(), Some(10));
+}
+
+// MAX_SEMANTIC_MARKERS を超えた場合に古いマーカーが削除される
+#[test]
+fn semantic_markers_capped() {
+    let (mut proc, mut term) = make_proc_term(24, 80);
+    for _ in 0..10_001 {
+        proc.advance(&mut term, b"\x1b]133;A\x07");
+    }
+    assert!(term.semantic_markers.len() <= 10_000);
+}
+
+// shell_integration_enabled = false のとき OSC 133 マーカーは記録されない
+#[test]
+fn osc_133_disabled_when_shell_integration_off() {
+    let (mut proc, mut term) = make_proc_term(24, 80);
+    term.shell_integration_enabled = false;
+    proc.advance(&mut term, b"\x1b]133;A\x07");
+    assert_eq!(term.semantic_markers.len(), 0);
+}

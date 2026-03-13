@@ -36,6 +36,10 @@ pub enum Action {
     Preferences,
     /// 全テキストを選択する（将来実装）。
     SelectAll,
+    /// 前のプロンプト（OSC 133 シェルインテグレーション）にジャンプする。
+    PrevPrompt,
+    /// 次のプロンプト（OSC 133 シェルインテグレーション）にジャンプする。
+    NextPrompt,
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +161,9 @@ fn macos_default_bindings() -> Vec<KeyBinding> {
         bind("Tab", "ctrl|shift", PrevSession),
         bind("]", "super|shift", NextSession),
         bind("[", "super|shift", PrevSession),
+        // プロンプトジャンプ（OSC 133 シェルインテグレーション）
+        bind("up", "super", PrevPrompt),
+        bind("down", "super", NextPrompt),
         // アプリ
         bind("q", "super", Quit),
         bind(",", "super", Preferences),

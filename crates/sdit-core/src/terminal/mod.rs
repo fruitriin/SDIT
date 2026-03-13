@@ -22,6 +22,36 @@ use crate::index::{Column, Line, Point};
 /// ことを防ぐ。超過分は破棄される。
 const MAX_PENDING_WRITES: usize = 4096;
 
+/// セマンティックマーカーの最大保持数。
+/// 超過した場合は古いマーカーから削除する（メモリ安全性）。
+const MAX_SEMANTIC_MARKERS: usize = 10_000;
+
+// ---------------------------------------------------------------------------
+// ShellIntegration — OSC 133 セマンティックゾーン
+// ---------------------------------------------------------------------------
+
+/// シェルインテグレーション: セマンティックゾーンの種類（OSC 133 / FinalTerm）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SemanticZone {
+    /// プロンプト開始 (OSC 133;A)
+    PromptStart,
+    /// コマンド入力開始（プロンプト終了）(OSC 133;B)
+    CommandStart,
+    /// コマンド出力開始 (OSC 133;C)
+    OutputStart,
+    /// コマンド終了 + 終了コード (OSC 133;D)
+    CommandEnd(Option<i32>),
+}
+
+/// セマンティックマーカー（行番号 + ゾーン種別）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SemanticMarker {
+    /// マーカーが記録された行（viewport 内の行番号として Grid の raw index）。
+    pub line: i32,
+    /// ゾーン種別。
+    pub zone: SemanticZone,
+}
+
 // ---------------------------------------------------------------------------
 // CursorStyle
 // ---------------------------------------------------------------------------
@@ -225,6 +255,13 @@ pub struct Terminal {
     pub kitty_flags: KittyFlagStack,
     /// デスクトップ通知ペンディング（title, body）。OSC 9/99 で設定される。
     pub(super) notification_pending: Option<(String, String)>,
+    /// セマンティックマーカーのリスト（時系列順）。OSC 133 で記録される。
+    pub semantic_markers: Vec<SemanticMarker>,
+    /// OSC 133 シェルインテグレーションを有効にするかどうか。
+    ///
+    /// Config への参照を持たないため、GUI 側（app.rs）で設定して渡す。
+    /// デフォルト: `true`。
+    pub shell_integration_enabled: bool,
 }
 
 impl Terminal {
@@ -251,6 +288,8 @@ impl Terminal {
             current_hyperlink: None,
             kitty_flags: KittyFlagStack::default(),
             notification_pending: None,
+            semantic_markers: Vec::new(),
+            shell_integration_enabled: true,
         }
     }
 
@@ -283,6 +322,8 @@ impl Terminal {
             current_hyperlink: None,
             kitty_flags: KittyFlagStack::default(),
             notification_pending: None,
+            semantic_markers: Vec::new(),
+            shell_integration_enabled: true,
         }
     }
 
@@ -482,6 +523,27 @@ impl Terminal {
         self.grid.cursor.template = Cell::default();
     }
 
+    /// 現在のカーソル行から上方向に最も近い PromptStart マーカーを見つけて、その行番号を返す。
+    pub fn prev_prompt(&self) -> Option<i32> {
+        let current_line = self.grid.cursor.point.line.0;
+        self.semantic_markers
+            .iter()
+            .rev()
+            .filter(|m| m.zone == SemanticZone::PromptStart && m.line < current_line)
+            .map(|m| m.line)
+            .next()
+    }
+
+    /// 現在のカーソル行から下方向に最も近い PromptStart マーカーを見つけて、その行番号を返す。
+    pub fn next_prompt(&self) -> Option<i32> {
+        let current_line = self.grid.cursor.point.line.0;
+        self.semantic_markers
+            .iter()
+            .filter(|m| m.zone == SemanticZone::PromptStart && m.line > current_line)
+            .map(|m| m.line)
+            .next()
+    }
+
     /// Apply a single parsed SGR parameter value to the cursor template.
     pub(super) fn apply_sgr(&mut self, param: u16) {
         let tmpl = &mut self.grid.cursor.template;
@@ -676,6 +738,36 @@ impl Perform for Terminal {
     }
 
     fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
+        // OSC 133: シェルインテグレーション（FinalTerm セマンティックゾーン）。
+        if self.shell_integration_enabled && params.len() >= 2 && params[0] == b"133" {
+            let sub = params[1];
+            let zone = if sub == b"A" {
+                Some(SemanticZone::PromptStart)
+            } else if sub == b"B" {
+                Some(SemanticZone::CommandStart)
+            } else if sub == b"C" {
+                Some(SemanticZone::OutputStart)
+            } else if sub == b"D" {
+                // D の後に ;exit_code が続く場合がある: params[2] に exit code
+                let exit_code = if params.len() >= 3 {
+                    std::str::from_utf8(params[2]).ok().and_then(|s| s.parse::<i32>().ok())
+                } else {
+                    None
+                };
+                Some(SemanticZone::CommandEnd(exit_code))
+            } else {
+                None
+            };
+            if let Some(z) = zone {
+                let line = self.grid.cursor.point.line.0;
+                self.semantic_markers.push(SemanticMarker { line, zone: z });
+                if self.semantic_markers.len() > MAX_SEMANTIC_MARKERS {
+                    self.semantic_markers.remove(0);
+                }
+            }
+            return;
+        }
+
         // OSC 8: ハイパーリンク。
         // リンク開始: \e]8;params;URL\ST  (URL は http:// または https:// のみ)
         // リンク終了: \e]8;;\ST
