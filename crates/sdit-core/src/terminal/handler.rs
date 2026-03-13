@@ -8,7 +8,7 @@ use vte::Params;
 use crate::grid::Dimensions;
 use crate::index::{Column, Line, Point};
 
-use super::{MAX_PENDING_WRITES, TermMode, Terminal};
+use super::{KittyKeyboardFlags, MAX_PENDING_WRITES, TermMode, Terminal};
 
 // ---------------------------------------------------------------------------
 // CSI dispatch
@@ -242,6 +242,31 @@ pub fn csi_dispatch(term: &mut Terminal, params: &Params, intermediates: &[u8], 
                     _ => {}
                 }
             }
+        }
+
+        // ---- Kitty Keyboard Protocol ----
+
+        // CSI > flags u — push keyboard flags
+        'u' if intermediates.first() == Some(&b'>') => {
+            let flags = params.iter().next().and_then(|p| p.first().copied()).unwrap_or(0);
+            let flags = KittyKeyboardFlags::from_raw(flags as u8);
+            term.kitty_flags.push(flags);
+            log::debug!("Kitty keyboard: push flags {}", flags.raw());
+        }
+
+        // CSI < n u — pop N keyboard flags
+        'u' if intermediates.first() == Some(&b'<') => {
+            let n = params.iter().next().and_then(|p| p.first().copied()).unwrap_or(1) as usize;
+            term.kitty_flags.pop(n);
+            log::debug!("Kitty keyboard: pop {} flags", n);
+        }
+
+        // CSI ? u — query current keyboard flags
+        'u' if is_private => {
+            let current = term.kitty_flags.current().raw();
+            let response = format!("\x1b[?{current}u");
+            write_response(term, response.as_bytes());
+            log::debug!("Kitty keyboard: query → {}", current);
         }
 
         _ => {}

@@ -85,6 +85,107 @@ impl TermMode {
 }
 
 // ---------------------------------------------------------------------------
+// Kitty Keyboard Protocol
+// ---------------------------------------------------------------------------
+
+/// Kitty keyboard protocol のプログレッシブエンハンスメントフラグ。
+///
+/// 参照: <https://sw.kovidgoyal.net/kitty/keyboard-protocol/>
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct KittyKeyboardFlags(u8);
+
+impl KittyKeyboardFlags {
+    /// フラグなし（レガシー動作）。
+    pub const NONE: Self = Self(0);
+    /// Bit 0: エスケープコードの曖昧性を解消する。
+    pub const DISAMBIGUATE: u8 = 1;
+    /// Bit 1: イベントタイプ（press/repeat/release）を報告する。
+    pub const REPORT_EVENTS: u8 = 2;
+    /// Bit 2: 代替キーを報告する。
+    pub const REPORT_ALTERNATES: u8 = 4;
+    /// Bit 3: すべてのキーをエスケープコードとして報告する。
+    pub const REPORT_ALL: u8 = 8;
+    /// Bit 4: 関連テキストを報告する。
+    pub const REPORT_ASSOCIATED: u8 = 16;
+
+    /// 生の `u8` 値から生成する（上位ビットはマスクされる）。
+    pub fn from_raw(val: u8) -> Self {
+        Self(val & 0x1f)
+    }
+
+    /// 生の `u8` 値を返す。
+    pub fn raw(self) -> u8 {
+        self.0
+    }
+
+    /// 指定したフラグビットが立っているか返す。
+    pub fn has(self, flag: u8) -> bool {
+        self.0 & flag != 0
+    }
+
+    /// いずれかのフラグが有効かどうか返す。
+    pub fn is_active(self) -> bool {
+        self.0 != 0
+    }
+}
+
+/// Kitty keyboard flags のプッシュ/ポップスタック。
+///
+/// Ghostty と同じく8エントリの固定サイズスタック。
+/// オーバーフロー時は最古のエントリを破棄する。
+#[derive(Debug, Clone)]
+pub struct KittyFlagStack {
+    entries: [KittyKeyboardFlags; 8],
+    len: usize,
+}
+
+impl Default for KittyFlagStack {
+    fn default() -> Self {
+        Self {
+            entries: [KittyKeyboardFlags::NONE; 8],
+            len: 1, // 初期エントリ（NONE）を含む
+        }
+    }
+}
+
+impl KittyFlagStack {
+    /// フラグをスタックにプッシュする。
+    ///
+    /// スタックが満杯（8エントリ）の場合は最古のエントリを破棄してシフトする。
+    pub fn push(&mut self, flags: KittyKeyboardFlags) {
+        if self.len < 8 {
+            self.entries[self.len] = flags;
+            self.len += 1;
+        } else {
+            // オーバーフロー: 先頭を捨ててシフト
+            self.entries.rotate_left(1);
+            self.entries[7] = flags;
+        }
+    }
+
+    /// スタックの先頭から `n` エントリをポップする。
+    ///
+    /// 最低1エントリ（初期エントリ）は常に残る。
+    pub fn pop(&mut self, n: usize) {
+        let new_len = self.len.saturating_sub(n).max(1);
+        for i in new_len..self.len {
+            self.entries[i] = KittyKeyboardFlags::NONE;
+        }
+        self.len = new_len;
+    }
+
+    /// 現在のフラグ（スタックトップ）を返す。
+    pub fn current(&self) -> KittyKeyboardFlags {
+        self.entries[self.len - 1]
+    }
+
+    /// 現在のフラグ（スタックトップ）を上書きする。
+    pub fn set(&mut self, flags: KittyKeyboardFlags) {
+        self.entries[self.len - 1] = flags;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Terminal
 // ---------------------------------------------------------------------------
 
@@ -118,6 +219,8 @@ pub struct Terminal {
     pub(super) clipboard_write_pending: Option<String>,
     /// OSC 8 ハイパーリンク: 現在アクティブな URL。None はリンクなし。
     pub(super) current_hyperlink: Option<Arc<str>>,
+    /// Kitty keyboard protocol フラグスタック。
+    pub kitty_flags: KittyFlagStack,
 }
 
 impl Terminal {
@@ -140,6 +243,7 @@ impl Terminal {
             bell_pending: false,
             clipboard_write_pending: None,
             current_hyperlink: None,
+            kitty_flags: KittyFlagStack::default(),
         }
     }
 
@@ -1128,5 +1232,100 @@ mod tests {
         assert!(term.pending_writes.len() <= MAX_PENDING_WRITES);
         // 少なくとも何かは書き込まれていること。
         assert!(!term.pending_writes.is_empty());
+    }
+
+    // ---------------------------------------------------------------------------
+    // KittyFlagStack テスト
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn kitty_flag_stack_default() {
+        let stack = KittyFlagStack::default();
+        assert_eq!(stack.current(), KittyKeyboardFlags::NONE);
+    }
+
+    #[test]
+    fn kitty_flag_stack_push_pop() {
+        let mut stack = KittyFlagStack::default();
+        stack.push(KittyKeyboardFlags::from_raw(1)); // disambiguate
+        assert_eq!(stack.current().raw(), 1);
+        stack.push(KittyKeyboardFlags::from_raw(3)); // disambiguate + report_events
+        assert_eq!(stack.current().raw(), 3);
+        stack.pop(1);
+        assert_eq!(stack.current().raw(), 1);
+        stack.pop(1);
+        assert_eq!(stack.current(), KittyKeyboardFlags::NONE);
+    }
+
+    #[test]
+    fn kitty_flag_stack_pop_underflow() {
+        let mut stack = KittyFlagStack::default();
+        stack.push(KittyKeyboardFlags::from_raw(1));
+        stack.pop(100); // 大量ポップ
+        // 最低1エントリ（初期エントリ）が残る
+        assert_eq!(stack.current(), KittyKeyboardFlags::NONE);
+    }
+
+    #[test]
+    fn kitty_flag_stack_overflow() {
+        let mut stack = KittyFlagStack::default();
+        for i in 1..=10u8 {
+            stack.push(KittyKeyboardFlags::from_raw(i & 0x1f));
+        }
+        // 最新のフラグ（10 & 0x1f = 10）が残っている
+        assert_eq!(stack.current().raw(), 10);
+    }
+
+    #[test]
+    fn kitty_flags_has() {
+        let flags = KittyKeyboardFlags::from_raw(
+            KittyKeyboardFlags::DISAMBIGUATE | KittyKeyboardFlags::REPORT_EVENTS,
+        );
+        assert!(flags.has(KittyKeyboardFlags::DISAMBIGUATE));
+        assert!(flags.has(KittyKeyboardFlags::REPORT_EVENTS));
+        assert!(!flags.has(KittyKeyboardFlags::REPORT_ALTERNATES));
+        assert!(flags.is_active());
+    }
+
+    #[test]
+    fn kitty_flags_mask() {
+        // 5ビット以上は切り捨てられる
+        let flags = KittyKeyboardFlags::from_raw(0xff);
+        assert_eq!(flags.raw(), 0x1f);
+    }
+
+    // Kitty CSI push/pop/query のシーケンステスト
+    #[test]
+    fn kitty_csi_push_pop_via_sequence() {
+        let (mut proc, mut term) = make_proc_term(24, 80);
+
+        // CSI > 1 u — push DISAMBIGUATE
+        proc.advance(&mut term, b"\x1b[>1u");
+        assert_eq!(term.kitty_flags.current().raw(), 1);
+
+        // CSI > 3 u — push (DISAMBIGUATE | REPORT_EVENTS)
+        proc.advance(&mut term, b"\x1b[>3u");
+        assert_eq!(term.kitty_flags.current().raw(), 3);
+
+        // CSI < 1 u — pop 1
+        proc.advance(&mut term, b"\x1b[<1u");
+        assert_eq!(term.kitty_flags.current().raw(), 1);
+
+        // CSI < 1 u — pop 1 (initial entry)
+        proc.advance(&mut term, b"\x1b[<1u");
+        assert_eq!(term.kitty_flags.current(), KittyKeyboardFlags::NONE);
+    }
+
+    #[test]
+    fn kitty_csi_query_responds() {
+        let (mut proc, mut term) = make_proc_term(24, 80);
+
+        // Push DISAMBIGUATE
+        proc.advance(&mut term, b"\x1b[>1u");
+
+        // CSI ? u — query
+        proc.advance(&mut term, b"\x1b[?u");
+        let response = term.drain_pending_writes().unwrap();
+        assert_eq!(response, b"\x1b[?1u");
     }
 }

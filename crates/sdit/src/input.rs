@@ -3,7 +3,7 @@ use winit::keyboard::{Key, ModifiersState, NamedKey};
 use sdit_core::config::keybinds::{
     Action, KeybindConfig, MOD_BIT_ALT, MOD_BIT_CTRL, MOD_BIT_SHIFT, MOD_BIT_SUPER,
 };
-use sdit_core::terminal::TermMode;
+use sdit_core::terminal::{KittyKeyboardFlags, TermMode};
 
 // ---------------------------------------------------------------------------
 // キーバインド解決
@@ -167,11 +167,57 @@ pub(crate) fn pixel_to_grid(
 // キー入力 → PTY バイト列変換
 // ---------------------------------------------------------------------------
 
+/// Kitty keyboard protocol における修飾キーのエンコーディング。
+///
+/// Kitty 仕様では修飾子は 1-based（1=なし、2=Shift、3=Alt、...）。
+/// ビットフィールド: Shift=1, Alt=2, Ctrl=4, Super=8
+fn kitty_modifiers(mods: ModifiersState) -> u8 {
+    let mut m = 0u8;
+    if mods.shift_key() {
+        m |= 1;
+    }
+    if mods.alt_key() {
+        m |= 2;
+    }
+    if mods.control_key() {
+        m |= 4;
+    }
+    if mods.super_key() {
+        m |= 8;
+    }
+    m
+}
+
+/// Kitty CSI u シーケンスを生成する。
+///
+/// `code`: Unicode コードポイントまたは仮想キーコード
+/// `mods`: Kitty 修飾子ビットフィールド（0=なし）
+/// `suffix`: 通常は `u`、方向キーなどは `A`/`B`/`C`/`D`
+fn kitty_csi(code: u32, mods: u8, suffix: char) -> Vec<u8> {
+    if mods == 0 {
+        // 修飾なし: CSI code suffix（パラメータ省略）
+        format!("\x1b[{code}{suffix}").into_bytes()
+    } else {
+        // 修飾あり: CSI code ; (mods+1) suffix
+        format!("\x1b[{code};{}{suffix}", mods + 1).into_bytes()
+    }
+}
+
 pub(crate) fn key_to_bytes(
     key: &Key,
     modifiers: ModifiersState,
     mode: TermMode,
+    kitty_flags: KittyKeyboardFlags,
 ) -> Option<Vec<u8>> {
+    // Kitty disambiguate モードが有効な場合は CSI u エンコーディングを使用
+    if kitty_flags.has(KittyKeyboardFlags::DISAMBIGUATE) {
+        return key_to_bytes_kitty(key, modifiers, mode);
+    }
+    key_to_bytes_legacy(key, modifiers, mode)
+}
+
+/// レガシーエンコーディング（Kitty 無効時）。
+fn key_to_bytes_legacy(key: &Key, modifiers: ModifiersState, mode: TermMode) -> Option<Vec<u8>> {
     match key {
         Key::Character(s) => {
             let bytes = s.as_bytes();
@@ -242,6 +288,160 @@ pub(crate) fn key_to_bytes(
                 _ => return None,
             };
             Some(s.to_vec())
+        }
+        _ => None,
+    }
+}
+
+/// Kitty keyboard protocol エンコーディング（`disambiguate` フラグ有効時）。
+///
+/// 修飾なしの通常キー（Enter, Tab, Backspace 等）はレガシー互換シーケンスを返す。
+/// 修飾子がある場合または特殊キーは CSI u 形式を使用する。
+fn key_to_bytes_kitty(key: &Key, modifiers: ModifiersState, _mode: TermMode) -> Option<Vec<u8>> {
+    let km = kitty_modifiers(modifiers);
+
+    match key {
+        Key::Character(s) => {
+            let bytes = s.as_bytes();
+            if bytes.is_empty() {
+                return None;
+            }
+            // 単一 ASCII 文字の場合のみ Kitty エンコーディングを適用
+            if bytes.len() == 1 && bytes[0].is_ascii() {
+                let ch = bytes[0] as u32;
+
+                // Ctrl が押されている場合: CSI u を使用
+                if modifiers.control_key() {
+                    // Ctrl+A〜Z のみ CSI u で送る
+                    let base_char = if bytes[0].is_ascii_lowercase() {
+                        bytes[0]
+                    } else if bytes[0].is_ascii_uppercase() {
+                        bytes[0].to_ascii_lowercase()
+                    } else {
+                        bytes[0]
+                    };
+                    if base_char.is_ascii_alphabetic() {
+                        return Some(kitty_csi(base_char.to_ascii_lowercase() as u32, km, 'u'));
+                    }
+                    // その他の制御文字はレガシー
+                    let ctrl_byte = if bytes[0].is_ascii_lowercase() {
+                        bytes[0] - b'a' + 1
+                    } else if bytes[0].is_ascii_uppercase() {
+                        bytes[0] - b'A' + 1
+                    } else {
+                        bytes[0]
+                    };
+                    return Some(vec![ctrl_byte]);
+                }
+
+                // 修飾子なしの場合はレガシー（文字そのまま）
+                if km == 0 {
+                    // Alt → ESC prefix はレガシーと同じ
+                    return Some(bytes.to_vec());
+                }
+
+                // Alt + 文字 は ESC prefix（レガシー互換）
+                if modifiers.alt_key() && !modifiers.control_key() && !modifiers.shift_key() {
+                    let mut result = vec![0x1b];
+                    result.extend_from_slice(bytes);
+                    return Some(result);
+                }
+
+                // Shift + 文字: CSI u で Unicode コードポイントを送る
+                return Some(kitty_csi(ch, km, 'u'));
+            }
+            // マルチバイト文字は修飾なしならそのまま
+            if km == 0 {
+                return Some(bytes.to_vec());
+            }
+            None
+        }
+        Key::Named(named) => {
+            // 修飾なしの特殊キーはレガシー互換を維持
+            match named {
+                NamedKey::Enter => {
+                    if km == 0 {
+                        return Some(b"\r".to_vec());
+                    }
+                    return Some(kitty_csi(13, km, 'u'));
+                }
+                NamedKey::Tab => {
+                    if km == 0 {
+                        return Some(b"\t".to_vec());
+                    }
+                    return Some(kitty_csi(9, km, 'u'));
+                }
+                NamedKey::Backspace => {
+                    if km == 0 {
+                        return Some(b"\x7f".to_vec());
+                    }
+                    return Some(kitty_csi(127, km, 'u'));
+                }
+                NamedKey::Escape => {
+                    if km == 0 {
+                        return Some(b"\x1b".to_vec());
+                    }
+                    return Some(kitty_csi(27, km, 'u'));
+                }
+                // 方向キー: CSI 1 ; mods {A,B,C,D}
+                NamedKey::ArrowUp => {
+                    return Some(kitty_csi(1, km, 'A'));
+                }
+                NamedKey::ArrowDown => {
+                    return Some(kitty_csi(1, km, 'B'));
+                }
+                NamedKey::ArrowRight => {
+                    return Some(kitty_csi(1, km, 'C'));
+                }
+                NamedKey::ArrowLeft => {
+                    return Some(kitty_csi(1, km, 'D'));
+                }
+                // ナビゲーションキー: CSI code ; mods ~
+                NamedKey::Insert => {
+                    return Some(kitty_csi(2, km, '~'));
+                }
+                NamedKey::Delete => {
+                    return Some(kitty_csi(3, km, '~'));
+                }
+                NamedKey::Home => {
+                    if km == 0 {
+                        return Some(b"\x1b[H".to_vec());
+                    }
+                    return Some(kitty_csi(1, km, 'H'));
+                }
+                NamedKey::End => {
+                    if km == 0 {
+                        return Some(b"\x1b[F".to_vec());
+                    }
+                    return Some(kitty_csi(1, km, 'F'));
+                }
+                NamedKey::PageUp => {
+                    return Some(kitty_csi(5, km, '~'));
+                }
+                NamedKey::PageDown => {
+                    return Some(kitty_csi(6, km, '~'));
+                }
+                NamedKey::Space => {
+                    if km == 0 {
+                        return Some(b" ".to_vec());
+                    }
+                    return Some(kitty_csi(32, km, 'u'));
+                }
+                // ファンクションキー
+                NamedKey::F1 => return Some(kitty_csi(1, km, 'P')),
+                NamedKey::F2 => return Some(kitty_csi(1, km, 'Q')),
+                NamedKey::F3 => return Some(kitty_csi(1, km, 'R')),
+                NamedKey::F4 => return Some(kitty_csi(1, km, 'S')),
+                NamedKey::F5 => return Some(kitty_csi(15, km, '~')),
+                NamedKey::F6 => return Some(kitty_csi(17, km, '~')),
+                NamedKey::F7 => return Some(kitty_csi(18, km, '~')),
+                NamedKey::F8 => return Some(kitty_csi(19, km, '~')),
+                NamedKey::F9 => return Some(kitty_csi(20, km, '~')),
+                NamedKey::F10 => return Some(kitty_csi(21, km, '~')),
+                NamedKey::F11 => return Some(kitty_csi(23, km, '~')),
+                NamedKey::F12 => return Some(kitty_csi(24, km, '~')),
+                _ => return None,
+            }
         }
         _ => None,
     }
@@ -470,5 +670,135 @@ mod tests {
         assert!(has_zoom_in, "ZoomIn バインディングが存在しない");
         assert!(has_zoom_out, "ZoomOut バインディングが存在しない");
         assert!(has_zoom_reset, "ZoomReset バインディングが存在しない");
+    }
+
+    // ---------------------------------------------------------------------------
+    // Kitty keyboard encoding テスト
+    // ---------------------------------------------------------------------------
+
+    fn no_mods() -> ModifiersState {
+        ModifiersState::empty()
+    }
+
+    fn kitty_mode() -> KittyKeyboardFlags {
+        KittyKeyboardFlags::from_raw(KittyKeyboardFlags::DISAMBIGUATE)
+    }
+
+    fn legacy_mode() -> KittyKeyboardFlags {
+        KittyKeyboardFlags::NONE
+    }
+
+    #[test]
+    fn kitty_disabled_uses_legacy_enter() {
+        // kitty_flags が NONE なら Enter は \r
+        let result = key_to_bytes(
+            &Key::Named(NamedKey::Enter),
+            no_mods(),
+            TermMode::default(),
+            legacy_mode(),
+        );
+        assert_eq!(result, Some(b"\r".to_vec()));
+    }
+
+    #[test]
+    fn kitty_disabled_uses_legacy_arrow() {
+        // Kitty なし: Up は CSI A
+        let result = key_to_bytes(
+            &Key::Named(NamedKey::ArrowUp),
+            no_mods(),
+            TermMode::default(),
+            legacy_mode(),
+        );
+        assert_eq!(result, Some(b"\x1b[A".to_vec()));
+    }
+
+    #[test]
+    fn kitty_enter_no_mods_is_legacy() {
+        // Kitty mode でも修飾なし Enter は \r
+        let result = key_to_bytes(
+            &Key::Named(NamedKey::Enter),
+            no_mods(),
+            TermMode::default(),
+            kitty_mode(),
+        );
+        assert_eq!(result, Some(b"\r".to_vec()));
+    }
+
+    #[test]
+    fn kitty_arrow_up_no_mods() {
+        // Kitty mode で Up は CSI 1A（修飾なし）
+        let result = key_to_bytes(
+            &Key::Named(NamedKey::ArrowUp),
+            no_mods(),
+            TermMode::default(),
+            kitty_mode(),
+        );
+        assert_eq!(result, Some(b"\x1b[1A".to_vec()));
+    }
+
+    #[test]
+    fn kitty_arrow_up_shift() {
+        // Kitty mode で Shift+Up は CSI 1;2A
+        let result = key_to_bytes(
+            &Key::Named(NamedKey::ArrowUp),
+            ModifiersState::SHIFT,
+            TermMode::default(),
+            kitty_mode(),
+        );
+        assert_eq!(result, Some(b"\x1b[1;2A".to_vec()));
+    }
+
+    #[test]
+    fn kitty_enter_with_ctrl() {
+        // Kitty mode で Ctrl+Enter は CSI 13;5u
+        let result = key_to_bytes(
+            &Key::Named(NamedKey::Enter),
+            ModifiersState::CONTROL,
+            TermMode::default(),
+            kitty_mode(),
+        );
+        // mods=4 (ctrl), m+1=5
+        assert_eq!(result, Some(b"\x1b[13;5u".to_vec()));
+    }
+
+    #[test]
+    fn kitty_backspace_with_alt() {
+        // Kitty mode で Alt+Backspace は CSI 127;3u
+        let result = key_to_bytes(
+            &Key::Named(NamedKey::Backspace),
+            ModifiersState::ALT,
+            TermMode::default(),
+            kitty_mode(),
+        );
+        // mods=2 (alt), m+1=3
+        assert_eq!(result, Some(b"\x1b[127;3u".to_vec()));
+    }
+
+    #[test]
+    fn kitty_f1_no_mods() {
+        // Kitty mode で F1 は CSI 1P
+        let result =
+            key_to_bytes(&Key::Named(NamedKey::F1), no_mods(), TermMode::default(), kitty_mode());
+        assert_eq!(result, Some(b"\x1b[1P".to_vec()));
+    }
+
+    #[test]
+    fn kitty_f5_no_mods() {
+        // Kitty mode で F5 は CSI 15~
+        let result =
+            key_to_bytes(&Key::Named(NamedKey::F5), no_mods(), TermMode::default(), kitty_mode());
+        assert_eq!(result, Some(b"\x1b[15~".to_vec()));
+    }
+
+    #[test]
+    fn kitty_delete_with_ctrl() {
+        // Kitty mode で Ctrl+Delete は CSI 3;5~
+        let result = key_to_bytes(
+            &Key::Named(NamedKey::Delete),
+            ModifiersState::CONTROL,
+            TermMode::default(),
+            kitty_mode(),
+        );
+        assert_eq!(result, Some(b"\x1b[3;5~".to_vec()));
     }
 }

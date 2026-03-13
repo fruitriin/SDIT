@@ -165,12 +165,13 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         return;
                     };
 
-                    let mode = session
-                        .term_state
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner)
-                        .terminal
-                        .mode();
+                    let (mode, kitty_flags) = {
+                        let state = session
+                            .term_state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        (state.terminal.mode(), state.terminal.kitty_flags.current())
+                    };
 
                     // Shift+PageUp / Shift+PageDown でビューポートスクロール
                     if self.modifiers.shift_key() {
@@ -203,7 +204,8 @@ impl ApplicationHandler<SditEvent> for SditApp {
                     // キー入力時に選択を解除
                     self.selection = None;
 
-                    if let Some(bytes) = key_to_bytes(&key_event.logical_key, self.modifiers, mode)
+                    if let Some(bytes) =
+                        key_to_bytes(&key_event.logical_key, self.modifiers, mode, kitty_flags)
                     {
                         if let Err(e) = session.pty_io.write_tx.try_send(bytes) {
                             log::warn!("PTY write channel full or closed: {e}");
