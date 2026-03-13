@@ -666,10 +666,8 @@ impl Perform for Terminal {
         if params.len() >= 2 && params[0] == b"9" {
             const MAX_NOTIFY_BYTES: usize = 4096;
             let raw = params[1];
-            let capped = if raw.len() > MAX_NOTIFY_BYTES { &raw[..MAX_NOTIFY_BYTES] } else { raw };
-            if let Ok(body) = std::str::from_utf8(capped) {
-                self.notification_pending = Some(("SDIT".to_string(), body.to_string()));
-            }
+            let body = sanitize_notification_text(truncate_utf8(raw, MAX_NOTIFY_BYTES));
+            self.notification_pending = Some(("SDIT".to_string(), body));
         }
 
         // OSC 99: Kitty 互換デスクトップ通知。
@@ -677,10 +675,8 @@ impl Perform for Terminal {
         if params.len() >= 2 && params[0] == b"99" {
             const MAX_NOTIFY_BYTES: usize = 4096;
             let raw = params[1];
-            let capped = if raw.len() > MAX_NOTIFY_BYTES { &raw[..MAX_NOTIFY_BYTES] } else { raw };
-            if let Ok(body) = std::str::from_utf8(capped) {
-                self.notification_pending = Some(("SDIT".to_string(), body.to_string()));
-            }
+            let body = sanitize_notification_text(truncate_utf8(raw, MAX_NOTIFY_BYTES));
+            self.notification_pending = Some(("SDIT".to_string(), body));
         }
 
         // OSC 52: クリップボード操作。
@@ -738,6 +734,22 @@ impl Default for Processor {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// 通知テキストから制御文字を除去する（改行・タブは保持）。
+fn sanitize_notification_text(s: &str) -> String {
+    s.chars().filter(|c| !c.is_control() || *c == '\n' || *c == '\t').collect()
+}
+
+/// バイト列を最大 `max_bytes` バイトで切り詰め、UTF-8 境界に合わせて返す。
+///
+/// マルチバイト文字の途中で切れた場合は、有効な部分までを返す。
+fn truncate_utf8(s: &[u8], max_bytes: usize) -> &str {
+    let capped = if s.len() > max_bytes { &s[..max_bytes] } else { s };
+    match std::str::from_utf8(capped) {
+        Ok(s) => s,
+        Err(e) => std::str::from_utf8(&capped[..e.valid_up_to()]).unwrap_or(""),
+    }
+}
 
 /// Build a tab-stop vector for `columns` columns (stops every 8 characters).
 fn build_tabs(columns: usize) -> Vec<bool> {
@@ -1436,5 +1448,29 @@ mod tests {
         let second = term.take_notification();
         assert!(first.is_some());
         assert!(second.is_none());
+    }
+
+    #[test]
+    fn osc_9_notification_sanitizes_control_chars() {
+        let mut term = Terminal::new(24, 80, 1000);
+        term.osc_dispatch(&[b"9", b"Hello\x00\x01\x07World"], false);
+        let (_, body) = term.take_notification().unwrap();
+        assert!(!body.contains('\x00'));
+        assert!(!body.contains('\x01'));
+        assert!(!body.contains('\x07'));
+        assert!(body.contains("Hello"));
+        assert!(body.contains("World"));
+    }
+
+    #[test]
+    fn osc_9_notification_truncates_utf8_safely() {
+        let mut term = Terminal::new(24, 80, 1000);
+        // 日本語テキスト（3バイト/文字）を大量に送って切り詰める
+        let long_body = "あ".repeat(2000); // 6000 bytes > 4096
+        term.osc_dispatch(&[b"9", long_body.as_bytes()], false);
+        let (_, body) = term.take_notification().unwrap();
+        assert!(body.len() <= 4096);
+        // UTF-8 として有効であることを確認
+        assert!(std::str::from_utf8(body.as_bytes()).is_ok());
     }
 }

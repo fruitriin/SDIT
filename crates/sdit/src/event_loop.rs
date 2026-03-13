@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
@@ -842,17 +844,32 @@ impl ApplicationHandler<SditEvent> for SditApp {
             }
             SditEvent::DesktopNotification { title, body } => {
                 if self.config.notification.enabled {
-                    // バックグラウンドスレッドで通知送信（イベントループをブロックしない）
-                    std::thread::Builder::new()
-                        .name("desktop-notify".to_string())
-                        .spawn(move || {
-                            if let Err(e) =
-                                notify_rust::Notification::new().summary(&title).body(&body).show()
-                            {
-                                log::warn!("Desktop notification failed: {e}");
-                            }
-                        })
-                        .ok();
+                    // バックグラウンドスレッドで通知送信（イベントループをブロックしない）。
+                    // AtomicBool でレート制限: 前の通知スレッドが完了するまで新規スレッドを立ち上げない。
+                    let in_flight = Arc::clone(&self.notification_in_flight);
+                    if in_flight
+                        .compare_exchange(
+                            false,
+                            true,
+                            std::sync::atomic::Ordering::Acquire,
+                            std::sync::atomic::Ordering::Relaxed,
+                        )
+                        .is_ok()
+                    {
+                        std::thread::Builder::new()
+                            .name("desktop-notify".to_string())
+                            .spawn(move || {
+                                if let Err(e) = notify_rust::Notification::new()
+                                    .summary(&title)
+                                    .body(&body)
+                                    .show()
+                                {
+                                    log::warn!("Desktop notification failed: {e}");
+                                }
+                                in_flight.store(false, std::sync::atomic::Ordering::Release);
+                            })
+                            .ok();
+                    }
                 }
             }
             SditEvent::MenuAction(action) => {

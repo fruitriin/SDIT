@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
@@ -248,6 +249,8 @@ pub(crate) struct SditApp {
     pub(crate) search: Option<SearchState>,
     /// 設定全体（キーバインド等）。
     pub(crate) config: sdit_core::config::Config,
+    /// 通知スレッドが飛行中かどうか（レート制限：同時に複数スレッドを立ち上げない）。
+    pub(crate) notification_in_flight: Arc<AtomicBool>,
     /// メニューバー + コンテキストメニューの共有 `MenuId` マップ。
     /// `MenuEvent` ハンドラのクロージャが `Arc` クローンを保持するため、
     /// フィールドとしては直接読まれないが、ドロップ防止のため保持する。
@@ -299,6 +302,7 @@ impl SditApp {
             hovered_url: None,
             search: None,
             config: config.clone(),
+            notification_in_flight: Arc::new(AtomicBool::new(false)),
             #[cfg(target_os = "macos")]
             menu_actions: menu_actions.clone(),
             #[cfg(target_os = "macos")]
