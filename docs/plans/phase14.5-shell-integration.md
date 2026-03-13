@@ -2,7 +2,25 @@
 
 **概要**: OSC 133 シーケンスでシェルのプロンプト境界を検出し、プロンプト間ジャンプやコマンド出力の選択を可能にする。
 
-**状態**: 未着手
+**状態**: **完了**
+
+## 実装結果
+
+- `SemanticZone` enum + `SemanticMarker` struct を `terminal/mod.rs` に追加
+- `osc_dispatch` で OSC 133 A/B/C/D を解釈（`terminal/mod.rs`）
+- `VecDeque<SemanticMarker>` で時系列順にマーカーを記録（上限 10,000）
+- `prev_prompt()` / `next_prompt()` メソッドでプロンプト間ナビゲーション
+- `ShellIntegrationConfig { enabled: bool }` を `config/mod.rs` に追加
+- `Action::PrevPrompt` / `Action::NextPrompt` キーバインド（Cmd+Up/Down）
+- テスト 7件追加（パース4件 + ナビゲーション1件 + キャップ1件 + 無効化1件）
+
+### セキュリティレビュー結果
+
+| 重要度 | ID | 内容 | 対応 |
+|---|---|---|---|
+| Medium | M-1 | `Vec::remove(0)` は O(n) → DoS リスク | `VecDeque` + `pop_front()` に修正済み |
+| Low | L-1 | exit_code が未バリデーション | `clamp(0, 255)` 追加済み |
+| Low | L-2 | マーカーの line フィールドがカーソル行のみ | Plan に記録（将来改善） |
 
 ## 背景
 
@@ -24,11 +42,11 @@
 
 | タスク | 詳細 | 変更先 | 状態 |
 |---|---|---|---|
-| SemanticZone 型 | PromptStart/CommandStart/OutputStart/CommandEnd(exit_code) | sdit-core (`terminal/mod.rs`) | 未着手 |
-| OSC 133 パーサー | osc_dispatch で A/B/C/D を解釈 | sdit-core (`terminal/handler.rs`) | 未着手 |
-| ゾーンマーカー記録 | Grid の各行にゾーン情報を保持 | sdit-core (`grid/mod.rs`) | 未着手 |
-| プロンプトジャンプ | Cmd+Up/Down でプロンプト間を移動 | sdit (`input.rs`, `event_loop.rs`) | 未着手 |
-| テスト | OSC 133 パース 4件 + ゾーン記録 2件 | sdit-core | 未着手 |
+| SemanticZone 型 | PromptStart/CommandStart/OutputStart/CommandEnd(exit_code) | sdit-core (`terminal/mod.rs`) | **完了** |
+| OSC 133 パーサー | osc_dispatch で A/B/C/D を解釈 | sdit-core (`terminal/mod.rs`) | **完了** |
+| ゾーンマーカー記録 | VecDeque でマーカー記録（上限10K） | sdit-core (`terminal/mod.rs`) | **完了** |
+| プロンプトジャンプ | Cmd+Up/Down でプロンプト間を移動 | sdit (`event_loop.rs`, `config/keybinds.rs`) | **完了** |
+| テスト | OSC 133 パース 4件 + ナビゲーション + キャップ + 無効化 | sdit-core | **完了** |
 
 ## 設定例
 
