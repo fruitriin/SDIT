@@ -729,9 +729,9 @@ fn osc_133_command_end_no_exit_code() {
 fn prompt_navigation() {
     let mut term = Terminal::new(24, 80, 100);
     // 行0, 5, 10 にプロンプトマーカーを配置
-    term.semantic_markers.push(SemanticMarker { line: 0, zone: SemanticZone::PromptStart });
-    term.semantic_markers.push(SemanticMarker { line: 5, zone: SemanticZone::PromptStart });
-    term.semantic_markers.push(SemanticMarker { line: 10, zone: SemanticZone::PromptStart });
+    term.semantic_markers.push_back(SemanticMarker { line: 0, zone: SemanticZone::PromptStart });
+    term.semantic_markers.push_back(SemanticMarker { line: 5, zone: SemanticZone::PromptStart });
+    term.semantic_markers.push_back(SemanticMarker { line: 10, zone: SemanticZone::PromptStart });
     // カーソルを行7に移動
     term.grid.cursor.point.line = Line(7);
     // prev_prompt → 行5

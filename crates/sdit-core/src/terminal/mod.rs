@@ -8,6 +8,7 @@ pub mod handler;
 pub mod search;
 pub mod url_detector;
 
+use std::collections::VecDeque;
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -256,7 +257,7 @@ pub struct Terminal {
     /// デスクトップ通知ペンディング（title, body）。OSC 9/99 で設定される。
     pub(super) notification_pending: Option<(String, String)>,
     /// セマンティックマーカーのリスト（時系列順）。OSC 133 で記録される。
-    pub semantic_markers: Vec<SemanticMarker>,
+    pub semantic_markers: VecDeque<SemanticMarker>,
     /// OSC 133 シェルインテグレーションを有効にするかどうか。
     ///
     /// Config への参照を持たないため、GUI 側（app.rs）で設定して渡す。
@@ -288,7 +289,7 @@ impl Terminal {
             current_hyperlink: None,
             kitty_flags: KittyFlagStack::default(),
             notification_pending: None,
-            semantic_markers: Vec::new(),
+            semantic_markers: VecDeque::new(),
             shell_integration_enabled: true,
         }
     }
@@ -322,7 +323,7 @@ impl Terminal {
             current_hyperlink: None,
             kitty_flags: KittyFlagStack::default(),
             notification_pending: None,
-            semantic_markers: Vec::new(),
+            semantic_markers: VecDeque::new(),
             shell_integration_enabled: true,
         }
     }
@@ -750,7 +751,10 @@ impl Perform for Terminal {
             } else if sub == b"D" {
                 // D の後に ;exit_code が続く場合がある: params[2] に exit code
                 let exit_code = if params.len() >= 3 {
-                    std::str::from_utf8(params[2]).ok().and_then(|s| s.parse::<i32>().ok())
+                    std::str::from_utf8(params[2])
+                        .ok()
+                        .and_then(|s| s.parse::<i32>().ok())
+                        .map(|c| c.clamp(0, 255))
                 } else {
                     None
                 };
@@ -760,9 +764,9 @@ impl Perform for Terminal {
             };
             if let Some(z) = zone {
                 let line = self.grid.cursor.point.line.0;
-                self.semantic_markers.push(SemanticMarker { line, zone: z });
+                self.semantic_markers.push_back(SemanticMarker { line, zone: z });
                 if self.semantic_markers.len() > MAX_SEMANTIC_MARKERS {
-                    self.semantic_markers.remove(0);
+                    self.semantic_markers.pop_front();
                 }
             }
             return;
