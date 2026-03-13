@@ -248,15 +248,19 @@ pub fn csi_dispatch(term: &mut Terminal, params: &Params, intermediates: &[u8], 
 
         // CSI > flags u — push keyboard flags
         'u' if intermediates.first() == Some(&b'>') => {
-            let flags = params.iter().next().and_then(|p| p.first().copied()).unwrap_or(0);
-            let flags = KittyKeyboardFlags::from_raw(flags as u8);
+            let flags_raw = params.iter().next().and_then(|p| p.first().copied()).unwrap_or(0);
+            if flags_raw > 0x1f {
+                log::debug!("Kitty keyboard: invalid flags value {flags_raw}, clamping to 0x1f");
+            }
+            let flags = KittyKeyboardFlags::from_raw((flags_raw & 0x1f) as u8);
             term.kitty_flags.push(flags);
             log::debug!("Kitty keyboard: push flags {}", flags.raw());
         }
 
         // CSI < n u — pop N keyboard flags
         'u' if intermediates.first() == Some(&b'<') => {
-            let n = params.iter().next().and_then(|p| p.first().copied()).unwrap_or(1) as usize;
+            let n = params.iter().next().and_then(|p| p.first().copied()).unwrap_or(1);
+            let n = (n as usize).clamp(1, 8);
             term.kitty_flags.pop(n);
             log::debug!("Kitty keyboard: pop {} flags", n);
         }

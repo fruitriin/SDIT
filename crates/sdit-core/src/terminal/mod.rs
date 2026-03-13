@@ -132,7 +132,7 @@ impl KittyKeyboardFlags {
 /// Kitty keyboard flags のプッシュ/ポップスタック。
 ///
 /// Ghostty と同じく8エントリの固定サイズスタック。
-/// オーバーフロー時は最古のエントリを破棄する。
+/// オーバーフロー時はプッシュを無視する（サイレント失敗）。
 #[derive(Debug, Clone)]
 pub struct KittyFlagStack {
     entries: [KittyKeyboardFlags; 8],
@@ -151,15 +151,13 @@ impl Default for KittyFlagStack {
 impl KittyFlagStack {
     /// フラグをスタックにプッシュする。
     ///
-    /// スタックが満杯（8エントリ）の場合は最古のエントリを破棄してシフトする。
+    /// スタックが満杯（8エントリ）の場合はプッシュを無視する。
     pub fn push(&mut self, flags: KittyKeyboardFlags) {
         if self.len < 8 {
             self.entries[self.len] = flags;
             self.len += 1;
         } else {
-            // オーバーフロー: 先頭を捨ててシフト
-            self.entries.rotate_left(1);
-            self.entries[7] = flags;
+            log::debug!("Kitty flag stack full, ignoring push");
         }
     }
 
@@ -1269,11 +1267,15 @@ mod tests {
     #[test]
     fn kitty_flag_stack_overflow() {
         let mut stack = KittyFlagStack::default();
-        for i in 1..=10u8 {
+        // デフォルトで len=1 なので、あと7エントリまでプッシュ可能
+        for i in 1..=7u8 {
             stack.push(KittyKeyboardFlags::from_raw(i & 0x1f));
         }
-        // 最新のフラグ（10 & 0x1f = 10）が残っている
-        assert_eq!(stack.current().raw(), 10);
+        // スタックが満杯（8エントリ）の状態で追加プッシュは無視される
+        stack.push(KittyKeyboardFlags::from_raw(0x1f));
+        stack.push(KittyKeyboardFlags::from_raw(0x1f));
+        // 最後に正常プッシュしたフラグ（7 & 0x1f = 7）が残っている
+        assert_eq!(stack.current().raw(), 7);
     }
 
     #[test]
@@ -1313,6 +1315,29 @@ mod tests {
 
         // CSI < 1 u — pop 1 (initial entry)
         proc.advance(&mut term, b"\x1b[<1u");
+        assert_eq!(term.kitty_flags.current(), KittyKeyboardFlags::NONE);
+    }
+
+    #[test]
+    fn kitty_csi_push_invalid_flags_clamped() {
+        let (mut proc, mut term) = make_proc_term(24, 80);
+
+        // CSI > 0xff u — flags_raw=255 (>0x1f) はクランプされて 0x1f になる
+        proc.advance(&mut term, b"\x1b[>255u");
+        assert_eq!(term.kitty_flags.current().raw(), 0x1f);
+    }
+
+    #[test]
+    fn kitty_csi_pop_large_n_clamped() {
+        let (mut proc, mut term) = make_proc_term(24, 80);
+
+        // スタックに2エントリ積む
+        proc.advance(&mut term, b"\x1b[>1u");
+        proc.advance(&mut term, b"\x1b[>3u");
+
+        // CSI < 65535 u — n が上限8にクランプされるため安全にポップ
+        proc.advance(&mut term, b"\x1b[<65535u");
+        // 最低1エントリ（初期エントリ）が残る
         assert_eq!(term.kitty_flags.current(), KittyKeyboardFlags::NONE);
     }
 
