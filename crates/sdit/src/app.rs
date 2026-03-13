@@ -56,6 +56,55 @@ impl SearchState {
 }
 
 // ---------------------------------------------------------------------------
+// QuickSelect 状態
+// ---------------------------------------------------------------------------
+
+/// QuickSelect のヒント1件分。
+#[derive(Debug, Clone)]
+pub(crate) struct QuickSelectHint {
+    /// ヒントラベル（"a", "s", "aa" など）。
+    pub(crate) label: String,
+    /// ビューポート行番号（0-indexed）。
+    pub(crate) row: usize,
+    /// マッチ開始列（0-indexed）。
+    pub(crate) start_col: usize,
+    /// マッチ終了列（0-indexed, exclusive）。
+    pub(crate) end_col: usize,
+    /// マッチしたテキスト。
+    pub(crate) text: String,
+}
+
+/// QuickSelect モードの状態。
+#[derive(Debug, Clone)]
+pub(crate) struct QuickSelectState {
+    /// 全ヒントのリスト。
+    pub(crate) hints: Vec<QuickSelectHint>,
+    /// ユーザーが入力中のヒント文字列。
+    pub(crate) input: String,
+}
+
+impl QuickSelectState {
+    /// ヒントラベルを生成する（a-z、次いで aa-az、ba-bz...）。
+    pub(crate) fn generate_label(index: usize) -> String {
+        const CHARS: &[u8] = b"asdfghjklqwertyuiopzxcvbnm";
+        let n = CHARS.len();
+        if index < n {
+            String::from(CHARS[index] as char)
+        } else {
+            let idx = index - n;
+            let hi = idx / n;
+            let lo = idx % n;
+            if hi < n {
+                format!("{}{}", CHARS[hi] as char, CHARS[lo] as char)
+            } else {
+                // 26*26 + 26 = 702個を超える場合（実用上まず起きない）
+                format!("{index}")
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // IME プリエディット状態
 // ---------------------------------------------------------------------------
 
@@ -247,6 +296,8 @@ pub(crate) struct SditApp {
     pub(crate) hovered_url: Option<UrlHoverState>,
     /// 検索バーの状態。None = 検索バー非表示。
     pub(crate) search: Option<SearchState>,
+    /// QuickSelect モードの状態。None = 非アクティブ。
+    pub(crate) quick_select: Option<QuickSelectState>,
     /// 設定全体（キーバインド等）。
     pub(crate) config: sdit_core::config::Config,
     /// 通知スレッドが飛行中かどうか（レート制限：同時に複数スレッドを立ち上げない）。
@@ -301,6 +352,7 @@ impl SditApp {
             url_detector: UrlDetector::new(),
             hovered_url: None,
             search: None,
+            quick_select: None,
             config: config.clone(),
             notification_in_flight: Arc::new(AtomicBool::new(false)),
             #[cfg(target_os = "macos")]
@@ -909,5 +961,34 @@ mod tests {
         let s = String::from_utf8(bytes).unwrap();
         assert!(s.starts_with("\x1b[200~"), "ブラケット開始シーケンスがない: {s:?}");
         assert!(s.contains("ab"), "テキスト本体がない: {s:?}");
+    }
+
+    // -----------------------------------------------------------------------
+    // QuickSelectState のテスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn hint_label_generation() {
+        // 最初の26ラベルは1文字
+        assert_eq!(QuickSelectState::generate_label(0), "a");
+        assert_eq!(QuickSelectState::generate_label(1), "s");
+        assert_eq!(QuickSelectState::generate_label(25), "m"); // 26番目の文字
+    }
+
+    #[test]
+    fn hint_label_two_chars() {
+        // 26個以上のマッチで2文字ラベルが生成されること
+        let label_26 = QuickSelectState::generate_label(26);
+        assert_eq!(label_26.chars().count(), 2, "26番目のラベルは2文字: {label_26}");
+        let label_27 = QuickSelectState::generate_label(27);
+        assert_eq!(label_27.chars().count(), 2, "27番目のラベルは2文字: {label_27}");
+    }
+
+    #[test]
+    fn hint_labels_are_unique() {
+        // 最初の52ラベルがすべて異なること
+        let labels: Vec<String> = (0..52).map(QuickSelectState::generate_label).collect();
+        let unique: std::collections::HashSet<&str> = labels.iter().map(|s| s.as_str()).collect();
+        assert_eq!(unique.len(), 52, "ラベルに重複がある: {labels:?}");
     }
 }

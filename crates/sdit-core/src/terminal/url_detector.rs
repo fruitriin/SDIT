@@ -1,6 +1,7 @@
 //! URL 検出モジュール。
 //!
 //! OSC 8 ハイパーリンク優先で、なければ正規表現でセル行中の URL を検出する。
+//! また、QuickSelect 用の汎用パターンマッチングも提供する。
 
 use regex::Regex;
 
@@ -14,6 +15,17 @@ pub struct UrlMatch {
     /// URL が始まる列位置（0-indexed）。
     pub start_col: usize,
     /// URL が終わる列位置（0-indexed, exclusive）。
+    pub end_col: usize,
+}
+
+/// 汎用パターンマッチ結果（QuickSelect 用）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PatternMatch {
+    /// マッチしたテキスト文字列。
+    pub text: String,
+    /// マッチが始まる列位置（0-indexed）。
+    pub start_col: usize,
+    /// マッチが終わる列位置（0-indexed, exclusive）。
     pub end_col: usize,
 }
 
@@ -73,6 +85,68 @@ impl Default for UrlDetector {
     fn default() -> Self {
         Self::new()
     }
+}
+
+// ---------------------------------------------------------------------------
+// QuickSelect パターン検出
+// ---------------------------------------------------------------------------
+
+/// デフォルトの QuickSelect パターン一覧を返す。
+///
+/// URL（https?://...）、Unix ファイルパス（/...）、git ハッシュ（7-40桁の16進数）、
+/// 数値（IP アドレス含む）を対象とする。
+pub fn default_quick_select_patterns() -> Vec<Regex> {
+    vec![
+        // URL
+        Regex::new(r#"https?://[^\s<>"{}|\\^\[\]]*[^\s<>"{}|\\^\[\].,;:!?'()]"#)
+            .expect("URL pattern compile failed"),
+        // Unix ファイルパス（/ で始まり空白以外の文字列）
+        Regex::new(r"/[^\s]+").expect("file path pattern compile failed"),
+        // git ハッシュ（7〜40桁の16進数。単語境界で区切る）
+        Regex::new(r"\b[0-9a-fA-F]{7,40}\b").expect("git hash pattern compile failed"),
+        // 数値（IP アドレスを含む。整数・小数・コロン区切りポート番号等）
+        Regex::new(r"\b\d+(?:\.\d+){0,3}(?::\d+)?\b").expect("number pattern compile failed"),
+    ]
+}
+
+/// セル配列に対して複数パターンをマッチし、重複なしで結果を返す。
+///
+/// 同一範囲のセルに複数のパターンがマッチした場合、先のパターン（より具体的なもの）が優先される。
+/// `patterns` が空の場合は `default_quick_select_patterns()` を使用する。
+pub fn detect_patterns_in_line(cells: &[Cell], patterns: &[Regex]) -> Vec<PatternMatch> {
+    let text = cells_to_text(cells);
+    if text.is_empty() {
+        return Vec::new();
+    }
+
+    let active_patterns: &[Regex];
+    let default_patterns;
+    if patterns.is_empty() {
+        default_patterns = default_quick_select_patterns();
+        active_patterns = &default_patterns;
+    } else {
+        active_patterns = patterns;
+    }
+
+    // 各パターンでマッチを収集し、重複排除（先に追加されたものが優先）
+    let mut results: Vec<PatternMatch> = Vec::new();
+
+    for regex in active_patterns {
+        for m in regex.find_iter(&text) {
+            let start_col = byte_offset_to_col(&text, cells, m.start());
+            let end_col = byte_offset_to_col(&text, cells, m.end());
+            // 既存マッチと重複していないか確認
+            let overlaps =
+                results.iter().any(|r| !(end_col <= r.start_col || start_col >= r.end_col));
+            if !overlaps && start_col < end_col {
+                results.push(PatternMatch { text: m.as_str().to_owned(), start_col, end_col });
+            }
+        }
+    }
+
+    // 列順にソート
+    results.sort_by_key(|m| m.start_col);
+    results
 }
 
 // ---------------------------------------------------------------------------
@@ -211,5 +285,80 @@ mod tests {
         let matches = detector.detect_urls_in_line(&cells);
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].url, "http://example.com");
+    }
+
+    // -----------------------------------------------------------------------
+    // detect_patterns_in_line のテスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn detect_patterns_finds_file_paths() {
+        let cells = make_cells("/usr/local/bin/fish");
+        let matches = detect_patterns_in_line(&cells, &[]);
+        let path_match = matches.iter().find(|m| m.text == "/usr/local/bin/fish");
+        assert!(path_match.is_some(), "ファイルパスが検出されなかった: {matches:?}");
+    }
+
+    #[test]
+    fn detect_patterns_finds_git_hashes() {
+        let cells = make_cells("commit abc1234def5 is the one");
+        let matches = detect_patterns_in_line(&cells, &[]);
+        let hash_match = matches.iter().find(|m| m.text == "abc1234def5");
+        assert!(hash_match.is_some(), "git ハッシュが検出されなかった: {matches:?}");
+    }
+
+    #[test]
+    fn detect_patterns_finds_urls_and_paths() {
+        let cells = make_cells("see https://example.com and /etc/hosts");
+        let matches = detect_patterns_in_line(&cells, &[]);
+        let url_match = matches.iter().find(|m| m.text == "https://example.com");
+        let path_match = matches.iter().find(|m| m.text == "/etc/hosts");
+        assert!(url_match.is_some(), "URL が検出されなかった: {matches:?}");
+        assert!(path_match.is_some(), "ファイルパスが検出されなかった: {matches:?}");
+    }
+
+    #[test]
+    fn detect_patterns_no_overlap() {
+        // URL にパスが含まれる場合、URL パターンが優先されてパスとして重複検出されないこと
+        let cells = make_cells("https://example.com/foo/bar");
+        let matches = detect_patterns_in_line(&cells, &[]);
+        // start_col が重複するマッチがないこと
+        for i in 0..matches.len() {
+            for j in (i + 1)..matches.len() {
+                let a = &matches[i];
+                let b = &matches[j];
+                let overlaps = !(a.end_col <= b.start_col || a.start_col >= b.end_col);
+                assert!(!overlaps, "マッチが重複している: {:?} と {:?}", a, b);
+            }
+        }
+    }
+
+    #[test]
+    fn detect_patterns_empty_cells() {
+        let cells = make_cells("");
+        let matches = detect_patterns_in_line(&cells, &[]);
+        assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn detect_patterns_custom_patterns() {
+        let pattern = Regex::new(r"FOO-\d+").unwrap();
+        let cells = make_cells("issue FOO-123 is fixed");
+        let matches = detect_patterns_in_line(&cells, &[pattern]);
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].text, "FOO-123");
+    }
+
+    #[test]
+    fn detect_patterns_sorted_by_col() {
+        let cells = make_cells("/var/a and /usr/b");
+        let matches = detect_patterns_in_line(&cells, &[]);
+        for i in 1..matches.len() {
+            assert!(
+                matches[i].start_col >= matches[i - 1].start_col,
+                "マッチが列順になっていない: {:?}",
+                matches
+            );
+        }
     }
 }

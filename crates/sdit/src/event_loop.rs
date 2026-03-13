@@ -76,6 +76,13 @@ impl ApplicationHandler<SditEvent> for SditApp {
 
             WindowEvent::KeyboardInput { event: key_event, .. } => {
                 if key_event.state == ElementState::Pressed {
+                    // --- QuickSelect モード中のキー入力処理（通常のキー処理より先に評価）---
+                    if self.quick_select.is_some() {
+                        if self.handle_quick_select_key(&key_event.logical_key, id) {
+                            return;
+                        }
+                    }
+
                     // --- 検索モード中のキー入力処理 ---
                     if self.search.is_some() {
                         use winit::keyboard::Key;
@@ -1147,6 +1154,9 @@ impl SditApp {
                     }
                 }
                 self.redraw_session(sid);
+            }
+            Action::QuickSelect => {
+                self.handle_quick_select_action(window_id);
             }
         }
     }

@@ -5,6 +5,7 @@ mod headless;
 mod input;
 #[cfg(target_os = "macos")]
 mod menu;
+mod quick_select;
 mod render;
 mod window;
 mod window_ops;

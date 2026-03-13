@@ -23,6 +23,7 @@ anyhow       = { workspace = true }
 arboard      = "3"
 notify       = { workspace = true }
 notify-rust  = "4"
+regex        = { workspace = true }
 muda = "0.17.1"
 open = "5"
 rfd = "0.15"

@@ -40,6 +40,8 @@ pub enum Action {
     PrevPrompt,
     /// 次のプロンプト（OSC 133 シェルインテグレーション）にジャンプする。
     NextPrompt,
+    /// `QuickSelect` モードを起動する（画面上のパターンをキーボードでコピー）。
+    QuickSelect,
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +166,8 @@ fn macos_default_bindings() -> Vec<KeyBinding> {
         // プロンプトジャンプ（OSC 133 シェルインテグレーション）
         bind("up", "super", PrevPrompt),
         bind("down", "super", NextPrompt),
+        // QuickSelect
+        bind("space", "super|shift", QuickSelect),
         // アプリ
         bind("q", "super", Quit),
         bind(",", "super", Preferences),

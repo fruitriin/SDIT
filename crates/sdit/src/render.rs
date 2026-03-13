@@ -328,6 +328,85 @@ impl SditApp {
             ws.atlas.upload_if_dirty(&ws.gpu.queue);
         }
 
+        // QuickSelect オーバーレイ描画
+        if let Some(ref qs) = self.quick_select {
+            let atlas_size = ws.atlas.size() as f32;
+
+            // マッチ背景色（青緑系ハイライト）
+            let match_bg = [0.1_f32, 0.5, 0.8, 1.0];
+            // ヒントラベル前景色（白）
+            let hint_fg = [1.0_f32, 1.0, 1.0, 1.0];
+            // ヒントラベル背景色（濃い黄色）
+            let hint_bg = [0.8_f32, 0.6, 0.0, 1.0];
+
+            for hint in &qs.hints {
+                if hint.row >= grid_rows {
+                    continue;
+                }
+
+                // マッチ範囲のセルを背景色変更でハイライト
+                for col in hint.start_col..hint.end_col.min(grid_cols) {
+                    let cell_index = hint.row * grid_cols + col;
+                    // 既存セル頂点の fg を維持しつつ bg を変更するため、
+                    // 背景だけを上書きする。グリフなしの背景セルとして描画する。
+                    let vertex = CellVertex {
+                        bg: match_bg,
+                        fg: hint_fg,
+                        grid_pos: [col as f32, hint.row as f32],
+                        uv: [0.0; 4],
+                        glyph_offset: [0.0; 2],
+                        glyph_size: [0.0; 2],
+                        cell_width_scale: 1.0,
+                        is_color_glyph: 0.0,
+                    };
+                    ws.cell_pipeline.overwrite_cell(&ws.gpu.queue, cell_index, &vertex);
+                }
+
+                // ヒントラベルをマッチ先頭セルに上書き描画
+                let mut col = hint.start_col;
+                for ch in hint.label.chars() {
+                    if col >= grid_cols {
+                        break;
+                    }
+                    let cell_width_count = char_cell_width(ch);
+
+                    let (uv, glyph_offset, glyph_size) =
+                        if let Some(entry) = self.font_ctx.rasterize_glyph(ch, &mut ws.atlas) {
+                            let r = entry.region;
+                            let uv = [
+                                r.x as f32 / atlas_size,
+                                r.y as f32 / atlas_size,
+                                (r.x + r.width) as f32 / atlas_size,
+                                (r.y + r.height) as f32 / atlas_size,
+                            ];
+                            (
+                                uv,
+                                [entry.placement_left as f32, entry.placement_top as f32],
+                                [r.width as f32, r.height as f32],
+                            )
+                        } else {
+                            ([0.0_f32; 4], [0.0_f32; 2], [0.0_f32; 2])
+                        };
+
+                    let vertex = CellVertex {
+                        bg: hint_bg,
+                        fg: hint_fg,
+                        grid_pos: [col as f32, hint.row as f32],
+                        uv,
+                        glyph_offset,
+                        glyph_size,
+                        cell_width_scale: if cell_width_count == 2 { 2.0 } else { 1.0 },
+                        is_color_glyph: 0.0,
+                    };
+                    let cell_index = hint.row * grid_cols + col;
+                    ws.cell_pipeline.overwrite_cell(&ws.gpu.queue, cell_index, &vertex);
+                    col += cell_width_count;
+                }
+            }
+
+            ws.atlas.upload_if_dirty(&ws.gpu.queue);
+        }
+
         ws.window.request_redraw();
     }
 

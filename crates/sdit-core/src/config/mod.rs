@@ -195,9 +195,23 @@ pub struct ShellIntegrationConfig {
     pub enabled: bool,
 }
 
+/// QuickSelect 設定。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct QuickSelectConfig {
+    /// 追加の正規表現パターン（デフォルトパターンに追加して使用される）。
+    pub patterns: Vec<String>,
+}
+
 impl Default for ShellIntegrationConfig {
     fn default() -> Self {
         Self { enabled: true }
+    }
+}
+
+impl Default for QuickSelectConfig {
+    fn default() -> Self {
+        Self { patterns: Vec::new() }
     }
 }
 
@@ -244,6 +258,8 @@ pub struct Config {
     pub scrollback: ScrollbackConfig,
     /// シェルインテグレーション設定。
     pub shell_integration: ShellIntegrationConfig,
+    /// QuickSelect 設定。
+    pub quick_select: QuickSelectConfig,
 }
 
 impl Config {
@@ -397,6 +413,15 @@ impl Config {
                 content.push('\n');
                 content.push_str("# ── Shell Integration ──────────────────────────────────────\n");
                 content.push_str("# enabled: enable OSC 133 shell integration for prompt navigation (default: true)\n");
+            } else if line == "[quick_select]" {
+                content.push('\n');
+                content.push_str("# ── Quick Select ───────────────────────────────────────────\n");
+                content.push_str(
+                    "# patterns: additional regex patterns to match in Quick Select mode\n",
+                );
+                content.push_str(
+                    "# Example: patterns = [\"[A-Z]+-\\\\d+\"]  # matches JIRA issue IDs\n",
+                );
             }
             content.push_str(line);
             content.push('\n');
