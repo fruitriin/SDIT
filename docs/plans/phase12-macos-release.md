@@ -44,6 +44,8 @@
 | High | H-1 | Release entitlements に不要な権限（カメラ・マイク等）が含まれていた | **修正済み**: apple-events のみに絞った |
 | High | H-2 | Debug entitlements にも同じ不要権限 | **修正済み**: apple-events + disable-library-validation のみに |
 | Medium | M-1 | Makefile の app ターゲットが entitlements を使用していない | ad-hoc 署名では不要。配布署名は CI/CD で行う想定（ガイド文書に記載済み） |
+| Info | I-1 | `byte_end` クランプ後の UTF-8 境界保証（cosmic-text が保証するため実質リスクなし） | 対応不要 |
+| Info | I-2 | `f32::MAX` をバッファ幅に渡す意図（折り返しなしの慣用パターン、コメント記載済み） | 対応不要 |
 
 ## 依存関係
 
