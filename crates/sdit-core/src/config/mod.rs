@@ -10,6 +10,31 @@ use self::color::ColorConfig;
 use self::font::FontConfig;
 use self::keybinds::KeybindConfig;
 
+/// macOS の Option キーを Alt として扱うかどうかの設定。
+///
+/// readline ショートカット（Alt+B/F/D 等）を使用するのに必要。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OptionAsAlt {
+    /// 左 Option キーのみ Alt として扱う。
+    #[serde(alias = "left")]
+    OnlyLeft,
+    /// 右 Option キーのみ Alt として扱う。
+    #[serde(alias = "right")]
+    OnlyRight,
+    /// 両方の Option キーを Alt として扱う。
+    Both,
+    /// Option キーを通常通り扱う（デフォルト）。
+    #[serde(alias = "none")]
+    None,
+}
+
+impl Default for OptionAsAlt {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 /// SDIT 設定全体。
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default)]
@@ -20,6 +45,12 @@ pub struct Config {
     pub colors: ColorConfig,
     /// キーバインド設定。
     pub keybinds: KeybindConfig,
+    /// macOS での Option キーの扱い。
+    ///
+    /// readline ショートカット（Alt+B/F/D 等）を有効にするには `"both"` を設定する。
+    /// 有効な値: `"only_left"` / `"left"`, `"only_right"` / `"right"`, `"both"`, `"none"`（デフォルト）。
+    /// macOS 以外のプラットフォームでは無視される。
+    pub option_as_alt: OptionAsAlt,
 }
 
 impl Config {
@@ -103,7 +134,7 @@ impl Config {
                 content.push_str(
                     "#   available: \"catppuccin-mocha\", \"catppuccin-latte\", \"gruvbox-dark\"\n",
                 );
-            } else if line == "[[keybinds]]" {
+            } else if line == "[keybinds]" || line == "[[keybinds]]" {
                 content.push('\n');
                 content.push_str("# ── Keybinds ────────────────────────────────────────────\n");
                 content.push_str(
@@ -111,6 +142,13 @@ impl Config {
                 );
                 content
                     .push_str("# Example: key = \"n\", mods = \"super\", action = \"NewWindow\"\n");
+            } else if line.starts_with("option_as_alt") {
+                content.push('\n');
+                content.push_str("# ── macOS Option Key ────────────────────────────────────\n");
+                content.push_str("# option_as_alt: treat Option key as Alt for readline shortcuts (Alt+B/F/D etc.)\n");
+                content.push_str(
+                    "#   values: \"none\" (default), \"both\", \"only_left\" / \"left\", \"only_right\" / \"right\"\n",
+                );
             }
             content.push_str(line);
             content.push('\n');
@@ -136,6 +174,46 @@ mod tests {
         let config = Config::default();
         assert!(!config.font.family.is_empty());
         assert!(config.font.size > 0.0);
+    }
+
+    #[test]
+    fn option_as_alt_default_is_none() {
+        let config = Config::default();
+        assert_eq!(config.option_as_alt, OptionAsAlt::None);
+    }
+
+    #[test]
+    fn option_as_alt_deserialize_canonical() {
+        let cases: &[(&str, OptionAsAlt)] = &[
+            (r#"option_as_alt = "none""#, OptionAsAlt::None),
+            (r#"option_as_alt = "both""#, OptionAsAlt::Both),
+            (r#"option_as_alt = "only_left""#, OptionAsAlt::OnlyLeft),
+            (r#"option_as_alt = "only_right""#, OptionAsAlt::OnlyRight),
+        ];
+        for (toml_str, expected) in cases {
+            let config: Config = toml::from_str(toml_str).unwrap();
+            assert_eq!(config.option_as_alt, *expected, "failed for: {toml_str}");
+        }
+    }
+
+    #[test]
+    fn option_as_alt_deserialize_alias() {
+        let left: Config = toml::from_str(r#"option_as_alt = "left""#).unwrap();
+        assert_eq!(left.option_as_alt, OptionAsAlt::OnlyLeft);
+
+        let right: Config = toml::from_str(r#"option_as_alt = "right""#).unwrap();
+        assert_eq!(right.option_as_alt, OptionAsAlt::OnlyRight);
+    }
+
+    #[test]
+    fn option_as_alt_serialize() {
+        let mut config = Config::default();
+        config.option_as_alt = OptionAsAlt::Both;
+        let serialized = toml::to_string(&config).unwrap();
+        assert!(
+            serialized.contains("option_as_alt = \"both\""),
+            "expected serialized form: {serialized}"
+        );
     }
 
     #[test]

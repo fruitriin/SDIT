@@ -3,6 +3,9 @@ use std::sync::Arc;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 
+#[cfg(target_os = "macos")]
+use winit::platform::macos::{OptionAsAlt as WinitOptionAsAlt, WindowExtMacOS};
+
 use sdit_core::pty::PtySize;
 use sdit_core::render::atlas::Atlas;
 use sdit_core::render::pipeline::{CellPipeline, GpuContext};
@@ -10,6 +13,17 @@ use sdit_core::session::{AppSnapshot, SessionSnapshot, SidebarState, WindowGeome
 
 use crate::app::{SditApp, WindowState};
 use crate::window::calc_grid_size;
+
+/// sdit-core の `OptionAsAlt` を winit の `WinitOptionAsAlt` に変換する。
+#[cfg(target_os = "macos")]
+pub(crate) fn config_option_as_alt_to_winit(v: sdit_core::config::OptionAsAlt) -> WinitOptionAsAlt {
+    match v {
+        sdit_core::config::OptionAsAlt::OnlyLeft => WinitOptionAsAlt::OnlyLeft,
+        sdit_core::config::OptionAsAlt::OnlyRight => WinitOptionAsAlt::OnlyRight,
+        sdit_core::config::OptionAsAlt::Both => WinitOptionAsAlt::Both,
+        sdit_core::config::OptionAsAlt::None => WinitOptionAsAlt::None,
+    }
+}
 
 impl SditApp {
     /// 現在のウィンドウ群のジオメトリを収集する。
@@ -57,6 +71,8 @@ impl SditApp {
         let window = match event_loop.create_window(attrs) {
             Ok(w) => {
                 w.set_ime_allowed(true);
+                #[cfg(target_os = "macos")]
+                w.set_option_as_alt(config_option_as_alt_to_winit(self.config.option_as_alt));
                 Arc::new(w)
             }
             Err(e) => {
@@ -298,6 +314,8 @@ impl SditApp {
         let new_window = match event_loop.create_window(attrs) {
             Ok(w) => {
                 w.set_ime_allowed(true);
+                #[cfg(target_os = "macos")]
+                w.set_option_as_alt(config_option_as_alt_to_winit(self.config.option_as_alt));
                 Arc::new(w)
             }
             Err(e) => {

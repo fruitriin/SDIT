@@ -389,7 +389,18 @@ impl SditApp {
         // 3. キーバインド更新（常に置換）
         // validate() は Config::load() 内で既に呼ばれている
 
-        // 4. 設定を置換
+        // 4. macOS: option_as_alt 変更チェック
+        #[cfg(target_os = "macos")]
+        if self.config.option_as_alt != new_config.option_as_alt {
+            use winit::platform::macos::WindowExtMacOS as _;
+            let winit_val =
+                crate::window_ops::config_option_as_alt_to_winit(new_config.option_as_alt);
+            for ws in self.windows.values() {
+                ws.window.set_option_as_alt(winit_val);
+            }
+        }
+
+        // 5. 設定を置換
         self.config = new_config;
 
         log::info!("Config reloaded successfully");
