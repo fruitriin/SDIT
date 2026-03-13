@@ -25,3 +25,4 @@
 | [021-context-menu](021-context-menu.md) | 右クリックコンテキストメニュー（ターミナル領域: Copy/Paste/Select All/Search、サイドバー領域: Close Session/Move to New Window）の表示・動作確認 | 2026-03-13 | UNIT_ONLY |
 | [022-config-serialize-template](022-config-serialize-template.md) | Config Serialize + TOML テンプレート生成（save/save_with_comments/Preferences ハンドラ）の確認 | 2026-03-13 | UNIT_ONLY |
 | [023-opentype-ligature](023-opentype-ligature.md) | OpenType リガチャ（`->`, `=>` 等）の検出・シェーピング・複数セル幅描画確認 | 2026-03-13 | UNIT_ONLY |
+| [024-window-padding](024-window-padding.md) | ウィンドウパディング（padding_x/padding_y）設定・描画オフセット・Hot Reload の確認 | 2026-03-14 | UNIT_ONLY |

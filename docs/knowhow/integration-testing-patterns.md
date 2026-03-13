@@ -88,3 +88,32 @@ verify-text tmp/capture.png "🎉 -> =>" --cells tmp/cells.json --reference tmp/
 - Screen Recording 権限は付与後に OS 再起動が必要
 - Accessibility 権限はターミナルアプリに付与する
 - Swift ユーティリティはコンパイル済みバイナリに権限を付与する
+
+## ディスプレイスリープ中の GUI テスト代替戦略
+
+`Display Asleep: Yes` の環境では `capture-window` と `screencapture` の両方が失敗する（exit code 134）。
+この状況では以下の代替戦略でテストを進める:
+
+1. **ユニットテスト（`cargo test`）で設定・ロジックを検証**: パディングのクランプ、TOML デシリアライズ等は GUI 不要で確認できる
+2. **ヘッドレステスト（`smoke_headless.rs`）でパイプライン検証**: PTY→VTE→Grid の動作確認
+3. **シナリオを UNIT_ONLY として INDEX に登録**: GUI が必要な手順を文書化し、ディスプレイ起動時に実行できるよう残しておく
+
+確認方法:
+```bash
+system_profiler SPDisplaysDataType | grep "Display Asleep"
+# "Display Asleep: Yes" → GUI テスト不可、ユニットテストで代替
+```
+
+## 視覚的差分テスト（パディング等オフセット系機能）のパターン
+
+パディング・マージン等「レイアウトオフセット」系の機能は OCR だけでは検証できない。
+以下のアプローチを組み合わせる:
+
+| 検証方法 | 内容 | 適用場面 |
+|---|---|---|
+| ユニットテスト | clamped_padding_x/y の値確認 | 設定値の正確性 |
+| スクリーンショット比較 | パディング 0 vs パディングあり の2枚を目視比較 | テキスト開始位置のオフセット確認 |
+| verify-text OCR | テキストが表示されているかの確認 | テキスト欠損がないことの確認 |
+
+スクリーンショット比較では「テキストの開始 X 座標」を測定できれば機械的に確認できるが、
+現状の verify-text ツールには座標比較機能がない。将来的な拡張候補として記録する。
