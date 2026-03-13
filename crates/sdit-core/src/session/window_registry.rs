@@ -47,6 +47,11 @@ impl SessionManager {
     pub fn is_empty(&self) -> bool {
         self.sessions.is_empty()
     }
+
+    /// 全セッションへのイテレータを返す。
+    pub fn all(&self) -> impl Iterator<Item = &Session> {
+        self.sessions.values()
+    }
 }
 
 impl Default for SessionManager {

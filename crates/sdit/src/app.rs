@@ -333,6 +333,9 @@ impl SditApp {
         let event_proxy = self.event_proxy.clone();
         let sid = session_id;
 
+        let default_cursor_style = sdit_core::terminal::CursorStyle::from(self.config.cursor.style);
+        let default_cursor_blinking = self.config.cursor.blinking;
+
         let session = match Session::spawn(
             session_id,
             SpawnParams {
@@ -341,6 +344,8 @@ impl SditApp {
                 terminal_rows: rows,
                 terminal_cols: cols,
                 scrollback: 10_000,
+                default_cursor_style,
+                default_cursor_blinking,
                 spawn_reader:
                     move |pty: Pty,
                           term_state: Arc<Mutex<TerminalState>>,
@@ -491,7 +496,21 @@ impl SditApp {
             }
         }
 
-        // 7. 設定を置換
+        // 7. カーソルデフォルト設定の変更チェック
+        let cursor_changed = self.config.cursor.style != new_config.cursor.style
+            || self.config.cursor.blinking != new_config.cursor.blinking;
+        if cursor_changed {
+            let new_style = sdit_core::terminal::CursorStyle::from(new_config.cursor.style);
+            let new_blinking = new_config.cursor.blinking;
+            // 全セッションの Terminal デフォルトを更新する
+            for session in self.session_mgr.all() {
+                let mut state =
+                    session.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                state.terminal.set_default_cursor(new_style, new_blinking);
+            }
+        }
+
+        // 8. 設定を置換
         self.config = new_config;
 
         log::info!("Config reloaded successfully");

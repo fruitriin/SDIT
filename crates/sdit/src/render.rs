@@ -95,6 +95,15 @@ impl SditApp {
             (None, None)
         };
 
+        // カーソル色: 設定された hex 文字列をパース。パース失敗時はログ警告して None 扱い。
+        let cursor_color = self.config.cursor.color.as_deref().and_then(|hex| {
+            let parsed = parse_hex_color(hex);
+            if parsed.is_none() {
+                log::warn!("cursor.color: invalid hex color '{hex}', using default");
+            }
+            parsed
+        });
+
         ws.cell_pipeline.update_from_grid(
             &ws.gpu.queue,
             grid,
@@ -104,6 +113,7 @@ impl SditApp {
             cell_size,
             surface_size,
             cursor_pos,
+            cursor_color,
             selection,
             url_hover,
             search_highlight.as_deref(),
@@ -350,6 +360,20 @@ impl SditApp {
 // ヘルパー関数
 // ---------------------------------------------------------------------------
 
+/// hex カラー文字列を `[f32; 4]` (RGBA) に変換する。
+///
+/// `"#rrggbb"` 形式のみサポート。パース失敗時は `None` を返す。
+pub(crate) fn parse_hex_color(hex: &str) -> Option<[f32; 4]> {
+    let hex = hex.strip_prefix('#')?;
+    if hex.len() != 6 {
+        return None;
+    }
+    let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+    Some([f32::from(r) / 255.0, f32::from(g) / 255.0, f32::from(b) / 255.0, 1.0])
+}
+
 /// Unicode 文字のセル幅を返す（全角=2、それ以外=1）。
 ///
 /// 簡易実装: CJK 統合漢字・ひらがな・カタカナ等の範囲を全角とみなす。
@@ -468,5 +492,45 @@ mod tests {
         // 絵文字 0x1F300-0x1F9FF
         assert_eq!(char_cell_width('🎉'), 2); // U+1F389
         assert_eq!(char_cell_width('😀'), 2); // U+1F600
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_hex_color テスト
+    // -----------------------------------------------------------------------
+
+    use super::parse_hex_color;
+
+    #[test]
+    fn parse_hex_color_valid() {
+        let color = parse_hex_color("#ff6600").unwrap();
+        assert!((color[0] - 1.0).abs() < 0.01, "r = {}", color[0]);
+        assert!((color[1] - 0.4).abs() < 0.01, "g = {}", color[1]);
+        assert!((color[2] - 0.0).abs() < 0.01, "b = {}", color[2]);
+        assert!((color[3] - 1.0).abs() < 0.01, "a = {}", color[3]);
+    }
+
+    #[test]
+    fn parse_hex_color_black_white() {
+        let black = parse_hex_color("#000000").unwrap();
+        for (i, &v) in black.iter().enumerate() {
+            let expected = if i == 3 { 1.0_f32 } else { 0.0_f32 };
+            assert!((v - expected).abs() < f32::EPSILON, "black[{i}] = {v}");
+        }
+        let white = parse_hex_color("#ffffff").unwrap();
+        assert!((white[0] - 1.0).abs() < f32::EPSILON);
+        assert!((white[1] - 1.0).abs() < f32::EPSILON);
+        assert!((white[2] - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn parse_hex_color_invalid() {
+        // # なし
+        assert!(parse_hex_color("ff6600").is_none());
+        // 長さ不足
+        assert!(parse_hex_color("#ff66").is_none());
+        // 無効な文字
+        assert!(parse_hex_color("#zzzzzz").is_none());
+        // 空文字
+        assert!(parse_hex_color("").is_none());
     }
 }

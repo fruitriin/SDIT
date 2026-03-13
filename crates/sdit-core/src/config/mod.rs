@@ -9,6 +9,44 @@ use serde::{Deserialize, Serialize};
 use self::color::ColorConfig;
 use self::font::FontConfig;
 use self::keybinds::KeybindConfig;
+use crate::terminal::CursorStyle;
+
+/// カーソルスタイルの設定値（serde 用）。
+///
+/// `CursorStyle` とは別に定義し、TOML 文字列との相互変換を担う。
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CursorStyleConfig {
+    /// ブロックカーソル（デフォルト）。
+    #[default]
+    Block,
+    /// アンダーラインカーソル。
+    Underline,
+    /// バーカーソル。
+    Bar,
+}
+
+impl From<CursorStyleConfig> for CursorStyle {
+    fn from(c: CursorStyleConfig) -> Self {
+        match c {
+            CursorStyleConfig::Block => CursorStyle::Block,
+            CursorStyleConfig::Underline => CursorStyle::Underline,
+            CursorStyleConfig::Bar => CursorStyle::Bar,
+        }
+    }
+}
+
+/// カーソル設定。
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct CursorConfig {
+    /// カーソルスタイル: "block" (デフォルト), "underline", "bar"
+    pub style: CursorStyleConfig,
+    /// カーソル点滅を有効にする（デフォルト: false）。
+    pub blinking: bool,
+    /// カーソル色（hex 文字列、例: "#ff6600"）。None ならテーマ前景色を使用。
+    pub color: Option<String>,
+}
 
 /// macOS の Option キーを Alt として扱うかどうかの設定。
 ///
@@ -137,6 +175,8 @@ pub struct Config {
     pub paste: PasteConfig,
     /// デスクトップ通知設定。
     pub notification: NotificationConfig,
+    /// カーソル設定。
+    pub cursor: CursorConfig,
 }
 
 impl Config {
@@ -262,6 +302,14 @@ impl Config {
                 content.push('\n');
                 content.push_str("# ── Notification ──────────────────────────────────────\n");
                 content.push_str("# enabled: show desktop notifications from OSC 9/99 sequences (default: true)\n");
+            } else if line == "[cursor]" {
+                content.push('\n');
+                content.push_str("# ── Cursor ─────────────────────────────────────────────\n");
+                content.push_str(
+                    "# style: cursor shape: \"block\" (default), \"underline\", \"bar\"\n",
+                );
+                content.push_str("# blinking: enable cursor blinking (default: false)\n");
+                content.push_str("# color: cursor color as hex string (e.g. \"#ff6600\"); omit to use theme foreground\n");
             }
             content.push_str(line);
             content.push('\n');
@@ -504,5 +552,51 @@ line_height = 1.3
         assert!(content.contains("# SDIT"), "expected '# SDIT' comment header");
         assert!(content.contains("[font]"), "expected [font] section");
         let _ = std::fs::remove_file(&path);
+    }
+
+    // -----------------------------------------------------------------------
+    // CursorConfig テスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn cursor_config_default() {
+        let cc = CursorConfig::default();
+        assert_eq!(cc.style, CursorStyleConfig::Block);
+        assert!(!cc.blinking);
+        assert!(cc.color.is_none());
+    }
+
+    #[test]
+    fn cursor_config_deserialize_full() {
+        let toml_str = "[cursor]\nstyle = \"bar\"\nblinking = true\ncolor = \"#ff6600\"\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.cursor.style, CursorStyleConfig::Bar);
+        assert!(config.cursor.blinking);
+        assert_eq!(config.cursor.color.as_deref(), Some("#ff6600"));
+    }
+
+    #[test]
+    fn cursor_config_deserialize_partial() {
+        let toml_str = "[cursor]\nstyle = \"underline\"\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.cursor.style, CursorStyleConfig::Underline);
+        assert!(!config.cursor.blinking); // default
+        assert!(config.cursor.color.is_none()); // default
+    }
+
+    #[test]
+    fn cursor_config_deserialize_empty_uses_defaults() {
+        let config: Config = toml::from_str("").unwrap();
+        assert_eq!(config.cursor.style, CursorStyleConfig::Block);
+        assert!(!config.cursor.blinking);
+        assert!(config.cursor.color.is_none());
+    }
+
+    #[test]
+    fn cursor_style_config_converts_to_cursor_style() {
+        use crate::terminal::CursorStyle;
+        assert_eq!(CursorStyle::from(CursorStyleConfig::Block), CursorStyle::Block);
+        assert_eq!(CursorStyle::from(CursorStyleConfig::Underline), CursorStyle::Underline);
+        assert_eq!(CursorStyle::from(CursorStyleConfig::Bar), CursorStyle::Bar);
     }
 }

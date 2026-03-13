@@ -398,6 +398,7 @@ impl CellPipeline {
     /// Grid からセルデータを構築して頂点バッファを更新する。
     ///
     /// `cursor_pos` はカーソル位置 `(column, row)` で、該当セルの fg/bg を反転描画する。
+    /// `cursor_color` はカーソルの背景色。`Some` の場合は反転ではなくその色を使う。
     /// `selection` は選択範囲 `(start, end)` で、範囲内のセルの fg/bg を反転描画する。
     /// `url_hover` は `(row, start_col, end_col)` で、範囲内のセルを青色で描画する。
     /// `search_matches` は `(row, start_col, end_col)` のスライスで、マッチセルを黄色ハイライトする。
@@ -413,6 +414,7 @@ impl CellPipeline {
         cell_size: [f32; 2],
         surface_size: [f32; 2],
         cursor_pos: Option<(usize, usize)>,
+        cursor_color: Option<[f32; 4]>,
         selection: Option<((usize, usize), (usize, usize))>,
         url_hover: Option<(usize, usize, usize)>,
         search_matches: Option<&[(usize, usize, usize)]>,
@@ -472,7 +474,14 @@ impl CellPipeline {
                 let is_current_match = current_search_match
                     .is_some_and(|(mr, ms, me)| row == mr && col >= ms && col < me);
                 let is_search_match = match_set.contains(&(row, col));
-                let (bg, fg) = if is_cursor || is_selected {
+                let (bg, fg) = if is_cursor {
+                    // カーソル色が設定されていればそれを使用し、なければ反転
+                    if let Some(c) = cursor_color {
+                        (c, color_to_rgba(cell.bg))
+                    } else {
+                        (color_to_rgba(cell.fg), color_to_rgba(cell.bg))
+                    }
+                } else if is_selected {
                     (color_to_rgba(cell.fg), color_to_rgba(cell.bg))
                 } else if is_current_match {
                     (hex_rgba(0xfa, 0xb3, 0x87), [0.0, 0.0, 0.0, 1.0])

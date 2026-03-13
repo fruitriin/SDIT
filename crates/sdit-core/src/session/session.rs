@@ -54,6 +54,10 @@ pub struct SpawnParams<F> {
     pub terminal_rows: usize,
     pub terminal_cols: usize,
     pub scrollback: usize,
+    /// デフォルトカーソルスタイル（設定ファイルから）。
+    pub default_cursor_style: crate::terminal::CursorStyle,
+    /// デフォルトカーソル点滅（設定ファイルから）。
+    pub default_cursor_blinking: bool,
     /// PTY Reader/Writer スレッドを生成するファクトリ。
     /// `(Pty, Arc<Mutex<TerminalState>>, Arc<AtomicBool>)` を受け取り
     /// `(reader, writer, write_tx)` を返す。
@@ -75,7 +79,13 @@ impl Session {
             Arc<AtomicBool>,
         ) -> (JoinHandle<()>, JoinHandle<()>, mpsc::SyncSender<Vec<u8>>),
     {
-        let terminal = Terminal::new(params.terminal_rows, params.terminal_cols, params.scrollback);
+        let terminal = Terminal::new_with_cursor(
+            params.terminal_rows,
+            params.terminal_cols,
+            params.scrollback,
+            params.default_cursor_style,
+            params.default_cursor_blinking,
+        );
         let processor = Processor::new();
         let term_state = Arc::new(Mutex::new(TerminalState { terminal, processor }));
 

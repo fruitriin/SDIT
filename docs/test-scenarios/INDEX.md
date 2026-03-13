@@ -13,7 +13,7 @@
 | [009-cjk-display](009-cjk-display.md) | CJK 全角文字の表示確認 | 2026-03-13 | UNIT_ONLY |
 | [010-alt-key](010-alt-key.md) | Alt キー入力の確認 | - | - |
 | [011-window-title](011-window-title.md) | ウィンドウタイトル動的更新の確認 | - | - |
-| [012-cursor-style](012-cursor-style.md) | カーソルスタイル変更の確認 | - | - |
+| [012-cursor-style](012-cursor-style.md) | DECSCUSR カーソルスタイル変更 + DECSCUSR 0 デフォルト復帰 + 設定ファイルデフォルト確認 | 2026-03-14 | UPDATED |
 | [013-ime-input](013-ime-input.md) | IME 入力（日本語）の確認 | 2026-03-13 | UNIT_ONLY |
 | [014-font-size-change](014-font-size-change.md) | フォントサイズ動的変更（Cmd+=/Cmd+-/Cmd+0）の確認 | 2026-03-13 | PASS |
 | [015-url-detection](015-url-detection.md) | URL 検出・Cmd+クリック・ホバーハイライトの確認 | 2026-03-13 | UNIT_ONLY |

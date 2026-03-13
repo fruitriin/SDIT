@@ -40,6 +40,7 @@
 | ファイル | 要約 | キーワード |
 |---|---|---|
 | [config-and-theming.md](config-and-theming.md) | TOML 設定基盤、f32 クランプの NaN 対策、WCAG コントラスト比検証、CJK 全角描画 | `#[serde(default)]`, `Config::load`, `dirs::config_dir`, `f32::is_finite`, `ResolvedColors`, `hex_to_rgba`, `WCAG 2.1`, `sRGB 線形化`, `WIDE_CHAR`, `WIDE_CHAR_SPACER`, `cell_width_scale: 2.0`, `atomic rename`, `TOCTOU` |
+| [cursor-config.md](cursor-config.md) | カーソル設定（style/blinking/color）の実装: serde/内部型分離、DECSCUSR 0 デフォルト復帰、hex カラー変換、hot reload パターン | `CursorStyleConfig`, `CursorConfig`, `CursorStyle`, `From<CursorStyleConfig>`, `new_with_cursor`, `set_default_cursor`, `default_cursor_style`, `default_cursor_blinking`, `DECSCUSR 0`, `parse_hex_color`, `SessionManager::all`, `terminal/tests.rs`, `#[cfg(test)] mod tests;` |
 
 ## macOS GUI 統合
 

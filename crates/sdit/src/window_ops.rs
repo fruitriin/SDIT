@@ -131,6 +131,7 @@ impl SditApp {
             cell_size,
             surface_size,
             Some((cursor_col, cursor_row)),
+            None, // cursor_color: 初期描画では色なし（デフォルト反転）
             None,
             None,
             None,

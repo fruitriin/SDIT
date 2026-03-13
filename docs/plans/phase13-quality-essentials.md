@@ -7,11 +7,11 @@
 | Phase | ファイル | 状態 |
 |---|---|---|
 | 13.1 | `phase13.1-option-as-alt.md` | **完了** |
-| 13.2 | `phase13.2-visual-bell.md` | 未着手 |
-| 13.3 | `phase13.3-window-opacity.md` | 未着手 |
-| 13.4 | `phase13.4-unsafe-paste.md` | 未着手 |
-| 13.5 | `phase13.5-kitty-keyboard.md` | 未着手 |
-| 13.6 | `phase13.6-desktop-notification.md` | 未着手 |
+| 13.2 | `phase13.2-visual-bell.md` | **完了** |
+| 13.3 | `phase13.3-window-opacity.md` | **完了** |
+| 13.4 | `phase13.4-unsafe-paste.md` | **完了** |
+| 13.5 | `phase13.5-kitty-keyboard.md` | **完了** |
+| 13.6 | `phase13.6-desktop-notification.md` | **完了** |
 
 ## 実装順序の推奨
 

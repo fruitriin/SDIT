@@ -227,7 +227,12 @@ pub fn csi_dispatch(term: &mut Terminal, params: &Params, intermediates: &[u8], 
             if intermediates.first() == Some(&b' ') {
                 let style = first_param(params, 0);
                 match style {
-                    0..=2 => {
+                    0 => {
+                        // DECSCUSR 0: デフォルトスタイルに復帰
+                        term.cursor_style = term.default_cursor_style;
+                        term.cursor_blinking = term.default_cursor_blinking;
+                    }
+                    1 | 2 => {
                         term.cursor_style = super::CursorStyle::Block;
                         term.cursor_blinking = style != 2;
                     }
@@ -460,4 +465,42 @@ fn nth_param(params: &Params, n: usize, default: usize) -> usize {
         .nth(n)
         .and_then(|p| p.first().copied())
         .map_or(default as u16, |v| if v == 0 { default as u16 } else { v }) as usize
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::super::{CursorStyle, Processor, Terminal};
+
+    /// DECSCUSR 0 でデフォルトカーソルスタイルに復帰することを確認する。
+    #[test]
+    fn decscusr_0_resets_to_default_cursor() {
+        let mut term = Terminal::new(24, 80, 100);
+        let mut proc = Processor::new();
+
+        // デフォルトを Bar + 点滅なしに設定
+        term.set_default_cursor(CursorStyle::Bar, false);
+
+        // neovim のように DECSCUSR 1 (Block + 点滅) に変更
+        // 正規形: CSI 1 SP q (パラメータが先、中間バイトが後)
+        proc.advance(&mut term, b"\x1b[1 q");
+        assert_eq!(term.cursor_style(), CursorStyle::Block);
+        assert!(term.cursor_blinking());
+
+        // DECSCUSR 0 でデフォルト（Bar + 点滅なし）に戻ることを確認
+        proc.advance(&mut term, b"\x1b[0 q");
+        assert_eq!(term.cursor_style(), CursorStyle::Bar);
+        assert!(!term.cursor_blinking());
+    }
+
+    /// `new_with_cursor` で初期カーソルスタイルが設定されることを確認する。
+    #[test]
+    fn new_with_cursor_sets_initial_style() {
+        let term = Terminal::new_with_cursor(24, 80, 100, CursorStyle::Underline, true);
+        assert_eq!(term.cursor_style(), CursorStyle::Underline);
+        assert!(term.cursor_blinking());
+    }
 }
