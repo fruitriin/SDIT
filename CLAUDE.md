@@ -362,6 +362,10 @@ sdit/
 - サブエージェントに実装を委譲する場合は、原則 `isolation: "worktree"` で起動する
 - 各 worktree は独立したブランチで作業し、完了後にメインブランチへマージする
 - worktree なしの並列実行は、変更対象ファイルが完全に独立していると確信できる場合のみ許可する
+- **worktree 起動後、`.claude` ディレクトリを worktree にコピーする**（hooks 等の .gitignore 対象ファイルは worktree に自動複製されないため）:
+  ```bash
+  cp -r /Users/riin/workspace/SDIT/.claude <worktree-path>/.claude
+  ```
 
 **利点:**
 - ファイル競合を根本的に排除できる（各エージェントが独立したワーキングツリーで作業）

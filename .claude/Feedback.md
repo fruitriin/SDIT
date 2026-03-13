@@ -20,6 +20,9 @@
 
 ## 完了済み
 
+- integration-test エージェントが `subagent_type: Explore`（読み取り専用）で起動されていたため GUI テスト（SDIT 起動 + スクリーンショット）を実行できていなかった → テンプレート・CLAUDE.md を修正し `general-purpose` を使うよう明記
+- worktree 起動時に `.claude` ディレクトリ（hooks 等の .gitignore 対象ファイル含む）が複製されず、フックエラーでエージェントがブロックされていた → CLAUDE.md に `cp -r .claude <worktree>/.claude` ルールを追記
+
 - ノウハウの読み込み順のブラッシュアップ → CLAUDE.md ブートシーケンスを knowhow サブエージェントフィルタリング方式に変更
 - 統合テストのログチェック → `smoke_headless.rs` と `smoke_gui.rs` に `RUST_LOG=info` + 期待ログメッセージの存在確認を追加
 - Phase 2 セキュリティ Low は各 Plan に記録済み（独立計画不要）
