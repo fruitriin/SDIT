@@ -3,6 +3,8 @@
 //! OSC 8 ハイパーリンク優先で、なければ正規表現でセル行中の URL を検出する。
 //! また、QuickSelect 用の汎用パターンマッチングも提供する。
 
+use std::sync::OnceLock;
+
 use regex::Regex;
 
 use crate::grid::Cell;
@@ -95,38 +97,43 @@ impl Default for UrlDetector {
 ///
 /// URL（https?://...）、Unix ファイルパス（/...）、git ハッシュ（7-40桁の16進数）、
 /// 数値（IP アドレス含む）を対象とする。
-pub fn default_quick_select_patterns() -> Vec<Regex> {
-    vec![
-        // URL
-        Regex::new(r#"https?://[^\s<>"{}|\\^\[\]]*[^\s<>"{}|\\^\[\].,;:!?'()]"#)
-            .expect("URL pattern compile failed"),
-        // Unix ファイルパス（/ で始まり空白以外の文字列）
-        Regex::new(r"/[^\s]+").expect("file path pattern compile failed"),
-        // git ハッシュ（7〜40桁の16進数。単語境界で区切る）
-        Regex::new(r"\b[0-9a-fA-F]{7,40}\b").expect("git hash pattern compile failed"),
-        // 数値（IP アドレスを含む。整数・小数・コロン区切りポート番号等）
-        Regex::new(r"\b\d+(?:\.\d+){0,3}(?::\d+)?\b").expect("number pattern compile failed"),
-    ]
+///
+/// `OnceLock` によりプロセス内で1回だけコンパイルし、以降は参照を返す。
+pub fn default_quick_select_patterns() -> &'static [Regex] {
+    static PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
+    PATTERNS.get_or_init(|| {
+        vec![
+            // URL
+            Regex::new(r#"https?://[^\s<>"{}|\\^\[\]]*[^\s<>"{}|\\^\[\].,;:!?'()]"#)
+                .expect("URL pattern compile failed"),
+            // Unix ファイルパス（/ で始まり空白以外の文字列）
+            Regex::new(r"/[^\s]+").expect("file path pattern compile failed"),
+            // git ハッシュ（7〜40桁の16進数。単語境界で区切る）
+            Regex::new(r"\b[0-9a-fA-F]{7,40}\b").expect("git hash pattern compile failed"),
+            // 数値（IP アドレスを含む。整数・小数・コロン区切りポート番号等）
+            Regex::new(r"\b\d+(?:\.\d+){0,3}(?::\d+)?\b").expect("number pattern compile failed"),
+        ]
+    })
 }
 
 /// セル配列に対して複数パターンをマッチし、重複なしで結果を返す。
 ///
 /// 同一範囲のセルに複数のパターンがマッチした場合、先のパターン（より具体的なもの）が優先される。
 /// `patterns` が空の場合は `default_quick_select_patterns()` を使用する。
-pub fn detect_patterns_in_line(cells: &[Cell], patterns: &[Regex]) -> Vec<PatternMatch> {
+pub fn detect_patterns_in_line(cells: &[Cell], patterns: &[&Regex]) -> Vec<PatternMatch> {
     let text = cells_to_text(cells);
     if text.is_empty() {
         return Vec::new();
     }
 
-    let active_patterns: &[Regex];
-    let default_patterns;
-    if patterns.is_empty() {
-        default_patterns = default_quick_select_patterns();
-        active_patterns = &default_patterns;
+    // patterns が空のときは静的デフォルトを参照スライスに変換して使う
+    let default_refs: Vec<&Regex>;
+    let active_patterns: &[&Regex] = if patterns.is_empty() {
+        default_refs = default_quick_select_patterns().iter().collect();
+        &default_refs
     } else {
-        active_patterns = patterns;
-    }
+        patterns
+    };
 
     // 各パターンでマッチを収集し、重複排除（先に追加されたものが優先）
     let mut results: Vec<PatternMatch> = Vec::new();
@@ -344,7 +351,7 @@ mod tests {
     fn detect_patterns_custom_patterns() {
         let pattern = Regex::new(r"FOO-\d+").unwrap();
         let cells = make_cells("issue FOO-123 is fixed");
-        let matches = detect_patterns_in_line(&cells, &[pattern]);
+        let matches = detect_patterns_in_line(&cells, &[&pattern]);
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].text, "FOO-123");
     }

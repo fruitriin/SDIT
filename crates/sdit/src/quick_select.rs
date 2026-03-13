@@ -1,6 +1,5 @@
 //! QuickSelect モード: キーボードショートカットで画面上のパターンをクリップボードにコピーする。
 
-use regex::Regex;
 use sdit_core::grid::Dimensions;
 use winit::keyboard::NamedKey;
 use winit::window::WindowId;
@@ -47,7 +46,7 @@ impl SditApp {
                             log::warn!("QuickSelect clipboard set_text failed: {e}");
                         }
                     }
-                    log::info!("QuickSelect: copied {:?}", hint.text);
+                    log::info!("QuickSelect: copied {} bytes", hint.text.len());
                     self.quick_select = None;
                 } else {
                     // 候補が残っているか確認（前方一致で候補があれば継続、なければ終了）
@@ -87,22 +86,10 @@ impl SditApp {
         let sid = ws.active_session_id();
         let Some(session) = self.session_mgr.get(sid) else { return };
 
-        // カスタムパターンをコンパイル
-        let custom_patterns: Vec<Regex> = self
-            .config
-            .quick_select
-            .patterns
-            .iter()
-            .filter_map(|p| {
-                Regex::new(p)
-                    .map_err(|e| log::warn!("QuickSelect pattern compile error '{p}': {e}"))
-                    .ok()
-            })
-            .collect();
-
-        // デフォルトパターン + カスタムパターンを結合
-        let mut all_patterns = sdit_core::terminal::url_detector::default_quick_select_patterns();
-        all_patterns.extend(custom_patterns);
+        // デフォルトパターン + コンパイル済みカスタムパターンを結合
+        let default_patterns = sdit_core::terminal::url_detector::default_quick_select_patterns();
+        let mut all_patterns: Vec<_> = default_patterns.iter().collect();
+        all_patterns.extend(self.compiled_quick_select_patterns.iter());
 
         // 全ビューポート行をスキャンしてヒントを生成
         let mut hints: Vec<QuickSelectHint> = Vec::new();

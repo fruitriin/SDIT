@@ -3,6 +3,8 @@ use std::sync::atomic::AtomicBool;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
+use regex::Regex;
+
 use winit::keyboard::ModifiersState;
 use winit::window::{Window, WindowId};
 
@@ -300,6 +302,8 @@ pub(crate) struct SditApp {
     pub(crate) quick_select: Option<QuickSelectState>,
     /// 設定全体（キーバインド等）。
     pub(crate) config: sdit_core::config::Config,
+    /// コンパイル済みカスタム QuickSelect パターン（config 更新時に再コンパイル）。
+    pub(crate) compiled_quick_select_patterns: Vec<Regex>,
     /// 通知スレッドが飛行中かどうか（レート制限：同時に複数スレッドを立ち上げない）。
     pub(crate) notification_in_flight: Arc<AtomicBool>,
     /// メニューバー + コンテキストメニューの共有 `MenuId` マップ。
@@ -354,6 +358,7 @@ impl SditApp {
             search: None,
             quick_select: None,
             config: config.clone(),
+            compiled_quick_select_patterns: compile_quick_select_patterns(config),
             notification_in_flight: Arc::new(AtomicBool::new(false)),
             #[cfg(target_os = "macos")]
             menu_actions: menu_actions.clone(),
@@ -632,6 +637,7 @@ impl SditApp {
         }
 
         // 11. 設定を置換
+        self.compiled_quick_select_patterns = compile_quick_select_patterns(&new_config);
         self.config = new_config;
 
         log::info!("Config reloaded successfully");
@@ -752,6 +758,22 @@ pub(crate) fn confirm_unsafe_paste(text: &str) -> bool {
         .show();
 
     result == MessageDialogResult::Custom("Paste".to_string())
+}
+
+/// 設定からカスタム QuickSelect パターンをコンパイルして返す。
+///
+/// 無効な正規表現はスキップし警告ログを出す。最大件数は `clamped_patterns()` で制限済み。
+pub(crate) fn compile_quick_select_patterns(config: &sdit_core::config::Config) -> Vec<Regex> {
+    config
+        .quick_select
+        .clamped_patterns()
+        .iter()
+        .filter_map(|p| {
+            Regex::new(p)
+                .map_err(|e| log::warn!("QuickSelect pattern compile error '{p}': {e}"))
+                .ok()
+        })
+        .collect()
 }
 
 /// テキストをブラケットペーストシーケンスで包む。

@@ -215,6 +215,16 @@ impl Default for QuickSelectConfig {
     }
 }
 
+impl QuickSelectConfig {
+    /// パターン一覧を最大 50 件に制限して返す。
+    ///
+    /// 50 件を超えるパターンを指定した場合、先頭 50 件のみが使用される。
+    pub fn clamped_patterns(&self) -> &[String] {
+        const MAX_PATTERNS: usize = 50;
+        &self.patterns[..self.patterns.len().min(MAX_PATTERNS)]
+    }
+}
+
 impl Default for ScrollbackConfig {
     fn default() -> Self {
         Self { lines: 10_000 }
