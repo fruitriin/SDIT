@@ -96,8 +96,8 @@ fn vs_main(
     // セル左上のピクセル座標。
     let cell_px = instance.grid_pos * u.cell_size;
 
-    // セル内ローカル座標（ピクセル）。全角文字は横方向2セル分に拡張。
-    let safe_scale = clamp(instance.cell_width_scale, 1.0, 2.0);
+    // セル内ローカル座標（ピクセル）。全角文字やリガチャは横方向に複数セル分に拡張。
+    let safe_scale = clamp(instance.cell_width_scale, 1.0, 8.0);
     let scaled_cell = vec2<f32>(u.cell_size.x * safe_scale, u.cell_size.y);
     let local = corner * scaled_cell;
 

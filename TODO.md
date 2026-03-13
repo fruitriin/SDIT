@@ -3,7 +3,7 @@
 `docs/plans/` の完了状態・優先度をトラックする。
 `docs/plans/` と TODO が一致しなければ TODO を編集する。
 
-## 現在のフェーズ: Phase 10.3b / 12（次に着手）
+## 現在のフェーズ: Phase 12 + 新規 Plan（次に着手）
 
 ## バックログ
 
@@ -31,8 +31,15 @@
 | done | 9.2 | `docs/plans/phase9.2-keybinds.md` | **完了** |
 | done | 10.1 | `docs/plans/phase10.1-hot-reload.md` | **完了** |
 | done | 10.2 | `docs/plans/phase10.2-window-persistence.md` | **完了** |
-| 中低 | 10.3 | `docs/plans/phase10.3-ligature-emoji.md` | **10.3a 完了**（10.3b リガチャ未着手） |
+| done | 10.3 | `docs/plans/phase10.3-ligature-emoji.md` | **完了** |
 | done | 11.1 | `docs/plans/phase11.1-macos-menubar.md` | **完了** |
 | done | 11.2 | `docs/plans/phase11.2-context-menu.md` | **完了** |
 | done | 11.3 | `docs/plans/phase11.3-gui-settings.md` | **完了** |
 | 低 | 12 | `docs/plans/phase12-macos-release.md` | 未着手 |
+
+
+オーナーリクエスト:
+タスクが無くなったら以下に取り組んでください
+- 当たり前品質を向上させる計画を追加する
+- オプションによって挙動を変えられるなら採用する価値があるタスクの計画を追加する
+

@@ -4,6 +4,7 @@
 //! - `FontSystem::new()` でシステムフォントを読み込む
 //! - `Buffer` に1文字をセットしてシェーピング → `PhysicalGlyph` を得る
 //! - `SwashCache` でラスタライズ → `Atlas` に配置
+//! - `shape_line()` で行全体をシェーピングし、リガチャを検出する
 
 use std::collections::HashMap;
 
@@ -12,6 +13,7 @@ use cosmic_text::{
     Attrs, Buffer, Family, FontSystem, Metrics, Placement, Shaping, SwashCache, SwashContent,
     fontdb,
 };
+use unicode_width::UnicodeWidthChar;
 
 use super::atlas::{Atlas, AtlasRegion};
 
@@ -40,6 +42,17 @@ pub struct GlyphEntry {
     /// カラーグリフ（絵文字等）かどうか。
     /// `true` の場合、シェーダーは fg 色を使わずテクスチャの RGBA をそのまま描画する。
     pub is_color: bool,
+}
+
+/// 行シェーピング結果の1グリフ分。
+#[derive(Debug, Clone)]
+pub struct ShapedGlyph {
+    /// このグリフが対応する開始カラム（セルインデックス）。
+    pub start_col: usize,
+    /// このグリフが占めるセル数（通常1、全角2、リガチャは2以上）。
+    pub num_cells: usize,
+    /// グリフの GlyphEntry（ラスタライズ結果）。None ならスペースや描画不要。
+    pub entry: Option<GlyphEntry>,
 }
 
 /// グリフキャッシュのキー。
@@ -158,60 +171,187 @@ impl FontContext {
             return self.glyph_cache.get(&cache_key_raw);
         }
 
-        // ラスタライズ。
-        let image =
-            self.swash_cache.get_image_uncached(&mut self.font_system, physical.cache_key)?;
-
-        let placement: Placement = image.placement;
-        let w = placement.width;
-        let h = placement.height;
-        if w == 0 || h == 0 {
-            return None;
-        }
-
-        // アトラスに確保して書き込む。
-        // Atlas は RGBA 4bytes/pixel を期待するため、コンテンツ種別に応じて変換する。
-        let is_color = matches!(image.content, SwashContent::Color);
-        let rgba_data: Vec<u8> = match image.content {
-            SwashContent::Mask => {
-                // グレースケール Alpha マスク → RGBA: R=G=B=255, A=alpha
-                image.data.iter().flat_map(|&a| [255u8, 255, 255, a]).collect()
-            }
-            SwashContent::Color => {
-                // カラー絵文字: swash が返す BGRA を RGBA に並び替える。
-                // swash の Color ビットマップは BGRA 順。
-                image
-                    .data
-                    .chunks_exact(4)
-                    .flat_map(|bgra| [bgra[2], bgra[1], bgra[0], bgra[3]])
-                    .collect()
-            }
-            SwashContent::SubpixelMask => {
-                // サブピクセル: RGBA 4bytes/pixel（zeno Format::Subpixel）
-                // A チャンネルは 0 のため、max(R,G,B) をアルファとして使う
-                image
-                    .data
-                    .chunks_exact(4)
-                    .flat_map(|rgba| {
-                        let a = rgba[0].max(rgba[1]).max(rgba[2]);
-                        [rgba[0], rgba[1], rgba[2], a]
-                    })
-                    .collect()
-            }
-        };
-
-        let region = atlas.reserve(w, h)?;
-        atlas.write(region, &rgba_data);
-
-        let entry = GlyphEntry {
-            region,
-            placement_left: placement.left,
-            placement_top: placement.top,
-            is_color,
-        };
+        // ラスタライズ（共通ヘルパー使用）。
+        let entry = rasterize_physical_glyph(
+            &mut self.swash_cache,
+            &mut self.font_system,
+            physical.cache_key,
+            atlas,
+        )?;
         self.glyph_cache.insert(cache_key_raw.clone(), entry);
         self.glyph_cache.get(&cache_key_raw)
     }
+
+    /// 行テキスト全体をシェーピングして `ShapedGlyph` のリストを返す。
+    ///
+    /// リガチャ（複数文字 → 1グリフ）や全角文字（2セル幅）を正しく検出する。
+    ///
+    /// `line_text`: Grid の1行分のテキスト（`WIDE_CHAR_SPACER` を除いたもの）。
+    /// `atlas`: グリフをラスタライズして配置するアトラス。
+    pub fn shape_line(&mut self, line_text: &str, atlas: &mut Atlas) -> Vec<ShapedGlyph> {
+        if line_text.is_empty() {
+            return Vec::new();
+        }
+
+        // cosmic-text Buffer を作成して行全体をシェーピング。
+        let line_height = self.font_size * self.line_height_factor;
+        let metrics = Metrics::new(self.font_size, line_height);
+        let mut buf = Buffer::new(&mut self.font_system, metrics);
+        let attrs = Attrs::new().family(Family::Name(&self.font_family));
+        buf.set_text(&mut self.font_system, line_text, attrs, Shaping::Advanced);
+        buf.shape_until_scroll(&mut self.font_system, false);
+
+        // 入力テキストの各バイト位置をセルカラムにマッピング。
+        let byte_to_col = build_byte_to_col_map(line_text);
+
+        let mut results: Vec<ShapedGlyph> = Vec::new();
+
+        for run in buf.layout_runs() {
+            let glyphs: Vec<_> = run.glyphs.iter().collect();
+            let n = glyphs.len();
+            for (i, glyph) in glyphs.iter().enumerate() {
+                let byte_start = glyph.metadata;
+                let byte_end = if i + 1 < n { glyphs[i + 1].metadata } else { line_text.len() };
+
+                // バイト範囲が逆転している（RTL 等）場合はスキップ。
+                if byte_start >= line_text.len() || byte_end < byte_start {
+                    continue;
+                }
+                let byte_end = byte_end.min(line_text.len());
+
+                // このグリフが対応する開始カラムを取得。
+                let start_col = if byte_start < byte_to_col.len() {
+                    byte_to_col[byte_start]
+                } else {
+                    byte_to_col.last().copied().unwrap_or(0)
+                };
+
+                // このグリフが占めるセル数を計算（カバーする文字の Unicode width 合計）。
+                let covered_text = &line_text[byte_start..byte_end];
+                // シェーダーの cell_width_scale 上限（8.0）と統一。
+                let num_cells = if covered_text.is_empty() {
+                    1
+                } else {
+                    covered_text
+                        .chars()
+                        .map(|c| UnicodeWidthChar::width(c).unwrap_or(1))
+                        .sum::<usize>()
+                        .max(1)
+                        .min(8)
+                };
+
+                // スペースや NUL 文字は GlyphEntry = None。
+                let entry = if covered_text.chars().all(|c| c == ' ' || c == '\0') {
+                    None
+                } else {
+                    let physical = glyph.physical((0.0, 0.0), 1.0);
+                    let cache_key = GlyphCacheKey {
+                        font_id: physical.cache_key.font_id,
+                        glyph_id: physical.cache_key.glyph_id,
+                    };
+                    if let Some(existing) = self.glyph_cache.get(&cache_key) {
+                        Some(existing.clone())
+                    } else {
+                        let new_entry = rasterize_physical_glyph(
+                            &mut self.swash_cache,
+                            &mut self.font_system,
+                            physical.cache_key,
+                            atlas,
+                        );
+                        if let Some(ref e) = new_entry {
+                            self.glyph_cache.insert(cache_key, e.clone());
+                        }
+                        new_entry
+                    }
+                };
+
+                results.push(ShapedGlyph { start_col, num_cells, entry });
+            }
+        }
+
+        results
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 内部ヘルパー
+// ---------------------------------------------------------------------------
+
+/// `PhysicalGlyph` のキャッシュキーからグリフをラスタライズしてアトラスに書き込む。
+///
+/// 成功すれば `GlyphEntry` を返す。ラスタライズ失敗・サイズゼロ・アトラス満杯の場合は `None`。
+fn rasterize_physical_glyph(
+    swash_cache: &mut SwashCache,
+    font_system: &mut FontSystem,
+    cache_key: cosmic_text::CacheKey,
+    atlas: &mut Atlas,
+) -> Option<GlyphEntry> {
+    let image = swash_cache.get_image_uncached(font_system, cache_key)?;
+
+    let placement: Placement = image.placement;
+    let w = placement.width;
+    let h = placement.height;
+    if w == 0 || h == 0 {
+        return None;
+    }
+
+    // Atlas は RGBA 4bytes/pixel を期待するため、コンテンツ種別に応じて変換する。
+    let is_color = matches!(image.content, SwashContent::Color);
+    let rgba_data: Vec<u8> = match image.content {
+        SwashContent::Mask => {
+            // グレースケール Alpha マスク → RGBA: R=G=B=255, A=alpha
+            image.data.iter().flat_map(|&a| [255u8, 255, 255, a]).collect()
+        }
+        SwashContent::Color => {
+            // カラー絵文字: swash が返す BGRA を RGBA に並び替える。
+            image
+                .data
+                .chunks_exact(4)
+                .flat_map(|bgra| [bgra[2], bgra[1], bgra[0], bgra[3]])
+                .collect()
+        }
+        SwashContent::SubpixelMask => {
+            // サブピクセル: RGBA 4bytes/pixel（zeno Format::Subpixel）
+            // A チャンネルは 0 のため、max(R,G,B) をアルファとして使う
+            image
+                .data
+                .chunks_exact(4)
+                .flat_map(|rgba| {
+                    let a = rgba[0].max(rgba[1]).max(rgba[2]);
+                    [rgba[0], rgba[1], rgba[2], a]
+                })
+                .collect()
+        }
+    };
+
+    let region = atlas.reserve(w, h)?;
+    atlas.write(region, &rgba_data);
+
+    Some(GlyphEntry {
+        region,
+        placement_left: placement.left,
+        placement_top: placement.top,
+        is_color,
+    })
+}
+
+/// 入力テキストの各バイト位置をセルカラムインデックスにマッピングするベクタを構築する。
+///
+/// `byte_to_col[byte_pos]` = そのバイトが属する文字のセル開始カラム。
+/// 全角文字は2セル幅を占めるため、その文字の後続バイトも同じカラム値を返す。
+fn build_byte_to_col_map(text: &str) -> Vec<usize> {
+    let bytes_len = text.len();
+    let mut map = vec![0usize; bytes_len];
+    let mut col = 0usize;
+    for (byte_pos, c) in text.char_indices() {
+        let char_len = c.len_utf8();
+        let byte_end = (byte_pos + char_len).min(bytes_len);
+        for b in byte_pos..byte_end {
+            map[b] = col;
+        }
+        col += UnicodeWidthChar::width(c).unwrap_or(1);
+    }
+    map
 }
 
 /// モノスペースフォントの em 幅からセル幅を計算する。
@@ -304,12 +444,27 @@ mod tests {
         let factor = 1.2_f32;
         let ctx = FontContext::new(font_size, factor);
         let expected = font_size * factor;
-        // 小数点誤差を考慮して epsilon を設ける。
         assert!(
             (ctx.metrics().cell_height - expected).abs() < 0.01,
             "cell_height = {}, expected = {}",
             ctx.metrics().cell_height,
             expected
         );
+    }
+
+    #[test]
+    fn build_byte_to_col_map_ascii() {
+        let map = build_byte_to_col_map("abc");
+        assert_eq!(map, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn build_byte_to_col_map_cjk() {
+        // 「日」は UTF-8 で 3 バイト、幅 2。「a」は 1 バイト、幅 1。
+        let map = build_byte_to_col_map("日a");
+        assert_eq!(map[0], 0); // 「日」のバイト 0
+        assert_eq!(map[1], 0); // 「日」のバイト 1
+        assert_eq!(map[2], 0); // 「日」のバイト 2
+        assert_eq!(map[3], 2); // 「a」→ カラム 2（「日」が幅 2 を占める）
     }
 }

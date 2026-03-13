@@ -15,7 +15,7 @@ use bytemuck::{Pod, Zeroable};
 use winit::window::Window;
 
 use super::atlas::Atlas;
-use super::font::FontContext;
+use super::font::{FontContext, GlyphEntry, ShapedGlyph};
 
 // ---------------------------------------------------------------------------
 // GpuContext
@@ -442,27 +442,29 @@ impl CellPipeline {
         let mut vertices: Vec<CellVertex> = Vec::with_capacity(rows * cols);
 
         for row in 0..rows {
+            // 行テキストを抽出（WIDE_CHAR_SPACER を除く）して shape_line() でシェーピング。
+            let mut line_text = String::with_capacity(cols);
             for col in 0..cols {
-                // row は screen_lines() の範囲内なので i32 に収まる（最大 65535 程度）。
+                #[allow(clippy::cast_possible_wrap)]
+                let point = Point::new(Line(row as i32), Column(col));
+                let cell = &grid[point];
+                if !cell.flags.contains(CellFlags::WIDE_CHAR_SPACER) {
+                    line_text.push(cell.c);
+                }
+            }
+            let shaped = font_ctx.shape_line(&line_text, atlas);
+
+            // ShapedGlyph からカラム → グリフ情報のマップを構築。
+            // col_glyph_map[col] = Some((entry, num_cells, is_first_cell))
+            let col_glyph_map = build_col_glyph_map(&shaped, cols);
+
+            #[allow(clippy::needless_range_loop)]
+            for col in 0..cols {
                 #[allow(clippy::cast_possible_wrap)]
                 let point = Point::new(Line(row as i32), Column(col));
                 let cell = &grid[point];
 
-                // WIDE_CHAR_SPACER（全角文字の右半分）は背景のみ描画。
-                if cell.flags.contains(CellFlags::WIDE_CHAR_SPACER) {
-                    vertices.push(CellVertex {
-                        bg: color_to_rgba(cell.bg),
-                        fg: [0.0; 4],
-                        grid_pos: [col as f32, row as f32],
-                        uv: [0.0; 4],
-                        glyph_offset: [0.0; 2],
-                        glyph_size: [0.0; 2],
-                        cell_width_scale: 1.0,
-                        is_color_glyph: 0.0,
-                    });
-                    continue;
-                }
-
+                // 色の決定（カーソル・選択・検索マッチ・URL ホバー）。
                 let is_cursor = cursor_pos == Some((col, row));
                 let is_selected = selection.is_some_and(|sel| is_in_selection(col, row, sel));
                 let is_url_hovered =
@@ -471,53 +473,59 @@ impl CellPipeline {
                     .is_some_and(|(mr, ms, me)| row == mr && col >= ms && col < me);
                 let is_search_match = match_set.contains(&(row, col));
                 let (bg, fg) = if is_cursor || is_selected {
-                    // カーソル位置 or 選択範囲: fg/bg を反転
                     (color_to_rgba(cell.fg), color_to_rgba(cell.bg))
                 } else if is_current_match {
-                    // 現在のマッチ: Catppuccin Mocha Peach (#fab387)
                     (hex_rgba(0xfa, 0xb3, 0x87), [0.0, 0.0, 0.0, 1.0])
                 } else if is_search_match {
-                    // その他のマッチ: Catppuccin Mocha Yellow (#f9e2af)
                     (hex_rgba(0xf9, 0xe2, 0xaf), [0.0, 0.0, 0.0, 1.0])
                 } else if is_url_hovered {
-                    // URL ホバー: 前景色を青色に変更
                     (color_to_rgba(cell.bg), [0.4, 0.6, 1.0, 1.0])
                 } else {
                     (color_to_rgba(cell.bg), color_to_rgba(cell.fg))
                 };
-                let is_wide = cell.flags.contains(CellFlags::WIDE_CHAR);
 
-                // グリフをラスタライズしてアトラスに配置。
-                let (uv, glyph_offset, glyph_size, is_color_glyph) =
-                    if let Some(entry) = font_ctx.rasterize_glyph(cell.c, atlas) {
-                        let r = entry.region;
-                        let uv = [
-                            r.x as f32 / atlas_size,
-                            r.y as f32 / atlas_size,
-                            (r.x + r.width) as f32 / atlas_size,
-                            (r.y + r.height) as f32 / atlas_size,
-                        ];
-                        let offset = [entry.placement_left as f32, entry.placement_top as f32];
-                        let size = [r.width as f32, r.height as f32];
-                        let color_flag = if entry.is_color { 1.0_f32 } else { 0.0_f32 };
-                        (uv, offset, size, color_flag)
+                // カラムマップからグリフ情報を取得。
+                if let Some(ref info) = col_glyph_map[col] {
+                    if info.is_first_cell {
+                        // リガチャ/全角/通常グリフの最初のセル: グリフ情報あり。
+                        let (uv, glyph_offset, glyph_size, is_color_glyph) =
+                            glyph_entry_to_vertex_data(info.entry.as_ref(), atlas_size);
+                        vertices.push(CellVertex {
+                            bg,
+                            fg,
+                            grid_pos: [col as f32, row as f32],
+                            uv,
+                            glyph_offset,
+                            glyph_size,
+                            cell_width_scale: info.num_cells as f32,
+                            is_color_glyph,
+                        });
                     } else {
-                        // スペース or グリフなし: ゼロサイズで背景のみ描画。
-                        ([0.0_f32; 4], [0.0_f32; 2], [0.0_f32; 2], 0.0_f32)
-                    };
-
-                // WIDE_CHAR は2セル幅で描画。
-                let cell_width_scale = if is_wide { 2.0 } else { 1.0 };
-                vertices.push(CellVertex {
-                    bg,
-                    fg,
-                    grid_pos: [col as f32, row as f32],
-                    uv,
-                    glyph_offset,
-                    glyph_size,
-                    cell_width_scale,
-                    is_color_glyph,
-                });
+                        // リガチャ/全角の後続セル: 背景のみ描画。
+                        vertices.push(CellVertex {
+                            bg,
+                            fg: [0.0; 4],
+                            grid_pos: [col as f32, row as f32],
+                            uv: [0.0; 4],
+                            glyph_offset: [0.0; 2],
+                            glyph_size: [0.0; 2],
+                            cell_width_scale: 1.0,
+                            is_color_glyph: 0.0,
+                        });
+                    }
+                } else {
+                    // マップにない（余剰カラム等）: 背景のみ。
+                    vertices.push(CellVertex {
+                        bg,
+                        fg: [0.0; 4],
+                        grid_pos: [col as f32, row as f32],
+                        uv: [0.0; 4],
+                        glyph_offset: [0.0; 2],
+                        glyph_size: [0.0; 2],
+                        cell_width_scale: 1.0,
+                        is_color_glyph: 0.0,
+                    });
+                }
             }
         }
 
@@ -552,6 +560,70 @@ impl CellPipeline {
         }
         let byte_offset = (index * std::mem::size_of::<CellVertex>()) as wgpu::BufferAddress;
         queue.write_buffer(&self.vertex_buffer, byte_offset, bytemuck::bytes_of(vertex));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// リガチャ・カラムマップヘルパー
+// ---------------------------------------------------------------------------
+
+/// カラムごとのグリフ情報。
+struct ColGlyphInfo {
+    /// グリフエントリ（None = スペース等の描画不要グリフ）。
+    entry: Option<GlyphEntry>,
+    /// このグリフが占めるセル数。
+    num_cells: usize,
+    /// このカラムがグリフの最初のセルかどうか。
+    is_first_cell: bool,
+}
+
+/// `ShapedGlyph` のリストからカラム → グリフ情報のマップを構築する。
+///
+/// 返り値は `cols` 長のベクタで、各要素は `Some(ColGlyphInfo)` または `None`。
+fn build_col_glyph_map(shaped: &[ShapedGlyph], cols: usize) -> Vec<Option<ColGlyphInfo>> {
+    let mut map: Vec<Option<ColGlyphInfo>> = (0..cols).map(|_| None).collect();
+
+    for sg in shaped {
+        if sg.start_col >= cols {
+            continue;
+        }
+        // 最初のセル: グリフ情報あり。
+        map[sg.start_col] = Some(ColGlyphInfo {
+            entry: sg.entry.clone(),
+            num_cells: sg.num_cells,
+            is_first_cell: true,
+        });
+        // 後続セル: 背景のみ描画。
+        for offset in 1..sg.num_cells {
+            let c = sg.start_col + offset;
+            if c < cols {
+                map[c] = Some(ColGlyphInfo { entry: None, num_cells: 1, is_first_cell: false });
+            }
+        }
+    }
+
+    map
+}
+
+/// `GlyphEntry` から `CellVertex` のグリフデータ (uv, offset, size, `is_color`) を生成する。
+fn glyph_entry_to_vertex_data(
+    entry: Option<&GlyphEntry>,
+    atlas_size: f32,
+) -> ([f32; 4], [f32; 2], [f32; 2], f32) {
+    if let Some(e) = entry {
+        let r = e.region;
+        let uv = [
+            r.x as f32 / atlas_size,
+            r.y as f32 / atlas_size,
+            (r.x + r.width) as f32 / atlas_size,
+            (r.y + r.height) as f32 / atlas_size,
+        ];
+        let offset = [e.placement_left as f32, e.placement_top as f32];
+        let size = [r.width as f32, r.height as f32];
+        let color_flag = if e.is_color { 1.0_f32 } else { 0.0_f32 };
+        (uv, offset, size, color_flag)
+    } else {
+        ([0.0_f32; 4], [0.0_f32; 2], [0.0_f32; 2], 0.0_f32)
     }
 }
 
