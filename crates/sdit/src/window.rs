@@ -49,6 +49,7 @@ pub(crate) fn spawn_pty_reader(
                             // BEL 処理
                             if terminal.take_bell() {
                                 log::info!("BEL received (session {})", session_id.0);
+                                let _ = event_proxy.send_event(SditEvent::BellRing(session_id));
                             }
                             // OSC 52 クリップボード書き込み処理
                             if let Some(text) = terminal.take_clipboard_write() {

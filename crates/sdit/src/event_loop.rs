@@ -664,23 +664,42 @@ impl ApplicationHandler<SditEvent> for SditApp {
             }
 
             WindowEvent::RedrawRequested => {
-                let Some(ws) = self.windows.get(&id) else { return };
+                let Some(ws) = self.windows.get_mut(&id) else { return };
+
+                // ビジュアルベルの intensity を取得してクリアカラーに反映
+                let bell_intensity = ws.visual_bell.intensity();
+                let clear_color = if bell_intensity > 0.0 {
+                    let bg = self.colors.background;
+                    // 背景色と白を intensity で補間（30% まで白を混ぜる）
+                    [
+                        bg[0] + (1.0 - bg[0]) * bell_intensity * 0.3,
+                        bg[1] + (1.0 - bg[1]) * bell_intensity * 0.3,
+                        bg[2] + (1.0 - bg[2]) * bell_intensity * 0.3,
+                        bg[3],
+                    ]
+                } else {
+                    self.colors.background
+                };
+
                 let pipelines: Vec<&CellPipeline> = if ws.sidebar.visible {
                     vec![&ws.sidebar_pipeline, &ws.cell_pipeline]
                 } else {
                     vec![&ws.cell_pipeline]
                 };
-                match ws.gpu.render_frame(&pipelines, self.colors.background) {
+                match ws.gpu.render_frame(&pipelines, clear_color) {
                     Ok(()) => {}
                     Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                        if let Some(ws) = self.windows.get_mut(&id) {
-                            let (w, h) =
-                                (ws.gpu.surface_config.width, ws.gpu.surface_config.height);
-                            ws.gpu.resize(w, h);
-                        }
+                        let (w, h) = (ws.gpu.surface_config.width, ws.gpu.surface_config.height);
+                        ws.gpu.resize(w, h);
                     }
                     Err(e) => log::error!("Render error: {e}"),
                 }
+
+                // ベルアニメーション継続中なら次フレームを要求
+                if bell_intensity > 0.0 {
+                    ws.window.request_redraw();
+                }
+
                 // SDIT_SMOKE_TEST=1: 1フレーム描画完了後に正常終了する。
                 if self.smoke_test {
                     log::info!("smoke_test: 1 frame rendered, exiting");
@@ -793,6 +812,28 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 }
                 if self.windows.is_empty() {
                     event_loop.exit();
+                }
+            }
+            SditEvent::BellRing(session_id) => {
+                let Some(&window_id) = self.session_to_window.get(&session_id) else { return };
+
+                // ビジュアルベル
+                if self.config.bell.visual {
+                    if let Some(ws) = self.windows.get_mut(&window_id) {
+                        ws.visual_bell.ring();
+                        ws.window.request_redraw();
+                    }
+                }
+
+                // Dock バウンス（ウィンドウが非フォーカスの場合のみ）
+                if self.config.bell.dock_bounce {
+                    if let Some(ws) = self.windows.get(&window_id) {
+                        if !ws.window.has_focus() {
+                            ws.window.request_user_attention(Some(
+                                winit::window::UserAttentionType::Informational,
+                            ));
+                        }
+                    }
                 }
             }
             SditEvent::MenuAction(action) => {

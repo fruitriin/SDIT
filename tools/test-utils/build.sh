@@ -27,6 +27,26 @@ swiftc \
     -framework Foundation
 echo "    OK: $SCRIPT_DIR/capture-window"
 
+echo "==> Building render-text..."
+swiftc \
+    "$SCRIPT_DIR/render-text.swift" \
+    -o "$SCRIPT_DIR/render-text" \
+    -framework CoreGraphics \
+    -framework CoreText \
+    -framework Foundation \
+    -framework ImageIO
+echo "    OK: $SCRIPT_DIR/render-text"
+
+echo "==> Building verify-text..."
+swiftc \
+    "$SCRIPT_DIR/verify-text.swift" \
+    -o "$SCRIPT_DIR/verify-text" \
+    -framework CoreGraphics \
+    -framework Vision \
+    -framework ImageIO \
+    -framework Foundation
+echo "    OK: $SCRIPT_DIR/verify-text"
+
 echo "==> Setting execute permission on send-keys.sh..."
 chmod +x "$SCRIPT_DIR/send-keys.sh"
 echo "    OK: $SCRIPT_DIR/send-keys.sh"

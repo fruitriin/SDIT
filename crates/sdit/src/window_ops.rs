@@ -11,7 +11,7 @@ use sdit_core::render::atlas::Atlas;
 use sdit_core::render::pipeline::{CellPipeline, GpuContext};
 use sdit_core::session::{AppSnapshot, SessionSnapshot, SidebarState, WindowGeometry};
 
-use crate::app::{SditApp, WindowState};
+use crate::app::{SditApp, VisualBell, WindowState};
 use crate::window::calc_grid_size;
 
 /// sdit-core の `OptionAsAlt` を winit の `WinitOptionAsAlt` に変換する。
@@ -153,6 +153,7 @@ impl SditApp {
                 sessions: vec![session_id],
                 active_index: 0,
                 sidebar: SidebarState::new(),
+                visual_bell: VisualBell::new(self.config.bell.clamped_duration_ms()),
             },
         );
 
@@ -356,6 +357,7 @@ impl SditApp {
                 sessions: vec![detach_sid],
                 active_index: 0,
                 sidebar: SidebarState::new(),
+                visual_bell: VisualBell::new(self.config.bell.clamped_duration_ms()),
             },
         );
 

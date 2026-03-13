@@ -17,8 +17,7 @@
       "Bash(cargo metadata:*)",
       "Bash(cargo build:*)",
       "Bash(savanna-smell-detector:*)",
-      "Bash(cargo tree:*)",
-      "Bash(brew info:*)"
+      "Bash(cargo tree:*)"
     ]
   }
 }

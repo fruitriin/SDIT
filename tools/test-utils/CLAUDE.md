@@ -11,6 +11,8 @@ SDIT のウィンドウ操作・画面キャプチャ・キー入力送信を自
 tools/test-utils/
 ├── window-info.swift      # AXUIElement → JSON（ウィンドウ属性取得）
 ├── capture-window.swift   # ScreenCaptureKit → PNG（スクリーンショット）
+├── render-text.swift      # CoreText → PNG（対照群テキストレンダリング）
+├── verify-text.swift      # OCR + 輝度 + SSIM 一括検証（トークン効率最大化）
 ├── send-keys.sh           # osascript System Events（キーストローク送信）
 ├── build.sh               # swiftc でコンパイル
 ├── README.md              # 人間向けドキュメント
@@ -44,6 +46,47 @@ sleep 2  # ウィンドウ描画を待つ
 # 5. クリーンアップ
 kill $SDIT_PID
 ```
+
+### CJK 対照群テストパターン
+
+```bash
+# 1. 対照群画像を生成（CoreText で正解レンダリング）
+./tools/test-utils/render-text --mono --cell-info "こんにちは世界" tmp/reference-cjk.png
+
+# 2. SDIT で同じテキストを表示してキャプチャ
+./tools/test-utils/capture-window sdit tmp/sdit-cjk.png
+
+# 3. 視覚比較（AI エージェントが両画像を読んで差分を判定）
+```
+
+render-text オプション:
+- `--mono`: 等幅グリッド描画（ターミナル風、CJK比較に推奨）
+- `--cell-info`: セル境界座標を JSON で出力（右端クリッピング検出に有用）
+- `--font <name>`: フォント名（SDIT の設定と揃える）
+- `--size <pt>`: フォントサイズ
+- `--bg/--fg <hex>`: 背景色/テキスト色
+
+### テキスト検証パターン（トークン最適化）
+
+```bash
+# 1. 対照群生成 + セル境界 JSON 保存
+./tools/test-utils/render-text --mono --cell-info "テスト文字列" tmp/ref.png | tail -n +2 > tmp/cells.json
+
+# 2. SDIT キャプチャ
+./tools/test-utils/capture-window sdit tmp/sdit.png
+
+# 3. 一括検証（エージェントはテキスト出力のみ読む → 画像トークン不要）
+./tools/test-utils/verify-text tmp/sdit.png "テスト文字列" \
+    --cells tmp/cells.json \
+    --reference tmp/ref.png
+```
+
+verify-text は 3 種類のチェックを一括実行し、構造化テキストレポートを返す:
+- **OCR 照合**: Vision.framework で認識、期待テキストと比較
+- **輝度分析**: セル内インク有無 + 右端クリッピング検出
+- **SSIM 比較**: 対照群とのセル単位構造類似度
+
+exit code: 0=全PASS, 1=エラー, 3=いずれかFAIL
 
 ### Exit code 規約
 

@@ -85,6 +85,69 @@ pub(crate) enum SditEvent {
     ConfigReloaded,
     /// メニューバーのアイテムが選択された。
     MenuAction(sdit_core::config::keybinds::Action),
+    /// BEL (0x07) 受信 → ビジュアルベル + Dock バウンス。
+    BellRing(SessionId),
+}
+
+// ---------------------------------------------------------------------------
+// VisualBell — ビジュアルベルアニメーション状態
+// ---------------------------------------------------------------------------
+
+/// ビジュアルベルのアニメーション状態。
+pub(crate) struct VisualBell {
+    /// ベルが鳴り始めた時刻。None = 非アクティブ。
+    start_time: Option<std::time::Instant>,
+    /// フェードアウト時間。
+    duration: std::time::Duration,
+}
+
+impl VisualBell {
+    pub(crate) fn new(duration_ms: u32) -> Self {
+        Self {
+            start_time: None,
+            duration: std::time::Duration::from_millis(u64::from(duration_ms)),
+        }
+    }
+
+    /// ベルを鳴らす。アニメーション中の再呼び出しは無視する（BEL ボム対策）。
+    pub(crate) fn ring(&mut self) {
+        // アニメーション中なら無視（レート制限）
+        if self.start_time.is_some() && self.intensity_inner() > 0.0 {
+            return;
+        }
+        self.start_time = Some(std::time::Instant::now());
+    }
+
+    /// 現在の intensity (0.0〜1.0) を返す。0.0 = 完全にフェードアウト。
+    pub(crate) fn intensity(&self) -> f32 {
+        self.intensity_inner()
+    }
+
+    fn intensity_inner(&self) -> f32 {
+        let Some(start) = self.start_time else { return 0.0 };
+        let elapsed = start.elapsed();
+        if self.duration.is_zero() || elapsed >= self.duration {
+            return 0.0;
+        }
+        let t = elapsed.as_secs_f32() / self.duration.as_secs_f32();
+        1.0 - t // 線形フェードアウト
+    }
+
+    /// アニメーションが完了しているかを返す。完了済みなら state をクリアする。
+    #[allow(dead_code)]
+    pub(crate) fn completed(&mut self) -> bool {
+        if self.start_time.is_some() && self.intensity() <= 0.0 {
+            self.start_time = None;
+            true
+        } else {
+            self.start_time.is_none()
+        }
+    }
+
+    /// duration を更新する（Hot Reload 用）。
+    pub(crate) fn set_duration(&mut self, duration_ms: u32) {
+        self.duration = std::time::Duration::from_millis(u64::from(duration_ms));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +168,8 @@ pub(crate) struct WindowState {
     pub(crate) active_index: usize,
     /// サイドバー状態。
     pub(crate) sidebar: SidebarState,
+    /// ビジュアルベルアニメーション状態。
+    pub(crate) visual_bell: VisualBell,
 }
 
 impl WindowState {
@@ -400,7 +465,14 @@ impl SditApp {
             }
         }
 
-        // 5. 設定を置換
+        // 5. bell duration 変更チェック
+        if self.config.bell.duration_ms != new_config.bell.duration_ms {
+            for ws in self.windows.values_mut() {
+                ws.visual_bell.set_duration(new_config.bell.clamped_duration_ms());
+            }
+        }
+
+        // 6. 設定を置換
         self.config = new_config;
 
         log::info!("Config reloaded successfully");
@@ -494,6 +566,48 @@ pub(crate) fn ime_commit_to_bytes(text: String, bracketed_paste: bool) -> Vec<u8
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // -----------------------------------------------------------------------
+    // VisualBell のテスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn visual_bell_initial_intensity_is_zero() {
+        let bell = VisualBell::new(150);
+        assert!(bell.intensity() < f32::EPSILON);
+    }
+
+    #[test]
+    fn visual_bell_ring_starts_animation() {
+        let mut bell = VisualBell::new(150);
+        bell.ring();
+        assert!(bell.intensity() > 0.0);
+    }
+
+    #[test]
+    fn visual_bell_fades_to_zero() {
+        let mut bell = VisualBell::new(10); // 10ms duration
+        bell.ring();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        assert!(bell.intensity() < f32::EPSILON);
+    }
+
+    #[test]
+    fn visual_bell_completed_clears_state() {
+        let mut bell = VisualBell::new(10);
+        bell.ring();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        assert!(bell.completed());
+        assert!(bell.completed()); // 既にクリア済み
+    }
+
+    #[test]
+    fn visual_bell_set_duration_updates() {
+        let mut bell = VisualBell::new(100);
+        bell.set_duration(200);
+        // duration が変わっていること確認（ring 前は 0.0 のまま）
+        assert!(bell.intensity() < f32::EPSILON);
+    }
 
     // -----------------------------------------------------------------------
     // PreeditState のテスト

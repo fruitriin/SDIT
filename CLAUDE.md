@@ -34,6 +34,7 @@
      a. **当たり前品質**: ユーザーが常用するなら「ないと乗り換えがつらい」機能
      b. **あったら便利**: 他ターミナルにあって SDIT にない便利機能
    - 発見した機能を `docs/plans/` に Plan として作成する
+     - **関心事が異なる機能は別の計画ファイルにする**（例: `phase13.2-visual-bell.md` と `phase13.3-window-opacity.md` は別ファイル）。1つの `phaseX.Y` に複数の関心事を詰め込まない
    - TODO.md に組み入れる
    - 調査した領域を `docs/knowhow/feature-survey-log.md` に追記する
    - 完了条件: Plan 作成 + TODO 組み入れ + 調査ログ更新

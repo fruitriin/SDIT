@@ -35,6 +35,31 @@ impl Default for OptionAsAlt {
     }
 }
 
+/// ベル（BEL 0x07）の設定。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct BellConfig {
+    /// ビジュアルベルを有効にする（画面フラッシュ）。
+    pub visual: bool,
+    /// macOS Dock バウンスを有効にする。
+    pub dock_bounce: bool,
+    /// ビジュアルベルのフェードアウト時間（ミリ秒）。
+    pub duration_ms: u32,
+}
+
+impl Default for BellConfig {
+    fn default() -> Self {
+        Self { visual: true, dock_bounce: true, duration_ms: 150 }
+    }
+}
+
+impl BellConfig {
+    /// duration_ms を安全な範囲にクランプする（0 除算防止 + 長期ループ防止）。
+    pub fn clamped_duration_ms(&self) -> u32 {
+        self.duration_ms.clamp(1, 5000)
+    }
+}
+
 /// SDIT 設定全体。
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default)]
@@ -51,6 +76,8 @@ pub struct Config {
     /// 有効な値: `"only_left"` / `"left"`, `"only_right"` / `"right"`, `"both"`, `"none"`（デフォルト）。
     /// macOS 以外のプラットフォームでは無視される。
     pub option_as_alt: OptionAsAlt,
+    /// ベル設定。
+    pub bell: BellConfig,
 }
 
 impl Config {
@@ -148,6 +175,16 @@ impl Config {
                 content.push_str("# option_as_alt: treat Option key as Alt for readline shortcuts (Alt+B/F/D etc.)\n");
                 content.push_str(
                     "#   values: \"none\" (default), \"both\", \"only_left\" / \"left\", \"only_right\" / \"right\"\n",
+                );
+            } else if line == "[bell]" {
+                content.push('\n');
+                content.push_str("# ── Bell ──────────────────────────────────────────────\n");
+                content.push_str(
+                    "# visual: flash the screen when BEL (0x07) is received (default: true)\n",
+                );
+                content.push_str("# dock_bounce: bounce the Dock icon when BEL is received while unfocused (default: true, macOS only)\n");
+                content.push_str(
+                    "# duration_ms: visual bell fade-out duration in milliseconds (default: 150)\n",
                 );
             }
             content.push_str(line);
@@ -265,6 +302,45 @@ line_height = 1.3
         );
         assert_eq!(loaded.font.family, config.font.family);
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn bell_config_default() {
+        let bell = BellConfig::default();
+        assert!(bell.visual);
+        assert!(bell.dock_bounce);
+        assert_eq!(bell.duration_ms, 150);
+    }
+
+    #[test]
+    fn bell_config_deserialize() {
+        let toml_str = "[bell]\nvisual = false\ndock_bounce = false\nduration_ms = 200\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert!(!config.bell.visual);
+        assert!(!config.bell.dock_bounce);
+        assert_eq!(config.bell.duration_ms, 200);
+    }
+
+    #[test]
+    fn bell_config_partial_deserialize() {
+        // 部分指定のとき残りはデフォルト補完
+        let toml_str = "[bell]\nduration_ms = 300\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert!(config.bell.visual); // default: true
+        assert!(config.bell.dock_bounce); // default: true
+        assert_eq!(config.bell.duration_ms, 300);
+    }
+
+    #[test]
+    fn bell_duration_clamp_zero() {
+        let bell = BellConfig { duration_ms: 0, ..Default::default() };
+        assert_eq!(bell.clamped_duration_ms(), 1);
+    }
+
+    #[test]
+    fn bell_duration_clamp_max() {
+        let bell = BellConfig { duration_ms: 999_999, ..Default::default() };
+        assert_eq!(bell.clamped_duration_ms(), 5000);
     }
 
     #[test]

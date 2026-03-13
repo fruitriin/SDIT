@@ -3,7 +3,7 @@
 `docs/plans/` の完了状態・優先度をトラックする。
 `docs/plans/` と TODO が一致しなければ TODO を編集する。
 
-## 現在のフェーズ: Phase 13.2（次に着手）
+## 現在のフェーズ: Phase 13.3（次に着手）
 
 ## バックログ
 
@@ -37,7 +37,7 @@
 | done | 11.3 | `docs/plans/phase11.3-gui-settings.md` | **完了** |
 | done | 12 | `docs/plans/phase12-macos-release.md` | **完了** |
 | done | 13.1 | `docs/plans/phase13.1-option-as-alt.md` | **完了** |
-| 中高 | 13.2 | `docs/plans/phase13.2-visual-bell.md` | 未着手 |
+| done | 13.2 | `docs/plans/phase13.2-visual-bell.md` | **完了** |
 | 中高 | 13.3 | `docs/plans/phase13.3-window-opacity.md` | 未着手 |
 | 中高 | 13.4 | `docs/plans/phase13.4-unsafe-paste.md` | 未着手 |
 | 中高 | 13.5 | `docs/plans/phase13.5-kitty-keyboard.md` | 未着手 |
