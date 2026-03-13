@@ -73,6 +73,31 @@
 
 ---
 
-## タスク
+## タスク: Phase 12 — macOS リリースビルド調査・提案
 
-（現在タスクなし）
+### Phase 12.1: バンドルアセット調査
+- [x] Alacritty の Makefile + Info.plist + バンドル構造を調査
+- [x] WezTerm の Makefile + Info.plist + バンドル構造を調査
+- [x] Ghostty の entitlements を調査
+- [x] .app バンドル構造・Info.plist 必須キー・アイコン要件・entitlements・Universal Binary をまとめる
+
+### Phase 12.2: コード署名・公証手順
+- [x] コード署名手順（codesign）の文書化
+- [x] 公証手順（notarytool）の文書化
+- [x] DMG 作成手順の文書化
+
+### Phase 12.3: ビルド手順提案書
+- [x] 手動ビルド手順書の作成（Makefile + ガイド文書）
+- [x] CI/CD 設計提案（GitHub Actions ワークフロー概要）
+- [x] 配布チャネルの提案（GitHub Releases + Homebrew Cask Tap 推奨）
+
+### P0 アセット実装
+- [x] Info.plist 作成（extra/macos/SDIT.app/Contents/Info.plist）
+- [x] entitlements 作成（Release + Debug）
+- [x] プレースホルダアイコン生成（sdit.icns）
+- [x] Makefile 作成（app / app-universal / dmg ターゲット）
+- [x] `make app` テスト成功・.app から起動確認
+
+### 品質ゲート
+- [x] Stage 1: `cargo fmt --check && cargo clippy --all-targets && cargo test`
+- [ ] Stage 2: security-review（実行中）

@@ -3,7 +3,7 @@
 `docs/plans/` の完了状態・優先度をトラックする。
 `docs/plans/` と TODO が一致しなければ TODO を編集する。
 
-## 現在のフェーズ: Phase 12 + 新規 Plan（次に着手）
+## 現在のフェーズ: 全 Phase 完了 → 新規 Plan 作成フェーズ
 
 ## バックログ
 
@@ -35,7 +35,7 @@
 | done | 11.1 | `docs/plans/phase11.1-macos-menubar.md` | **完了** |
 | done | 11.2 | `docs/plans/phase11.2-context-menu.md` | **完了** |
 | done | 11.3 | `docs/plans/phase11.3-gui-settings.md` | **完了** |
-| 低 | 12 | `docs/plans/phase12-macos-release.md` | 未着手 |
+| done | 12 | `docs/plans/phase12-macos-release.md` | **完了** |
 
 
 オーナーリクエスト:
