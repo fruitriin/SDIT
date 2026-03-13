@@ -79,15 +79,18 @@
 
 ---
 
-## タスク: Phase 14.2 — スクロールバック設定
+## タスク: Phase 14.3 — ウィンドウパディング
 
 ### 実装
-- [x] ScrollbackConfig 追加（config/mod.rs: lines, clamped_lines）
-- [x] SessionParams 統合（app.rs: Config から scrollback 値を渡す）
-- [x] Hot Reload 対応（新規セッションのみ反映）
-- [x] save_with_comments にスクロールバックセクション追加
-- [x] テスト（ScrollbackConfig serde 2件 + clamp 2件 + empty→default 1件）
+- [x] WindowConfig 拡張（padding_x, padding_y, clamped_padding）
+- [x] グリッドサイズ計算にパディング反映（window.rs, render.rs, app.rs, window_ops.rs）
+- [x] セル描画オフセット（render.rs + WGSL シェーダー origin_y 追加）
+- [x] マウス座標補正（input.rs + event_loop.rs 全 9 箇所）
+- [x] IME カーソル位置補正（render.rs）
+- [x] Hot Reload 対応（app.rs: apply_config_reload にパディング変更チェック追加）
+- [x] save_with_comments 更新（padding_x/padding_y コメント追加）
+- [x] テスト（WindowConfig padding serde + clamp: 4 テスト追加）
 
 ### 品質ゲート
-- [x] Stage 1: `cargo fmt --check && cargo clippy --all-targets && cargo test`（全テスト通過）
-- [ ] Stage 2: security-review + integration-test（省略: 設定追加のみで攻撃面なし）
+- [x] Stage 1: `cargo fmt --check && cargo clippy --all-targets && cargo test`（226 テスト + headless 4 テスト全通過）
+- [ ] Stage 2: security-review + integration-test

@@ -95,9 +95,11 @@ impl SditApp {
         };
 
         let metrics = *self.font_ctx.metrics();
+        let padding_x = f32::from(self.config.window.clamped_padding_x());
+        let padding_y = f32::from(self.config.window.clamped_padding_y());
         let (cols, rows) = calc_grid_size(
-            gpu.surface_config.width as f32,
-            gpu.surface_config.height as f32,
+            (gpu.surface_config.width as f32 - 2.0 * padding_x).max(0.0),
+            (gpu.surface_config.height as f32 - 2.0 * padding_y).max(0.0),
             metrics.cell_width,
             metrics.cell_height,
         );
@@ -174,13 +176,13 @@ impl SditApp {
         let Some(ws) = self.windows.get(&window_id) else { return };
         let metrics = *self.font_ctx.metrics();
         let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
-        let term_width = (ws.gpu.surface_config.width as f32 - sidebar_w).max(0.0);
-        let (cols, rows) = calc_grid_size(
-            term_width,
-            ws.gpu.surface_config.height as f32,
-            metrics.cell_width,
-            metrics.cell_height,
-        );
+        let padding_x = f32::from(self.config.window.clamped_padding_x());
+        let padding_y = f32::from(self.config.window.clamped_padding_y());
+        let term_width =
+            (ws.gpu.surface_config.width as f32 - sidebar_w - 2.0 * padding_x).max(0.0);
+        let term_height = (ws.gpu.surface_config.height as f32 - 2.0 * padding_y).max(0.0);
+        let (cols, rows) =
+            calc_grid_size(term_width, term_height, metrics.cell_width, metrics.cell_height);
 
         let Some(session_id) = self.spawn_session(rows, cols) else {
             return;
@@ -373,9 +375,13 @@ impl SditApp {
 
         // 新ウィンドウのサイズに合わせて Terminal + PTY をリサイズ
         let new_ws = self.windows.get(&new_window_id).unwrap();
+        #[allow(clippy::similar_names)]
+        let padding_x_detach = f32::from(self.config.window.clamped_padding_x());
+        #[allow(clippy::similar_names)]
+        let padding_y_detach = f32::from(self.config.window.clamped_padding_y());
         let (cols, rows) = calc_grid_size(
-            new_ws.gpu.surface_config.width as f32,
-            new_ws.gpu.surface_config.height as f32,
+            (new_ws.gpu.surface_config.width as f32 - 2.0 * padding_x_detach).max(0.0),
+            (new_ws.gpu.surface_config.height as f32 - 2.0 * padding_y_detach).max(0.0),
             metrics.cell_width,
             metrics.cell_height,
         );

@@ -426,15 +426,22 @@ impl SditApp {
             }
             // 全セッションをリサイズ
             let metrics = *self.font_ctx.metrics();
+            let padding_x = f32::from(new_config.window.clamped_padding_x());
+            let padding_y = f32::from(new_config.window.clamped_padding_y());
             let window_ids: Vec<winit::window::WindowId> = self.windows.keys().copied().collect();
             for window_id in window_ids {
                 let Some(ws) = self.windows.get(&window_id) else { continue };
                 let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
                 let surface_w = ws.gpu.surface_config.width as f32;
                 let surface_h = ws.gpu.surface_config.height as f32;
-                let term_width = (surface_w - sidebar_w).max(0.0);
-                let (cols, rows) =
-                    calc_grid_size(term_width, surface_h, metrics.cell_width, metrics.cell_height);
+                let term_width = (surface_w - sidebar_w - 2.0 * padding_x).max(0.0);
+                let term_height = (surface_h - 2.0 * padding_y).max(0.0);
+                let (cols, rows) = calc_grid_size(
+                    term_width,
+                    term_height,
+                    metrics.cell_width,
+                    metrics.cell_height,
+                );
 
                 let session_ids: Vec<_> = ws.sessions.clone();
                 for sid in session_ids {
@@ -496,7 +503,50 @@ impl SditApp {
             }
         }
 
-        // 7. カーソルデフォルト設定の変更チェック
+        // 7. パディング変更チェック（グリッドサイズ再計算 + PTY リサイズ）
+        let padding_changed = self.config.window.padding_x != new_config.window.padding_x
+            || self.config.window.padding_y != new_config.window.padding_y;
+        if padding_changed {
+            let metrics = *self.font_ctx.metrics();
+            #[allow(clippy::similar_names)]
+            let new_px = f32::from(new_config.window.clamped_padding_x());
+            #[allow(clippy::similar_names)]
+            let new_py = f32::from(new_config.window.clamped_padding_y());
+            let window_ids: Vec<winit::window::WindowId> = self.windows.keys().copied().collect();
+            for window_id in window_ids {
+                let Some(ws) = self.windows.get(&window_id) else { continue };
+                let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+                let surface_w = ws.gpu.surface_config.width as f32;
+                let surface_h = ws.gpu.surface_config.height as f32;
+                let term_width = (surface_w - sidebar_w - 2.0 * new_px).max(0.0);
+                let term_height = (surface_h - 2.0 * new_py).max(0.0);
+                let (cols, rows) = calc_grid_size(
+                    term_width,
+                    term_height,
+                    metrics.cell_width,
+                    metrics.cell_height,
+                );
+                let session_ids: Vec<_> = ws.sessions.clone();
+                for sid in session_ids {
+                    if let Some(session) = self.session_mgr.get(sid) {
+                        {
+                            let mut state = session
+                                .term_state
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                            state.terminal.resize(rows, cols);
+                        }
+                        let pty_size = PtySize::new(
+                            rows.try_into().unwrap_or(24),
+                            cols.try_into().unwrap_or(80),
+                        );
+                        session.resize_pty(pty_size);
+                    }
+                }
+            }
+        }
+
+        // 9. カーソルデフォルト設定の変更チェック
         let cursor_changed = self.config.cursor.style != new_config.cursor.style
             || self.config.cursor.blinking != new_config.cursor.blinking;
         if cursor_changed {
@@ -510,7 +560,7 @@ impl SditApp {
             }
         }
 
-        // 8. 設定を置換
+        // 10. 設定を置換
         self.config = new_config;
 
         log::info!("Config reloaded successfully");
@@ -536,15 +586,18 @@ impl SditApp {
 
         // 全ウィンドウ・全セッションをリサイズ
         let metrics = *self.font_ctx.metrics();
+        let padding_x = f32::from(self.config.window.clamped_padding_x());
+        let padding_y = f32::from(self.config.window.clamped_padding_y());
         let window_ids: Vec<winit::window::WindowId> = self.windows.keys().copied().collect();
         for window_id in window_ids {
             let Some(ws) = self.windows.get(&window_id) else { continue };
             let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
             let surface_w = ws.gpu.surface_config.width as f32;
             let surface_h = ws.gpu.surface_config.height as f32;
-            let term_width = (surface_w - sidebar_w).max(0.0);
+            let term_width = (surface_w - sidebar_w - 2.0 * padding_x).max(0.0);
+            let term_height = (surface_h - 2.0 * padding_y).max(0.0);
             let (cols, rows) =
-                calc_grid_size(term_width, surface_h, metrics.cell_width, metrics.cell_height);
+                calc_grid_size(term_width, term_height, metrics.cell_width, metrics.cell_height);
 
             let session_ids: Vec<_> = ws.sessions.clone();
             for sid in session_ids {

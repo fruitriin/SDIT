@@ -126,16 +126,19 @@ impl SditApp {
             ws.window.set_title(&title);
         }
 
-        // ターミナルパイプラインの origin_x を設定
+        // ターミナルパイプラインの origin_x / origin_y を設定（サイドバー + パディング）
         let rows_f32 = grid_rows as f32;
         let cols_f32 = grid_cols as f32;
+        let padding_x = f32::from(self.config.window.clamped_padding_x());
+        let padding_y = f32::from(self.config.window.clamped_padding_y());
         ws.cell_pipeline.update_uniforms(
             &ws.gpu.queue,
             cell_size,
             [cols_f32, rows_f32],
             surface_size,
             atlas_size_f32,
-            sidebar_width_px,
+            sidebar_width_px + padding_x,
+            padding_y,
         );
 
         // サイドバー描画
@@ -160,6 +163,7 @@ impl SditApp {
                 surface_size,
                 atlas_size_f32,
                 0.0, // サイドバー自体は origin_x = 0
+                0.0, // サイドバー自体は origin_y = 0
             );
         }
 
@@ -170,8 +174,8 @@ impl SditApp {
             let preedit_width: usize =
                 self.preedit.as_ref().map_or(0, |p| p.text.chars().map(char_cell_width).sum());
             let ime_col = cursor_col + preedit_width;
-            let ime_x = sidebar_width_px + (ime_col as f32 * metrics.cell_width);
-            let ime_y = cursor_row as f32 * metrics.cell_height;
+            let ime_x = sidebar_width_px + padding_x + (ime_col as f32 * metrics.cell_width);
+            let ime_y = padding_y + cursor_row as f32 * metrics.cell_height;
             ws.window.set_ime_cursor_area(
                 winit::dpi::PhysicalPosition::new(f64::from(ime_x), f64::from(ime_y)),
                 winit::dpi::PhysicalSize::new(
@@ -336,9 +340,12 @@ impl SditApp {
 
         let metrics = *self.font_ctx.metrics();
         let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
-        let term_width = (width as f32 - sidebar_w).max(0.0);
+        let padding_x = f32::from(self.config.window.clamped_padding_x());
+        let padding_y = f32::from(self.config.window.clamped_padding_y());
+        let term_width = (width as f32 - sidebar_w - 2.0 * padding_x).max(0.0);
+        let term_height = (height as f32 - 2.0 * padding_y).max(0.0);
         let (cols, rows) =
-            calc_grid_size(term_width, height as f32, metrics.cell_width, metrics.cell_height);
+            calc_grid_size(term_width, term_height, metrics.cell_width, metrics.cell_height);
 
         let session_ids: Vec<SessionId> = ws.sessions.clone();
         for sid in session_ids {

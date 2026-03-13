@@ -81,11 +81,15 @@ pub struct WindowConfig {
     pub opacity: f32,
     /// macOS でウィンドウ背景にブラーエフェクトを適用する。
     pub blur: bool,
+    /// グリッドとウィンドウ左右端の余白（ピクセル）。デフォルト: 0、最大: 200。
+    pub padding_x: u16,
+    /// グリッドとウィンドウ上下端の余白（ピクセル）。デフォルト: 0、最大: 200。
+    pub padding_y: u16,
 }
 
 impl Default for WindowConfig {
     fn default() -> Self {
-        Self { opacity: 1.0, blur: false }
+        Self { opacity: 1.0, blur: false, padding_x: 0, padding_y: 0 }
     }
 }
 
@@ -95,6 +99,16 @@ impl WindowConfig {
     /// NaN や Inf が渡された場合はデフォルト値 1.0 を返す。
     pub fn clamped_opacity(&self) -> f32 {
         if self.opacity.is_finite() { self.opacity.clamp(0.0, 1.0) } else { 1.0 }
+    }
+
+    /// `padding_x` を安全な範囲（0〜200 ピクセル）にクランプする。
+    pub fn clamped_padding_x(&self) -> u16 {
+        self.padding_x.min(200)
+    }
+
+    /// `padding_y` を安全な範囲（0〜200 ピクセル）にクランプする。
+    pub fn clamped_padding_y(&self) -> u16 {
+        self.padding_y.min(200)
     }
 }
 
@@ -317,6 +331,12 @@ impl Config {
                 content.push_str(
                     "# blur: enable background blur effect (macOS only, default: false)\n",
                 );
+                content.push_str(
+                    "# padding_x: horizontal padding between grid and window edge in pixels (0-200, default: 0)\n",
+                );
+                content.push_str(
+                    "# padding_y: vertical padding between grid and window edge in pixels (0-200, default: 0)\n",
+                );
             } else if line == "[paste]" {
                 content.push('\n');
                 content.push_str("# ── Paste ─────────────────────────────────────────────\n");
@@ -500,6 +520,8 @@ line_height = 1.3
         let wc = WindowConfig::default();
         assert!((wc.opacity - 1.0).abs() < f32::EPSILON);
         assert!(!wc.blur);
+        assert_eq!(wc.padding_x, 0);
+        assert_eq!(wc.padding_y, 0);
     }
 
     #[test]
@@ -508,6 +530,14 @@ line_height = 1.3
         let config: Config = toml::from_str(toml_str).unwrap();
         assert!((config.window.opacity - 0.8).abs() < f32::EPSILON);
         assert!(config.window.blur);
+    }
+
+    #[test]
+    fn window_config_padding_deserialize() {
+        let toml_str = "[window]\npadding_x = 8\npadding_y = 4\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.window.padding_x, 8);
+        assert_eq!(config.window.padding_y, 4);
     }
 
     #[test]
@@ -524,6 +554,18 @@ line_height = 1.3
         assert!((wc.clamped_opacity() - 0.0).abs() < f32::EPSILON);
         let wc = WindowConfig { opacity: 2.0, ..Default::default() };
         assert!((wc.clamped_opacity() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn window_padding_clamp() {
+        // 200 を超える値は 200 にクランプされる
+        let wc = WindowConfig { padding_x: 500, padding_y: 300, ..Default::default() };
+        assert_eq!(wc.clamped_padding_x(), 200);
+        assert_eq!(wc.clamped_padding_y(), 200);
+        // 範囲内の値はそのまま
+        let wc2 = WindowConfig { padding_x: 8, padding_y: 4, ..Default::default() };
+        assert_eq!(wc2.clamped_padding_x(), 8);
+        assert_eq!(wc2.clamped_padding_y(), 4);
     }
 
     #[test]

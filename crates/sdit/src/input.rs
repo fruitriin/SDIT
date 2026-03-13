@@ -150,16 +150,21 @@ pub(crate) fn mouse_report_x11(button: u8, col: usize, row: usize) -> Vec<u8> {
 /// ピクセル座標をグリッド座標 (col, row) に変換する。
 ///
 /// `sidebar_width_px`: サイドバーの幅（ピクセル）
+/// `padding_x`: 左端パディング（ピクセル）
+/// `padding_y`: 上端パディング（ピクセル）
 pub(crate) fn pixel_to_grid(
     x: f64,
     y: f64,
     cell_width: f32,
     cell_height: f32,
     sidebar_width_px: f32,
+    padding_x: f32,
+    padding_y: f32,
 ) -> (usize, usize) {
-    let term_x = (x as f32 - sidebar_width_px).max(0.0);
+    let term_x = (x as f32 - sidebar_width_px - padding_x).max(0.0);
+    let term_y = (y as f32 - padding_y).max(0.0);
     let col = if cell_width > 0.0 { (term_x / cell_width).floor() as usize } else { 0 };
-    let row = if cell_height > 0.0 { (y as f32 / cell_height).floor() as usize } else { 0 };
+    let row = if cell_height > 0.0 { (term_y / cell_height).floor() as usize } else { 0 };
     (col, row)
 }
 

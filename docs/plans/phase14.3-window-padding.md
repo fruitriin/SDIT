@@ -2,7 +2,7 @@
 
 **概要**: ターミナルグリッドとウィンドウ端の間に余白（パディング）を設定可能にする。テキストがウィンドウ枠に密着しない、視認性の高い表示を実現する。
 
-**状態**: 未着手
+**状態**: **完了**
 
 ## 背景
 
@@ -14,13 +14,13 @@
 
 | タスク | 詳細 | 変更先 | 状態 |
 |---|---|---|---|
-| WindowConfig 拡張 | `window.padding_x`, `window.padding_y` (u16, default: 0, clamp: 0-200) | sdit-core (`config/mod.rs`) | 未着手 |
-| グリッドサイズ計算 | パディング分を差し引いた有効領域でグリッドサイズを算出 | sdit (`window.rs`, `render.rs`) | 未着手 |
-| 描画オフセット | セル描画時に padding_x/padding_y をオフセットとして加算 | sdit (`render.rs`) | 未着手 |
-| マウス座標補正 | クリック・スクロール座標からパディングを差し引く | sdit (`input.rs`) | 未着手 |
-| カーソル描画補正 | カーソル位置にパディングオフセットを適用 | sdit (`render.rs`) | 未着手 |
-| Hot Reload 対応 | 設定変更時にグリッドサイズ再計算 + PTY リサイズ | sdit (`event_loop.rs`) | 未着手 |
-| テスト | WindowConfig padding serde 2件 + clamp 2件 | sdit-core | 未着手 |
+| WindowConfig 拡張 | `window.padding_x`, `window.padding_y` (u16, default: 0, clamp: 0-200) | sdit-core (`config/mod.rs`) | **完了** |
+| グリッドサイズ計算 | パディング分を差し引いた有効領域でグリッドサイズを算出 | sdit (`window.rs`, `render.rs`) | **完了** |
+| 描画オフセット | セル描画時に padding_x/padding_y をオフセットとして加算 | sdit (`render.rs`) | **完了** |
+| マウス座標補正 | クリック・スクロール座標からパディングを差し引く | sdit (`input.rs`) | **完了** |
+| カーソル描画補正 | カーソル位置にパディングオフセットを適用 | sdit (`render.rs`) | **完了** |
+| Hot Reload 対応 | 設定変更時にグリッドサイズ再計算 + PTY リサイズ | sdit (`event_loop.rs`) | **完了** |
+| テスト | WindowConfig padding serde 2件 + clamp 2件 | sdit-core | **完了** |
 
 ## 設定例
 

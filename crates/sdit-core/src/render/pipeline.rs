@@ -198,8 +198,12 @@ struct Uniforms {
     grid_size: [f32; 2],
     surface_size: [f32; 2],
     atlas_size: f32,
-    /// 描画開始 X オフセット（ピクセル）。サイドバー分のオフセットに使用。
+    /// 描画開始 X オフセット（ピクセル）。サイドバー + パディング分のオフセットに使用。
     origin_x: f32,
+    /// 描画開始 Y オフセット（ピクセル）。パディング分のオフセットに使用。
+    origin_y: f32,
+    /// bytemuck の Pod/Zeroable を維持するためのパディング（16 バイトアライメント）。
+    _pad: f32,
 }
 
 // ---------------------------------------------------------------------------
@@ -382,6 +386,7 @@ impl CellPipeline {
     }
 
     /// Uniforms を更新する。
+    #[allow(clippy::too_many_arguments)]
     pub fn update_uniforms(
         &self,
         queue: &wgpu::Queue,
@@ -390,8 +395,17 @@ impl CellPipeline {
         surface_size: [f32; 2],
         atlas_size: f32,
         origin_x: f32,
+        origin_y: f32,
     ) {
-        let uniforms = Uniforms { cell_size, grid_size, surface_size, atlas_size, origin_x };
+        let uniforms = Uniforms {
+            cell_size,
+            grid_size,
+            surface_size,
+            atlas_size,
+            origin_x,
+            origin_y,
+            _pad: 0.0,
+        };
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
     }
 
@@ -423,7 +437,7 @@ impl CellPipeline {
         let rows = grid.screen_lines();
         let cols = grid.columns();
 
-        // Uniforms を更新。origin_x は呼び出し側で設定する場合もあるが、
+        // Uniforms を更新。origin_x/origin_y は呼び出し側で設定する場合もあるが、
         // update_from_grid では常に 0.0（サイドバーオフセットなし）を使用する。
         self.update_uniforms(
             queue,
@@ -431,6 +445,7 @@ impl CellPipeline {
             [cols as f32, rows as f32],
             surface_size,
             atlas_size,
+            0.0,
             0.0,
         );
 

@@ -254,6 +254,8 @@ impl ApplicationHandler<SditEvent> for SditApp {
                     if let Some(ws) = self.windows.get(&id) {
                         let metrics = *self.font_ctx.metrics();
                         let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+                        let padding_x = f32::from(self.config.window.clamped_padding_x());
+                        let padding_y = f32::from(self.config.window.clamped_padding_y());
                         let sid = ws.active_session_id();
                         let mouse_drag;
                         let use_sgr;
@@ -276,6 +278,8 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                 metrics.cell_width,
                                 metrics.cell_height,
                                 sidebar_w,
+                                padding_x,
+                                padding_y,
                             );
                             // button=32 = 左ボタン押しながらドラッグ
                             let bytes = if use_sgr {
@@ -296,6 +300,8 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                 metrics.cell_width,
                                 metrics.cell_height,
                                 sidebar_w,
+                                padding_x,
+                                padding_y,
                             );
                             if let Some(sel) = &mut self.selection {
                                 // row は screen_lines の範囲内なので i32 に収まる。
@@ -318,6 +324,8 @@ impl ApplicationHandler<SditEvent> for SditApp {
                     if let Some(ws) = self.windows.get(&id) {
                         let metrics = *self.font_ctx.metrics();
                         let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+                        let padding_x = f32::from(self.config.window.clamped_padding_x());
+                        let padding_y = f32::from(self.config.window.clamped_padding_y());
                         // サイドバー領域内のクリック
                         if ws.sidebar.visible && (x as f32) < sidebar_w {
                             if let Some(row) = ws.sidebar.hit_test(
@@ -340,12 +348,16 @@ impl ApplicationHandler<SditEvent> for SditApp {
                             if is_url_modifier(self.modifiers) {
                                 let metrics = *self.font_ctx.metrics();
                                 let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+                                let padding_x = f32::from(self.config.window.clamped_padding_x());
+                                let padding_y = f32::from(self.config.window.clamped_padding_y());
                                 let (col, row) = pixel_to_grid(
                                     x,
                                     y,
                                     metrics.cell_width,
                                     metrics.cell_height,
                                     sidebar_w,
+                                    padding_x,
+                                    padding_y,
                                 );
                                 let sid = ws.active_session_id();
                                 let url = {
@@ -419,6 +431,8 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                     metrics.cell_width,
                                     metrics.cell_height,
                                     sidebar_w,
+                                    padding_x,
+                                    padding_y,
                                 );
                                 let bytes = if use_sgr {
                                     mouse_report_sgr(0, col, row, true)
@@ -438,6 +452,8 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                     metrics.cell_width,
                                     metrics.cell_height,
                                     sidebar_w,
+                                    padding_x,
+                                    padding_y,
                                 );
                                 let now = std::time::Instant::now();
                                 let is_same_pos = self.last_click_pos == Some((col, row));
@@ -552,6 +568,8 @@ impl ApplicationHandler<SditEvent> for SditApp {
                     if let Some(ws) = self.windows.get(&id) {
                         let metrics = *self.font_ctx.metrics();
                         let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+                        let padding_x = f32::from(self.config.window.clamped_padding_x());
+                        let padding_y = f32::from(self.config.window.clamped_padding_y());
                         if !ws.sidebar.visible || (x as f32) >= sidebar_w {
                             let sid = ws.active_session_id();
                             let mouse_active;
@@ -572,6 +590,8 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                     metrics.cell_width,
                                     metrics.cell_height,
                                     sidebar_w,
+                                    padding_x,
+                                    padding_y,
                                 );
                                 let bytes = mouse_report_sgr(0, col, row, false);
                                 if let Some(session) = self.session_mgr.get(sid) {
@@ -630,12 +650,16 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         if let Some((x, y)) = self.cursor_position {
                             let metrics = *self.font_ctx.metrics();
                             let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+                            let padding_x = f32::from(self.config.window.clamped_padding_x());
+                            let padding_y = f32::from(self.config.window.clamped_padding_y());
                             let (col, row) = pixel_to_grid(
                                 x,
                                 y,
                                 metrics.cell_width,
                                 metrics.cell_height,
                                 sidebar_w,
+                                padding_x,
+                                padding_y,
                             );
                             let count = lines.unsigned_abs().clamp(1, 20);
                             for _ in 0..count {
@@ -1172,6 +1196,8 @@ impl SditApp {
 
         let metrics = *self.font_ctx.metrics();
         let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+        let padding_x = f32::from(self.config.window.clamped_padding_x());
+        let padding_y = f32::from(self.config.window.clamped_padding_y());
 
         // サイドバー領域は対象外
         if ws.sidebar.visible && (x as f32) < sidebar_w {
@@ -1185,7 +1211,15 @@ impl SditApp {
             return;
         }
 
-        let (col, row) = pixel_to_grid(x, y, metrics.cell_width, metrics.cell_height, sidebar_w);
+        let (col, row) = pixel_to_grid(
+            x,
+            y,
+            metrics.cell_width,
+            metrics.cell_height,
+            sidebar_w,
+            padding_x,
+            padding_y,
+        );
 
         let Some(ws) = self.windows.get(&window_id) else {
             return;
