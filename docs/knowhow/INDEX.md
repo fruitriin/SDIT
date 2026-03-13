@@ -48,6 +48,18 @@
 |---|---|---|
 | [context-menu-macos.md](context-menu-macos.md) | macOS 右クリックコンテキストメニューの muda 統合、MenuEvent 共有マップ、unsafe スコープ限定パターン | `show_context_menu_for_nsview`, `#![allow(unsafe_code)]`, `SharedMenuActions`, `Arc<Mutex<HashMap<MenuId, Action>>>`, `extend()`, `MouseButton::Right`, `dead_code` |
 
+## UI インタラクション
+
+| ファイル | 要約 | キーワード |
+|---|---|---|
+| [quick-select-overlay.md](quick-select-overlay.md) | Quick Select モードのオーバーレイ実装: パターンマッチ・ヒントラベル生成・CellVertex 上書き描画・キー処理 | `QuickSelectState`, `QuickSelectHint`, `generate_label`, `CHARS homerow`, `detect_patterns_in_line`, `default_quick_select_patterns`, `overwrite_cell`, `Action::QuickSelect`, `Cmd+Shift+Space`, `patterns: Vec<String>` |
+
+## シェルインテグレーション
+
+| ファイル | 要約 | キーワード |
+|---|---|---|
+| [shell-integration-osc133.md](shell-integration-osc133.md) | OSC 133 パーサー・SemanticMarker VecDeque 設計・プロンプトジャンプのスクロール計算・fish 互換性 | `SemanticZone`, `SemanticMarker`, `VecDeque`, `push_back`, `pop_front`, `MAX_SEMANTIC_MARKERS`, `prev_prompt`, `next_prompt`, `shell_integration_enabled`, `display_offset`, `Scroll::Delta` |
+
 ## テスト・品質保証
 
 | ファイル | 要約 | キーワード |

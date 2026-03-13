@@ -79,6 +79,17 @@
 
 ---
 
-## タスク
+## タスク: Phase 14.6 — Quick Select
 
-（現在タスクなし）
+### 実装
+- [ ] url_detector.rs 拡張: ファイルパス・git ハッシュ・数値パターン追加 + detect_patterns_in_line()
+- [ ] QuickSelectState 構造体 + ヒントラベル生成（app.rs）
+- [ ] QuickSelectConfig 追加（config/mod.rs）
+- [ ] Action::QuickSelect キーバインド（keybinds.rs）
+- [ ] event_loop.rs: QuickSelect モード開始 + ヒントキー入力処理
+- [ ] render.rs: オーバーレイ描画（ハイライト + ヒントラベル）
+- [ ] テスト（パターンマッチ + ヒントラベル割り当て）
+
+### 品質ゲート
+- [ ] Stage 1: `cargo fmt --check && cargo clippy --all-targets && cargo test`
+- [ ] Stage 2: security-review + integration-test
