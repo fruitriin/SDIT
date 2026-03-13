@@ -74,7 +74,33 @@
 - Quick Select → Phase 14.6
 
 **将来検討（Plan 未作成）:**
-- コピーモード（vi-mode）— キーボードのみでスクロールバック内を選択
-- カスタムリンク正規表現 — URL 以外のクリック可能パターン
-- フォントフォールバックチェーン — 複数フォントの優先順位指定
-- セル間隔の微調整 — letter-spacing 相当の設定
+- カスタムシェーダー（shadertoy 互換） — Phase 16.x で検討
+
+### 2026-03-14: Phase 15 策定（入力・フォント・リンク高度化）
+
+**調査対象リファレンス:**
+- Alacritty: `alacritty/src/config/bindings.rs`（ViAction/ViMotion）、`alacritty/src/config/scrolling.rs`、`alacritty/src/config/mouse.rs`、`alacritty/src/config/selection.rs`、`alacritty/src/config/font.rs`
+- Ghostty: `src/font/Collection.zig`（フォールバック）、`src/font/CodepointMap.zig`、`src/font/Metrics.zig`、`src/renderer/Metal.zig`（カスタムシェーダー）、`src/config/Config.zig`（selection-word-chars, font-variation, link 等）
+- WezTerm: `mux/src/`（tab.rs の set_title）
+- Zellij: `default-plugins/tab-bar/`、`zellij-utils/src/data.rs`（RenameTab）
+
+**発見した機能ギャップ（Phase 15 Plan に反映済み）:**
+- vi モード（コピーモード） → Phase 15.1
+- スクロール倍率設定 → Phase 15.2
+- セマンティック単語境界文字 → Phase 15.2
+- タイピング中マウスカーソル非表示 → Phase 15.2
+- 選択時クリップボード自動コピー → Phase 15.2
+- フォントフォールバックチェーン → Phase 15.3
+- font-codepoint-map → Phase 15.3
+- font-variation / font-feature → Phase 15.3
+- セル幅・高さ・ベースラインの調整 → Phase 15.3
+- カスタムリンク正規表現 → Phase 15.4
+- セッションリネーム → Phase 15.4
+- フォントバリエーション軸設定 → Phase 15.3
+
+**将来検討（Plan 未作成）:**
+- カスタムシェーダー（shadertoy 互換）— Phase 16.x で検討
+
+**未調査領域（次回の候補）:**
+- WezTerm: `wezterm-client/src/`（クライアント/サーバー分離の詳細）
+- Zellij: `zellij-server/src/`（セッション永続化の詳細）
