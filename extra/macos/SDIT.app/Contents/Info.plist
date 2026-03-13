@@ -35,9 +35,7 @@
   <key>NSSupportsAutomaticGraphicsSwitching</key>
   <true/>
   <key>NSRequiresAquaSystemAppearance</key>
-  <string>NO</string>
-  <key>NSMainNibFile</key>
-  <string></string>
+  <false/>
   <key>NSAppleEventsUsageDescription</key>
   <string>An application in SDIT would like to access AppleScript.</string>
   <key>NSCalendarsUsageDescription</key>
@@ -46,8 +44,6 @@
   <string>An application in SDIT would like to access the camera.</string>
   <key>NSContactsUsageDescription</key>
   <string>An application in SDIT wants to access your contacts.</string>
-  <key>NSLocationAlwaysUsageDescription</key>
-  <string>An application in SDIT would like to access your location information, even in the background.</string>
   <key>NSLocationUsageDescription</key>
   <string>An application in SDIT would like to access your location information.</string>
   <key>NSLocationWhenInUseUsageDescription</key>
