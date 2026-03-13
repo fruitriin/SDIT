@@ -28,6 +28,8 @@ pub(crate) fn spawn_pty_reader(
         .name(format!("pty-reader-{}", session_id.0))
         .spawn(move || {
             let mut buf = [0u8; 8192];
+            // BEL レート制限: 最後に BEL イベントを送出した時刻を記録する
+            let mut last_bell_time: Option<std::time::Instant> = None;
             loop {
                 match pty.read(&mut buf) {
                     Ok(0) => {
@@ -46,10 +48,16 @@ pub(crate) fn spawn_pty_reader(
                             if let Some(response) = terminal.drain_pending_writes() {
                                 let _ = write_tx.send(response);
                             }
-                            // BEL 処理
+                            // BEL 処理（100ms レート制限: BEL ボムによるイベントキュー枯渇を防ぐ）
                             if terminal.take_bell() {
-                                log::info!("BEL received (session {})", session_id.0);
-                                let _ = event_proxy.send_event(SditEvent::BellRing(session_id));
+                                let now = std::time::Instant::now();
+                                let should_send = last_bell_time
+                                    .is_none_or(|t| now.duration_since(t).as_millis() >= 100);
+                                if should_send {
+                                    log::info!("BEL received (session {})", session_id.0);
+                                    let _ = event_proxy.send_event(SditEvent::BellRing(session_id));
+                                    last_bell_time = Some(now);
+                                }
                             }
                             // OSC 52 クリップボード書き込み処理
                             if let Some(text) = terminal.take_clipboard_write() {

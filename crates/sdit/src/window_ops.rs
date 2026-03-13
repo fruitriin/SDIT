@@ -55,7 +55,12 @@ impl SditApp {
         event_loop: &ActiveEventLoop,
         geometry: Option<&WindowGeometry>,
     ) {
-        let mut attrs = Window::default_attributes().with_title("SDIT");
+        let needs_transparent =
+            self.config.window.clamped_opacity() < 1.0 || self.config.window.blur;
+        let mut attrs = Window::default_attributes()
+            .with_title("SDIT")
+            .with_transparent(needs_transparent)
+            .with_blur(self.config.window.blur);
 
         if let Some(geom) = geometry {
             attrs = attrs
@@ -304,9 +309,13 @@ impl SditApp {
         }
 
         // 新しいウィンドウを作成（元ウィンドウからカスケード配置）
+        let needs_transparent =
+            self.config.window.clamped_opacity() < 1.0 || self.config.window.blur;
         let mut attrs = Window::default_attributes()
             .with_title("SDIT")
-            .with_inner_size(winit::dpi::LogicalSize::new(800.0_f64, 600.0_f64));
+            .with_inner_size(winit::dpi::LogicalSize::new(800.0_f64, 600.0_f64))
+            .with_transparent(needs_transparent)
+            .with_blur(self.config.window.blur);
 
         if let Some(pos) = self.cascade_position() {
             attrs = attrs.with_position(pos);

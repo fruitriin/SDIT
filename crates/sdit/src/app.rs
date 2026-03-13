@@ -472,7 +472,20 @@ impl SditApp {
             }
         }
 
-        // 6. 設定を置換
+        // 6. window opacity/blur 変更チェック
+        let opacity_changed =
+            (self.config.window.opacity - new_config.window.opacity).abs() > f32::EPSILON;
+        let blur_changed = self.config.window.blur != new_config.window.blur;
+        if opacity_changed || blur_changed {
+            for ws in self.windows.values() {
+                if blur_changed {
+                    ws.window.set_blur(new_config.window.blur);
+                }
+                ws.window.request_redraw();
+            }
+        }
+
+        // 7. 設定を置換
         self.config = new_config;
 
         log::info!("Config reloaded successfully");

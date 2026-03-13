@@ -667,6 +667,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 let Some(ws) = self.windows.get_mut(&id) else { return };
 
                 // ビジュアルベルの intensity を取得してクリアカラーに反映
+                let opacity = self.config.window.clamped_opacity();
                 let bell_intensity = ws.visual_bell.intensity();
                 let clear_color = if bell_intensity > 0.0 {
                     let bg = self.colors.background;
@@ -675,10 +676,11 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         bg[0] + (1.0 - bg[0]) * bell_intensity * 0.3,
                         bg[1] + (1.0 - bg[1]) * bell_intensity * 0.3,
                         bg[2] + (1.0 - bg[2]) * bell_intensity * 0.3,
-                        bg[3],
+                        opacity, // alpha はベル中も opacity を維持
                     ]
                 } else {
-                    self.colors.background
+                    let bg = self.colors.background;
+                    [bg[0], bg[1], bg[2], opacity]
                 };
 
                 let pipelines: Vec<&CellPipeline> = if ws.sidebar.visible {

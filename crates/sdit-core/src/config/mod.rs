@@ -35,6 +35,31 @@ impl Default for OptionAsAlt {
     }
 }
 
+/// ウィンドウ外観の設定。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct WindowConfig {
+    /// ウィンドウ背景の不透明度（0.0 = 完全透明、1.0 = 不透明）。
+    pub opacity: f32,
+    /// macOS でウィンドウ背景にブラーエフェクトを適用する。
+    pub blur: bool,
+}
+
+impl Default for WindowConfig {
+    fn default() -> Self {
+        Self { opacity: 1.0, blur: false }
+    }
+}
+
+impl WindowConfig {
+    /// opacity を安全な範囲にクランプする。
+    ///
+    /// NaN や Inf が渡された場合はデフォルト値 1.0 を返す。
+    pub fn clamped_opacity(&self) -> f32 {
+        if self.opacity.is_finite() { self.opacity.clamp(0.0, 1.0) } else { 1.0 }
+    }
+}
+
 /// ベル（BEL 0x07）の設定。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
@@ -78,6 +103,8 @@ pub struct Config {
     pub option_as_alt: OptionAsAlt,
     /// ベル設定。
     pub bell: BellConfig,
+    /// ウィンドウ外観設定。
+    pub window: WindowConfig,
 }
 
 impl Config {
@@ -186,6 +213,15 @@ impl Config {
                 content.push_str(
                     "# duration_ms: visual bell fade-out duration in milliseconds (default: 150)\n",
                 );
+            } else if line == "[window]" {
+                content.push('\n');
+                content.push_str("# ── Window ─────────────────────────────────────────────\n");
+                content.push_str(
+                    "# opacity: background opacity (0.0 = fully transparent, 1.0 = opaque, default: 1.0)\n",
+                );
+                content.push_str(
+                    "# blur: enable background blur effect (macOS only, default: false)\n",
+                );
             }
             content.push_str(line);
             content.push('\n');
@@ -244,8 +280,7 @@ mod tests {
 
     #[test]
     fn option_as_alt_serialize() {
-        let mut config = Config::default();
-        config.option_as_alt = OptionAsAlt::Both;
+        let config = Config { option_as_alt: OptionAsAlt::Both, ..Default::default() };
         let serialized = toml::to_string(&config).unwrap();
         assert!(
             serialized.contains("option_as_alt = \"both\""),
@@ -341,6 +376,47 @@ line_height = 1.3
     fn bell_duration_clamp_max() {
         let bell = BellConfig { duration_ms: 999_999, ..Default::default() };
         assert_eq!(bell.clamped_duration_ms(), 5000);
+    }
+
+    #[test]
+    fn window_config_default() {
+        let wc = WindowConfig::default();
+        assert!((wc.opacity - 1.0).abs() < f32::EPSILON);
+        assert!(!wc.blur);
+    }
+
+    #[test]
+    fn window_config_deserialize() {
+        let toml_str = "[window]\nopacity = 0.8\nblur = true\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert!((config.window.opacity - 0.8).abs() < f32::EPSILON);
+        assert!(config.window.blur);
+    }
+
+    #[test]
+    fn window_config_partial_deserialize() {
+        let toml_str = "[window]\nopacity = 0.5\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert!((config.window.opacity - 0.5).abs() < f32::EPSILON);
+        assert!(!config.window.blur); // default
+    }
+
+    #[test]
+    fn window_opacity_clamp() {
+        let wc = WindowConfig { opacity: -0.5, ..Default::default() };
+        assert!((wc.clamped_opacity() - 0.0).abs() < f32::EPSILON);
+        let wc = WindowConfig { opacity: 2.0, ..Default::default() };
+        assert!((wc.clamped_opacity() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn window_opacity_clamp_nan_inf() {
+        let wc = WindowConfig { opacity: f32::NAN, ..Default::default() };
+        assert!((wc.clamped_opacity() - 1.0).abs() < f32::EPSILON);
+        let wc = WindowConfig { opacity: f32::INFINITY, ..Default::default() };
+        assert!((wc.clamped_opacity() - 1.0).abs() < f32::EPSILON);
+        let wc = WindowConfig { opacity: f32::NEG_INFINITY, ..Default::default() };
+        assert!((wc.clamped_opacity() - 1.0).abs() < f32::EPSILON);
     }
 
     #[test]
