@@ -544,6 +544,67 @@ impl SditApp {
 // IME ユーティリティ関数
 // ---------------------------------------------------------------------------
 
+/// ペーストテキストが「unsafe」（改行を含む）かどうかを判定する。
+///
+/// Bracketed Paste モードが有効な場合は、シェルが改行を直接実行しないため
+/// 安全とみなし、常に false を返す。
+/// ただし、bracketed paste 終了シーケンス（`\x1b[201~`）は
+/// bracketed paste モード内でも脱出インジェクションに使えるため、
+/// モードの有無にかかわらず常に危険と判定する。
+pub(crate) fn is_unsafe_paste(text: &str, bracketed_paste_mode: bool) -> bool {
+    // bracketed paste 終了シーケンスは常に危険（モード有効時でも脱出に使える）
+    if text.contains("\x1b[201~") {
+        return true;
+    }
+    if bracketed_paste_mode {
+        return false; // bracketed paste は安全
+    }
+    text.contains('\n') || text.contains('\r')
+}
+
+/// unsafe paste の確認ダイアログを表示する。
+///
+/// ユーザーが「Paste」を選択した場合は true を返す。
+pub(crate) fn confirm_unsafe_paste(text: &str) -> bool {
+    use rfd::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
+
+    // プレビュー（最初の5行、各行80文字まで）
+    let preview: String = text
+        .lines()
+        .take(5)
+        .map(|line| {
+            // UTF-8 境界安全なトランケート + 制御文字を可視記号に置換
+            let sanitized: String = line
+                .chars()
+                .take(80)
+                .map(|c| if c.is_control() && c != '\t' { '\u{00b7}' } else { c })
+                .collect();
+            if line.chars().count() > 80 { format!("{sanitized}\u{2026}") } else { sanitized }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let line_count = text.lines().count();
+    let more = if line_count > 5 {
+        format!("\n\n\u{2026} and {} more lines", line_count - 5)
+    } else {
+        String::new()
+    };
+
+    let result = MessageDialog::new()
+        .set_level(MessageLevel::Warning)
+        .set_title("Confirm Paste")
+        .set_description(format!(
+            "You are about to paste text containing newlines. \
+             This could execute commands in the terminal.\n\n\
+             {preview}{more}"
+        ))
+        .set_buttons(MessageButtons::OkCancelCustom("Paste".to_string(), "Cancel".to_string()))
+        .show();
+
+    result == MessageDialogResult::Custom("Paste".to_string())
+}
+
 /// テキストをブラケットペーストシーケンスで包む。
 ///
 /// Terminal Injection 攻撃防止のため、テキスト内のブラケットシーケンスをサニタイズする。
@@ -579,6 +640,40 @@ pub(crate) fn ime_commit_to_bytes(text: String, bracketed_paste: bool) -> Vec<u8
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // -----------------------------------------------------------------------
+    // is_unsafe_paste のテスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn is_unsafe_paste_detects_newline() {
+        assert!(is_unsafe_paste("hello\nworld", false));
+        assert!(is_unsafe_paste("hello\rworld", false));
+        assert!(!is_unsafe_paste("hello world", false));
+    }
+
+    #[test]
+    fn is_unsafe_paste_safe_in_bracketed_mode() {
+        assert!(!is_unsafe_paste("hello\nworld", true));
+    }
+
+    #[test]
+    fn is_unsafe_paste_empty_string() {
+        assert!(!is_unsafe_paste("", false));
+        assert!(!is_unsafe_paste("", true));
+    }
+
+    #[test]
+    fn is_unsafe_paste_safe_single_line() {
+        assert!(!is_unsafe_paste("echo hello", false));
+    }
+
+    #[test]
+    fn is_unsafe_paste_detects_bracket_escape() {
+        // bracketed paste 終了シーケンスは bracketed モードでも危険
+        assert!(is_unsafe_paste("hello\x1b[201~world", true));
+        assert!(is_unsafe_paste("hello\x1b[201~world", false));
+    }
 
     // -----------------------------------------------------------------------
     // VisualBell のテスト

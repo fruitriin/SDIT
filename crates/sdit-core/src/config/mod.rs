@@ -85,6 +85,20 @@ impl BellConfig {
     }
 }
 
+/// ペースト設定。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct PasteConfig {
+    /// 複数行テキストのペースト時に確認ダイアログを表示する。
+    pub confirm_multiline: bool,
+}
+
+impl Default for PasteConfig {
+    fn default() -> Self {
+        Self { confirm_multiline: true }
+    }
+}
+
 /// SDIT 設定全体。
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default)]
@@ -105,6 +119,8 @@ pub struct Config {
     pub bell: BellConfig,
     /// ウィンドウ外観設定。
     pub window: WindowConfig,
+    /// ペースト設定。
+    pub paste: PasteConfig,
 }
 
 impl Config {
@@ -222,6 +238,10 @@ impl Config {
                 content.push_str(
                     "# blur: enable background blur effect (macOS only, default: false)\n",
                 );
+            } else if line == "[paste]" {
+                content.push('\n');
+                content.push_str("# ── Paste ─────────────────────────────────────────────\n");
+                content.push_str("# confirm_multiline: show confirmation dialog when pasting text containing newlines (default: true)\n");
             }
             content.push_str(line);
             content.push('\n');
@@ -417,6 +437,19 @@ line_height = 1.3
         assert!((wc.clamped_opacity() - 1.0).abs() < f32::EPSILON);
         let wc = WindowConfig { opacity: f32::NEG_INFINITY, ..Default::default() };
         assert!((wc.clamped_opacity() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn paste_config_default() {
+        let pc = PasteConfig::default();
+        assert!(pc.confirm_multiline);
+    }
+
+    #[test]
+    fn paste_config_deserialize() {
+        let toml_str = "[paste]\nconfirm_multiline = false\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert!(!config.paste.confirm_multiline);
     }
 
     #[test]

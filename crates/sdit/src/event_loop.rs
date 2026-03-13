@@ -11,8 +11,8 @@ use sdit_core::selection::{Selection, SelectionType};
 use sdit_core::terminal::TermMode;
 
 use crate::app::{
-    PreeditState, SditApp, SditEvent, SearchState, UrlHoverState, ime_commit_to_bytes,
-    wrap_bracketed_paste,
+    PreeditState, SditApp, SditEvent, SearchState, UrlHoverState, confirm_unsafe_paste,
+    ime_commit_to_bytes, is_unsafe_paste, wrap_bracketed_paste,
 };
 use sdit_core::config::keybinds::Action;
 use sdit_core::session::AppSnapshot;
@@ -993,6 +993,15 @@ impl SditApp {
                     self.clipboard.as_mut().and_then(|cb| cb.get_text().ok()).unwrap_or_default();
                 if !text.is_empty() {
                     let bracketed = mode.contains(TermMode::BRACKETED_PASTE);
+
+                    // Unsafe paste check
+                    if self.config.paste.confirm_multiline
+                        && is_unsafe_paste(&text, bracketed)
+                        && !confirm_unsafe_paste(&text)
+                    {
+                        return; // ユーザーがキャンセル
+                    }
+
                     let bytes: Vec<u8> =
                         if bracketed { wrap_bracketed_paste(&text) } else { text.into_bytes() };
                     if let Err(e) = session.pty_io.write_tx.try_send(bytes) {

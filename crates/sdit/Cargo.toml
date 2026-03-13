@@ -24,3 +24,4 @@ arboard      = "3"
 notify       = { workspace = true }
 muda = "0.17.1"
 open = "5"
+rfd = "0.15"
