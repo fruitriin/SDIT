@@ -219,6 +219,8 @@ pub struct Terminal {
     pub(super) current_hyperlink: Option<Arc<str>>,
     /// Kitty keyboard protocol フラグスタック。
     pub kitty_flags: KittyFlagStack,
+    /// デスクトップ通知ペンディング（title, body）。OSC 9/99 で設定される。
+    pub(super) notification_pending: Option<(String, String)>,
 }
 
 impl Terminal {
@@ -242,6 +244,7 @@ impl Terminal {
             clipboard_write_pending: None,
             current_hyperlink: None,
             kitty_flags: KittyFlagStack::default(),
+            notification_pending: None,
         }
     }
 
@@ -303,6 +306,14 @@ impl Terminal {
     /// 呼び出し後はフィールドが `None` になる（take セマンティクス）。
     pub fn take_clipboard_write(&mut self) -> Option<String> {
         self.clipboard_write_pending.take()
+    }
+
+    /// デスクトップ通知ペンディングを取り出す。
+    ///
+    /// OSC 9 / OSC 99 で設定された `(title, body)` を返す。
+    /// 呼び出し後はフィールドが `None` になる（take セマンティクス）。
+    pub fn take_notification(&mut self) -> Option<(String, String)> {
+        self.notification_pending.take()
     }
 
     /// Resize the terminal to `lines` rows and `columns` columns.
@@ -650,6 +661,28 @@ impl Perform for Terminal {
                 self.title = Some(title.to_owned());
             }
         }
+        // OSC 9: iTerm2 互換デスクトップ通知。
+        // 形式: \e]9;<body>BEL
+        if params.len() >= 2 && params[0] == b"9" {
+            const MAX_NOTIFY_BYTES: usize = 4096;
+            let raw = params[1];
+            let capped = if raw.len() > MAX_NOTIFY_BYTES { &raw[..MAX_NOTIFY_BYTES] } else { raw };
+            if let Ok(body) = std::str::from_utf8(capped) {
+                self.notification_pending = Some(("SDIT".to_string(), body.to_string()));
+            }
+        }
+
+        // OSC 99: Kitty 互換デスクトップ通知。
+        // 形式: \e]99;<body>BEL （簡易実装: 本文のみ）
+        if params.len() >= 2 && params[0] == b"99" {
+            const MAX_NOTIFY_BYTES: usize = 4096;
+            let raw = params[1];
+            let capped = if raw.len() > MAX_NOTIFY_BYTES { &raw[..MAX_NOTIFY_BYTES] } else { raw };
+            if let Ok(body) = std::str::from_utf8(capped) {
+                self.notification_pending = Some(("SDIT".to_string(), body.to_string()));
+            }
+        }
+
         // OSC 52: クリップボード操作。
         // 書き込み: \e]52;c;<base64_data>BEL
         // 読み取り: \e]52;c;?BEL — セキュリティのため応答しない
@@ -1352,5 +1385,56 @@ mod tests {
         proc.advance(&mut term, b"\x1b[?u");
         let response = term.drain_pending_writes().unwrap();
         assert_eq!(response, b"\x1b[?1u");
+    }
+
+    // OSC 9/99 デスクトップ通知テスト
+    #[test]
+    fn osc_9_notification() {
+        let mut term = Terminal::new(24, 80, 1000);
+        term.osc_dispatch(&[b"9", b"Build complete!"], false);
+        let notif = term.take_notification();
+        assert!(notif.is_some());
+        let (title, body) = notif.unwrap();
+        assert_eq!(title, "SDIT");
+        assert_eq!(body, "Build complete!");
+    }
+
+    #[test]
+    fn osc_99_notification() {
+        let mut term = Terminal::new(24, 80, 1000);
+        term.osc_dispatch(&[b"99", b"Task finished"], false);
+        let notif = term.take_notification();
+        assert!(notif.is_some());
+        let (_, body) = notif.unwrap();
+        assert_eq!(body, "Task finished");
+    }
+
+    #[test]
+    fn osc_9_notification_too_long() {
+        let mut term = Terminal::new(24, 80, 1000);
+        let long_body = "A".repeat(10000);
+        term.osc_dispatch(&[b"9", long_body.as_bytes()], false);
+        let notif = term.take_notification();
+        assert!(notif.is_some());
+        let (_, body) = notif.unwrap();
+        assert!(body.len() <= 4096);
+    }
+
+    #[test]
+    fn osc_9_no_body_no_notification() {
+        // パラメータが1つだけ（body なし）の場合は通知なし
+        let mut term = Terminal::new(24, 80, 1000);
+        term.osc_dispatch(&[b"9"], false);
+        assert!(term.take_notification().is_none());
+    }
+
+    #[test]
+    fn take_notification_clears_pending() {
+        let mut term = Terminal::new(24, 80, 1000);
+        term.osc_dispatch(&[b"9", b"once"], false);
+        let first = term.take_notification();
+        let second = term.take_notification();
+        assert!(first.is_some());
+        assert!(second.is_none());
     }
 }

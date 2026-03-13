@@ -840,6 +840,21 @@ impl ApplicationHandler<SditEvent> for SditApp {
                     }
                 }
             }
+            SditEvent::DesktopNotification { title, body } => {
+                if self.config.notification.enabled {
+                    // バックグラウンドスレッドで通知送信（イベントループをブロックしない）
+                    std::thread::Builder::new()
+                        .name("desktop-notify".to_string())
+                        .spawn(move || {
+                            if let Err(e) =
+                                notify_rust::Notification::new().summary(&title).body(&body).show()
+                            {
+                                log::warn!("Desktop notification failed: {e}");
+                            }
+                        })
+                        .ok();
+                }
+            }
             SditEvent::MenuAction(action) => {
                 // フォーカスがあるウィンドウ、またはウィンドウが1つだけならそれを使う。
                 let focused_window_id = self

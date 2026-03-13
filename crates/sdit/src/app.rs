@@ -87,6 +87,8 @@ pub(crate) enum SditEvent {
     MenuAction(sdit_core::config::keybinds::Action),
     /// BEL (0x07) 受信 → ビジュアルベル + Dock バウンス。
     BellRing(SessionId),
+    /// OSC 9/99 デスクトップ通知要求。
+    DesktopNotification { title: String, body: String },
 }
 
 // ---------------------------------------------------------------------------

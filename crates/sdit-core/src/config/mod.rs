@@ -85,6 +85,20 @@ impl BellConfig {
     }
 }
 
+/// デスクトップ通知設定。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct NotificationConfig {
+    /// デスクトップ通知を有効にする。
+    pub enabled: bool,
+}
+
+impl Default for NotificationConfig {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
 /// ペースト設定。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
@@ -121,6 +135,8 @@ pub struct Config {
     pub window: WindowConfig,
     /// ペースト設定。
     pub paste: PasteConfig,
+    /// デスクトップ通知設定。
+    pub notification: NotificationConfig,
 }
 
 impl Config {
@@ -242,6 +258,10 @@ impl Config {
                 content.push('\n');
                 content.push_str("# ── Paste ─────────────────────────────────────────────\n");
                 content.push_str("# confirm_multiline: show confirmation dialog when pasting text containing newlines (default: true)\n");
+            } else if line == "[notification]" {
+                content.push('\n');
+                content.push_str("# ── Notification ──────────────────────────────────────\n");
+                content.push_str("# enabled: show desktop notifications from OSC 9/99 sequences (default: true)\n");
             }
             content.push_str(line);
             content.push('\n');
@@ -450,6 +470,19 @@ line_height = 1.3
         let toml_str = "[paste]\nconfirm_multiline = false\n";
         let config: Config = toml::from_str(toml_str).unwrap();
         assert!(!config.paste.confirm_multiline);
+    }
+
+    #[test]
+    fn notification_config_default() {
+        let nc = NotificationConfig::default();
+        assert!(nc.enabled);
+    }
+
+    #[test]
+    fn notification_config_deserialize() {
+        let toml_str = "[notification]\nenabled = false\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert!(!config.notification.enabled);
     }
 
     #[test]

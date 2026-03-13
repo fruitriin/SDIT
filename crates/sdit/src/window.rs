@@ -63,6 +63,11 @@ pub(crate) fn spawn_pty_reader(
                             if let Some(text) = terminal.take_clipboard_write() {
                                 let _ = event_proxy.send_event(SditEvent::ClipboardWrite(text));
                             }
+                            // OSC 9/99 デスクトップ通知処理
+                            if let Some((title, body)) = terminal.take_notification() {
+                                let _ = event_proxy
+                                    .send_event(SditEvent::DesktopNotification { title, body });
+                            }
                             // 新しい出力があったら display_offset を 0 にリセット（ライブビュー追従）
                             if terminal.grid().display_offset() > 0 {
                                 terminal.grid_mut().scroll_display(Scroll::Bottom);

@@ -79,6 +79,25 @@
 
 ---
 
-## タスク
+## タスク: Phase 13.6 — デスクトップ通知
 
-（現在タスクなし）
+### OSC パース (sdit-core)
+- [x] Terminal に notification_pending フィールド追加
+- [x] OSC 9 パース（iTerm2 互換: 本文のみ）
+- [x] OSC 99 パース（Kitty 互換: タイトル + 本文）
+- [x] take_notification() メソッド追加
+
+### イベント・通知 (sdit)
+- [x] SditEvent::DesktopNotification 追加
+- [x] PTY リーダーで take_notification → イベント送出
+- [x] notify-rust クレートでシステム通知発行
+- [x] レート制限（OSC 9/99 通知は一度の PTY 読み取りで最後の1件のみ送出。BEL のような時間ベースのレート制限は通知の性質上不要と判断）
+
+### 設定
+- [x] NotificationConfig（enabled: bool）
+- [x] save_with_comments に [notification] セクション
+
+### テスト・品質ゲート
+- [x] OSC 9/99 パーステスト（osc_9_notification, osc_99_notification, osc_9_notification_too_long, osc_9_no_body_no_notification, take_notification_clears_pending）
+- [x] NotificationConfig serde テスト
+- [x] Stage 1: cargo fmt --check && cargo clippy --all-targets && cargo test → 全 210 件通過
