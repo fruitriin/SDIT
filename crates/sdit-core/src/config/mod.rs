@@ -85,11 +85,15 @@ pub struct WindowConfig {
     pub padding_x: u16,
     /// グリッドとウィンドウ上下端の余白（ピクセル）。デフォルト: 0、最大: 200。
     pub padding_y: u16,
+    /// 初期ウィンドウ幅（列数）。デフォルト: 80、範囲: 10-500。
+    pub columns: u16,
+    /// 初期ウィンドウ高さ（行数）。デフォルト: 24、範囲: 2-200。
+    pub rows: u16,
 }
 
 impl Default for WindowConfig {
     fn default() -> Self {
-        Self { opacity: 1.0, blur: false, padding_x: 0, padding_y: 0 }
+        Self { opacity: 1.0, blur: false, padding_x: 0, padding_y: 0, columns: 80, rows: 24 }
     }
 }
 
@@ -109,6 +113,16 @@ impl WindowConfig {
     /// `padding_y` を安全な範囲（0〜200 ピクセル）にクランプする。
     pub fn clamped_padding_y(&self) -> u16 {
         self.padding_y.min(200)
+    }
+
+    /// `columns` を安全な範囲（10〜500）にクランプする。
+    pub fn clamped_columns(&self) -> u16 {
+        self.columns.clamp(10, 500)
+    }
+
+    /// `rows` を安全な範囲（2〜200）にクランプする。
+    pub fn clamped_rows(&self) -> u16 {
+        self.rows.clamp(2, 200)
     }
 }
 
@@ -337,6 +351,10 @@ impl Config {
                 content.push_str(
                     "# padding_y: vertical padding between grid and window edge in pixels (0-200, default: 0)\n",
                 );
+                content.push_str(
+                    "# columns: initial terminal width in columns (10-500, default: 80)\n",
+                );
+                content.push_str("# rows: initial terminal height in rows (2-200, default: 24)\n");
             } else if line == "[paste]" {
                 content.push('\n');
                 content.push_str("# ── Paste ─────────────────────────────────────────────\n");
@@ -704,5 +722,44 @@ line_height = 1.3
     fn scrollback_config_empty_uses_default() {
         let config: Config = toml::from_str("").unwrap();
         assert_eq!(config.scrollback.lines, 10_000);
+    }
+
+    // -----------------------------------------------------------------------
+    // WindowConfig columns/rows テスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn window_config_columns_rows_default() {
+        let wc = WindowConfig::default();
+        assert_eq!(wc.columns, 80);
+        assert_eq!(wc.rows, 24);
+    }
+
+    #[test]
+    fn window_config_columns_rows_deserialize() {
+        let toml_str = "[window]\ncolumns = 120\nrows = 36\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.window.columns, 120);
+        assert_eq!(config.window.rows, 36);
+    }
+
+    #[test]
+    fn window_config_columns_clamp() {
+        let wc = WindowConfig { columns: 5, ..Default::default() };
+        assert_eq!(wc.clamped_columns(), 10);
+        let wc = WindowConfig { columns: 600, ..Default::default() };
+        assert_eq!(wc.clamped_columns(), 500);
+        let wc = WindowConfig { columns: 80, ..Default::default() };
+        assert_eq!(wc.clamped_columns(), 80);
+    }
+
+    #[test]
+    fn window_config_rows_clamp() {
+        let wc = WindowConfig { rows: 1, ..Default::default() };
+        assert_eq!(wc.clamped_rows(), 2);
+        let wc = WindowConfig { rows: 300, ..Default::default() };
+        assert_eq!(wc.clamped_rows(), 200);
+        let wc = WindowConfig { rows: 24, ..Default::default() };
+        assert_eq!(wc.clamped_rows(), 24);
     }
 }

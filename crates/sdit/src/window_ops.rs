@@ -67,7 +67,14 @@ impl SditApp {
                 .with_inner_size(winit::dpi::LogicalSize::new(geom.width, geom.height))
                 .with_position(winit::dpi::PhysicalPosition::new(geom.x, geom.y));
         } else {
-            attrs = attrs.with_inner_size(winit::dpi::LogicalSize::new(800.0_f64, 600.0_f64));
+            let metrics = *self.font_ctx.metrics();
+            let padding_x = f32::from(self.config.window.clamped_padding_x());
+            let padding_y = f32::from(self.config.window.clamped_padding_y());
+            let cols = f32::from(self.config.window.clamped_columns());
+            let rows = f32::from(self.config.window.clamped_rows());
+            let width = f64::from(cols * metrics.cell_width + 2.0 * padding_x);
+            let height = f64::from(rows * metrics.cell_height + 2.0 * padding_y);
+            attrs = attrs.with_inner_size(winit::dpi::LogicalSize::new(width, height));
             if let Some(pos) = self.cascade_position() {
                 attrs = attrs.with_position(pos);
             }
@@ -314,9 +321,18 @@ impl SditApp {
         // 新しいウィンドウを作成（元ウィンドウからカスケード配置）
         let needs_transparent =
             self.config.window.clamped_opacity() < 1.0 || self.config.window.blur;
+        let detach_metrics = *self.font_ctx.metrics();
+        let detach_padding_x = f32::from(self.config.window.clamped_padding_x());
+        let detach_padding_y = f32::from(self.config.window.clamped_padding_y());
+        let detach_cols = f32::from(self.config.window.clamped_columns());
+        let detach_rows = f32::from(self.config.window.clamped_rows());
+        let detach_width =
+            f64::from(detach_cols * detach_metrics.cell_width + 2.0 * detach_padding_x);
+        let detach_height =
+            f64::from(detach_rows * detach_metrics.cell_height + 2.0 * detach_padding_y);
         let mut attrs = Window::default_attributes()
             .with_title("SDIT")
-            .with_inner_size(winit::dpi::LogicalSize::new(800.0_f64, 600.0_f64))
+            .with_inner_size(winit::dpi::LogicalSize::new(detach_width, detach_height))
             .with_transparent(needs_transparent)
             .with_blur(self.config.window.blur);
 
@@ -375,13 +391,9 @@ impl SditApp {
 
         // 新ウィンドウのサイズに合わせて Terminal + PTY をリサイズ
         let new_ws = self.windows.get(&new_window_id).unwrap();
-        #[allow(clippy::similar_names)]
-        let padding_x_detach = f32::from(self.config.window.clamped_padding_x());
-        #[allow(clippy::similar_names)]
-        let padding_y_detach = f32::from(self.config.window.clamped_padding_y());
         let (cols, rows) = calc_grid_size(
-            (new_ws.gpu.surface_config.width as f32 - 2.0 * padding_x_detach).max(0.0),
-            (new_ws.gpu.surface_config.height as f32 - 2.0 * padding_y_detach).max(0.0),
+            (new_ws.gpu.surface_config.width as f32 - 2.0 * detach_padding_x).max(0.0),
+            (new_ws.gpu.surface_config.height as f32 - 2.0 * detach_padding_y).max(0.0),
             metrics.cell_width,
             metrics.cell_height,
         );
