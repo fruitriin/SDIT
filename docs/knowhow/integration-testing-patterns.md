@@ -52,6 +52,24 @@ fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Option<ExitStatus>
 - `send-keys.sh`: osascript の System Events でキーストローク送信
   - **重要**: AppleScript に変数を埋め込む際はバックスラッシュと二重引用符のエスケープが必須
   - **コマンド文字列のスペース**: `echo` や `print` 等のコマンドと引数の間のスペースは、1つの文字列引数に含めること。分割して送ると結合されてしまう（→ 下記「シェルコマンド入力のスペース問題」参照）
+  - **英数キー先打ち必須**: `send-keys.sh` を呼ぶ前に毎回英数キー（key code 102）を送り IME モードを確定する（→ 下記「英数キー先打ちパターン」参照）
+
+## 英数キー先打ちパターン
+
+`send-keys.sh` でキーを送る前に**毎回**英数キー（key code 102）を先打ちして IME モードを確定する。
+現在の IME 状態に依存しないため、テスト間の状態持ち越しを防ぐ。
+
+```bash
+# 英数キーを送る（IME を ASCII モードに確定）
+osascript -e 'tell application "System Events" to key code 102'
+sleep 0.1
+
+# その後にコマンドを送る
+./tools/test-utils/send-keys.sh sdit "echo hello world"
+```
+
+`send-keys.sh` を使うすべてのシナリオ手順で、keystroke の直前に英数キー先打ちを入れること。
+詳細は `docs/knowhow/gui-test-ime-interference.md` を参照。
 
 ## シェルコマンド入力のスペース問題
 
