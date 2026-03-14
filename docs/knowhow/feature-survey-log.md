@@ -136,3 +136,37 @@
 - Ghostty: `src/renderer/`（GPU 描画最適化、シェーダー実装）
 - WezTerm: `wezterm-client/src/`（クライアント/サーバー分離の詳細）
 - Zellij: `zellij-server/src/`（セッション永続化の詳細）
+
+### 2026-03-14: Phase 17 策定（品質・UX 向上 第2弾）
+
+**調査対象リファレンス:**
+- Ghostty: `src/apprt/action.zig`（全アクション列挙 — toggle_window_decorations, float_window, toggle_command_palette, key_sequence 等）
+- Ghostty: `src/config/Config.zig`（quick-terminal, font-thicken, right-click, key-remap, theme 等）
+- Ghostty: `src/terminal/kitty/`（Kitty グラフィクスプロトコル概要把握）
+- Ghostty: `src/renderer/shadertoy.zig`（カスタムシェーダー概要）
+- WezTerm: `wezterm-gui/src/termwindow/palette.rs`（コマンドパレット設計）
+- WezTerm: `wezterm-client/src/`（クライアント/サーバー分離概要）
+- Zellij: `zellij-server/src/session_layout_metadata.rs`（セッション永続化概要）
+- Alacritty: `alacritty/src/config/window.rs`（Decorations enum）
+
+**発見した機能ギャップ（Phase 17 Plan に反映済み）:**
+- テーマプリセットシステム → Phase 17.1
+- ウィンドウデコレーション設定 → Phase 17.2
+- Always On Top → Phase 17.3
+- 右クリック動作カスタマイズ → Phase 17.4
+- コマンドパレット → Phase 17.5
+- セッション復帰（タブ・CWD） → Phase 17.6
+
+**将来検討（Phase 18+ で検討）:**
+- Kitty グラフィクスプロトコル — 実装規模大、独立フェーズで計画
+- Quick Terminal（macOS） — macOS 固有 UI、独立フェーズで計画
+- カスタムシェーダー（Shadertoy） — wgpu post-process パス、独立フェーズで計画
+- フォントレンダリング調整（font-thicken） — macOS 固有、独立フェーズで計画
+- キーリマップ（キーシムレベル変換） — 現行キーバインドでは対応困難
+- タブ/ウィンドウ概要表示 — 縦タブバーがあるため優先度低
+- インスペクター/デバッグレイヤー — 開発者向けツール
+
+**未調査領域（次回の候補）:**
+- Ghostty: `src/terminal/kitty/graphics_exec.zig`（Kitty グラフィクス実行詳細）
+- WezTerm: `wezterm-mux/src/`（Mux 層の詳細セッション管理）
+- Zellij: `default-plugins/`（プラグイン UI 設計の詳細）
