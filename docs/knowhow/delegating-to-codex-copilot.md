@@ -144,6 +144,24 @@ copilot
 | 設計判断・曖昧な仕様 | Claude（メイン or サブ） | 意図理解力 |
 | セキュリティレビュー | Claude（メイン） | 信頼性重視 |
 
+## 品質ゲートの分業（確立されたパターン）
+
+Phase 21.5 / 22.2 の実践で確立した分業:
+
+```
+Stage 1（ビルド・ユニットテスト）→ Copilot CLI
+  - PTY 不要・機械的・高速・GPT-5 mini で無料
+  - cargo build && cargo test -p sdit-core && cargo test -p sdit --lib
+
+Stage 2（セキュリティ・E2E）→ Claude Code サブエージェント
+  - GUI 起動・スクリーンショット・OCR が必要
+  - PTY が必要なテストが含まれる
+  - CLAUDE.md などプロジェクト規約の深い理解が必要
+  - 「クラッシュ自動発見 → 新プラン作成 → TODO 登録」の副産物効果がある
+```
+
+**E2E テストエージェントの副産物効果**: GUI 操作中に発見したバグを、現フェーズとは別の新計画として自動分離・TODO 登録する。人間が見落としがちな問題を副産物として捕捉できる。
+
 ## 注意事項
 
 - `.claude/hooks/` は Codex/Copilot には効かない（AGENTS.md の指示文のみで制約）
