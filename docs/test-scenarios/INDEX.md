@@ -10,7 +10,7 @@
 | [006-session-switch](006-session-switch.md) | セッション切り替え（サイドバークリック）確認 | - | - |
 | [007-session-detach](007-session-detach.md) | セッション切出し（ドラッグアウト）確認 | - | - |
 | [008-config-font-theme](008-config-font-theme.md) | 設定ファイルによるフォント・テーマ変更確認 | - | - |
-| [009-cjk-display](009-cjk-display.md) | CJK 全角文字の表示確認 | 2026-03-13 | UNIT_ONLY |
+| [009-cjk-display](009-cjk-display.md) | CJK 全角文字の表示確認 | 2026-03-14 | PARTIAL |
 | [010-alt-key](010-alt-key.md) | Alt キー入力の確認 | - | - |
 | [011-window-title](011-window-title.md) | ウィンドウタイトル動的更新の確認 | - | - |
 | [012-cursor-style](012-cursor-style.md) | DECSCUSR カーソルスタイル変更 + DECSCUSR 0 デフォルト復帰 + 設定ファイルデフォルト確認 | 2026-03-14 | UPDATED |

@@ -98,3 +98,26 @@ cellH = imgH / n        （整数除算）
 4. clip-image --grid-cell 3 2 8 → tmp/clip.png（注目領域のみ）
 5. verify-text tmp/clip.png "期待テキスト"
 ```
+
+## 009-cjk テストでの実用知見（2026-03-14）
+
+### annotate-grid での CJK テキスト座標特定
+
+`--divide 8` で 8×8 分割した際、1行目のテキストは row 0 に収まる。
+CJK 文字が `echo` コマンド引数として入力された場合:
+- `riin@quox-353 SDIT % echo こんにちは世界` の形で 1 行に収まる
+- col 0: プロンプト `riin@quox-353`
+- col 1-2: `SDIT % echo `
+- col 2-5: `こんにちは世界`（全角 14 セル分）
+
+### clip-image と verify-text の連携での注意点
+
+- `--grid-cell` で切り出した領域が小さすぎると（20px 高）、verify-text の輝度チェックでセル座標ずれが起きる
+- verify-text の `--region` オプションを使う場合は、1文字あたり最低 15-20px の高さを確保する
+- 画面全体に verify-text をかけると、OCR が余分なテキスト（プロンプト等）を拾って FAIL になる。SSIM/LUMINANCE の結果で補完すること
+
+### screencapture フォールバックの反転バグ確認
+
+`capture-window` が screencapture フォールバックを使う場合でも、
+2026-03-14 の環境では **annotate-grid/clip-image の画像は正立**していた（反転なし）。
+CGS_REQUIRE_INIT エラーで ScreenCaptureKit が失敗しても screencapture フォールバック PNG は正しく処理される。
