@@ -959,6 +959,11 @@ pub struct TerminalConfig {
     /// `"unicode"`: Unicode 標準の幅計算を使用する（デフォルト）。
     /// `"legacy"`: 旧来の wcswidth 互換モード（将来対応）。
     pub grapheme_width_method: GraphemeWidthMethod,
+    /// 東アジア曖昧幅文字（○□★→℃ 等）のセル幅扱い。
+    ///
+    /// `"narrow"`: 1 セル幅（デフォルト。unicode-width の標準動作）。
+    /// `"wide"`: 2 セル幅（CJK 環境向け。全角扱い）。
+    pub east_asian_ambiguous_width: EastAsianAmbiguousWidth,
     /// OSC 10/11/12 カラー問い合わせの応答形式。
     ///
     /// `"8-bit"`: `rgb:RR/GG/BB` 形式で応答する。
@@ -980,6 +985,7 @@ impl Default for TerminalConfig {
     fn default() -> Self {
         Self {
             grapheme_width_method: GraphemeWidthMethod::Unicode,
+            east_asian_ambiguous_width: EastAsianAmbiguousWidth::Narrow,
             osc_color_report_format: OscColorReportFormat::default(),
             title_report: false,
             enquiry_response: None,
@@ -1014,6 +1020,20 @@ pub enum GraphemeWidthMethod {
     Unicode,
     /// 旧来の wcswidth 互換モード（将来対応）。
     Legacy,
+}
+
+/// 東アジア曖昧幅（East Asian Ambiguous Width）文字の幅扱い。
+///
+/// Unicode では○・□・★・→・℃ 等を「曖昧幅」として定義している。
+/// CJK 環境では慣習的に 2 セル（全角）扱いすることが多い。
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum EastAsianAmbiguousWidth {
+    /// 1 セル幅（unicode-width デフォルト）。
+    #[default]
+    Narrow,
+    /// 2 セル幅（CJK 環境向け）。
+    Wide,
 }
 
 /// SDIT 設定全体。
@@ -1401,6 +1421,9 @@ impl Config {
                 content.push_str("#   \"unicode\": standard Unicode width calculation\n");
                 content
                     .push_str("#   \"legacy\": legacy wcswidth-compatible mode (future support)\n");
+                content.push_str("# east_asian_ambiguous_width: cell width for East Asian Ambiguous characters e.g. ○□★ (default: \"narrow\")\n");
+                content.push_str("#   \"narrow\": 1 cell (standard unicode-width behavior)\n");
+                content.push_str("#   \"wide\": 2 cells (CJK environment preference)\n");
             }
             content.push_str(line);
             content.push('\n');

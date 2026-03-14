@@ -16,7 +16,7 @@ use std::sync::Arc;
 use bitflags::bitflags;
 use vte::Perform;
 
-use crate::config::OscColorReportFormat;
+use crate::config::{EastAsianAmbiguousWidth, OscColorReportFormat};
 use crate::grid::{Cell, CellFlags, Color, Dimensions, Grid, GridCell, NamedColor};
 use crate::index::{Column, Line, Point};
 
@@ -285,6 +285,10 @@ pub struct Terminal {
     ///
     /// Config への参照を持たないため、GUI 側（app.rs）で設定して渡す。
     pub enquiry_response: Option<String>,
+    /// 東アジア曖昧幅文字を 2 セル幅として扱うか。
+    ///
+    /// Config への参照を持たないため、GUI 側（app.rs）で設定して渡す。
+    pub east_asian_ambiguous_width: EastAsianAmbiguousWidth,
 }
 
 impl Terminal {
@@ -319,6 +323,7 @@ impl Terminal {
             osc_color_report_format: OscColorReportFormat::default(),
             title_report: false,
             enquiry_response: None,
+            east_asian_ambiguous_width: EastAsianAmbiguousWidth::default(),
         }
     }
 
@@ -359,6 +364,7 @@ impl Terminal {
             osc_color_report_format: OscColorReportFormat::default(),
             title_report: false,
             enquiry_response: None,
+            east_asian_ambiguous_width: EastAsianAmbiguousWidth::default(),
         }
     }
 
@@ -671,7 +677,13 @@ impl Perform for Terminal {
             self.carriage_return();
         }
 
-        let width = unicode_width::UnicodeWidthChar::width(c).unwrap_or(1);
+        // east_asian_ambiguous_width = Wide のとき width_cjk() を使い Ambiguous 文字を 2 セル扱いにする
+        // `.min(2)`: unicode-width の将来的な仕様変更で 3 以上の値が返されても描画崩れを防ぐ防御的ガード
+        let width = if self.east_asian_ambiguous_width == EastAsianAmbiguousWidth::Wide {
+            unicode_width::UnicodeWidthChar::width_cjk(c).unwrap_or(1).min(2)
+        } else {
+            unicode_width::UnicodeWidthChar::width(c).unwrap_or(1).min(2)
+        };
 
         let col = self.grid.cursor.point.column.0;
         let cols = self.grid.columns();

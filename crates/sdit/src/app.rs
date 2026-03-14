@@ -580,6 +580,8 @@ impl SditApp {
             state.terminal.osc_color_report_format = self.config.terminal.osc_color_report_format;
             state.terminal.title_report = self.config.terminal.title_report;
             state.terminal.enquiry_response = self.config.terminal.clamped_enquiry_response();
+            state.terminal.east_asian_ambiguous_width =
+                self.config.terminal.east_asian_ambiguous_width;
         }
 
         self.session_mgr.insert(session);
@@ -787,21 +789,25 @@ impl SditApp {
             }
         }
 
-        // 10b. terminal config 変更チェック（osc_color_report_format / title_report / enquiry_response）
+        // 10b. terminal config 変更チェック
         let terminal_config_changed = self.config.terminal.osc_color_report_format
             != new_config.terminal.osc_color_report_format
             || self.config.terminal.title_report != new_config.terminal.title_report
-            || self.config.terminal.enquiry_response != new_config.terminal.enquiry_response;
+            || self.config.terminal.enquiry_response != new_config.terminal.enquiry_response
+            || self.config.terminal.east_asian_ambiguous_width
+                != new_config.terminal.east_asian_ambiguous_width;
         if terminal_config_changed {
             let fmt = new_config.terminal.osc_color_report_format;
             let title_report = new_config.terminal.title_report;
             let enq = new_config.terminal.clamped_enquiry_response();
+            let eaw = new_config.terminal.east_asian_ambiguous_width;
             for session in self.session_mgr.all() {
                 let mut state =
                     session.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                 state.terminal.osc_color_report_format = fmt;
                 state.terminal.title_report = title_report;
                 state.terminal.enquiry_response = enq.clone();
+                state.terminal.east_asian_ambiguous_width = eaw;
             }
         }
 

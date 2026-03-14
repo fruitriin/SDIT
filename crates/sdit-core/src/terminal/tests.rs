@@ -952,3 +952,53 @@ fn enq_response_none() {
     let writes = term.drain_pending_writes();
     assert!(writes.is_none(), "expected no response when enquiry_response is None");
 }
+
+// ---------------------------------------------------------------------------
+// Phase 25.2: East Asian Ambiguous Width
+// ---------------------------------------------------------------------------
+
+/// Narrow モード（デフォルト）で ○（U+25CB）が幅1になることを確認する。
+#[test]
+fn east_asian_ambiguous_narrow_circle() {
+    use crate::config::EastAsianAmbiguousWidth;
+    let (mut proc, mut term) = make_proc_term(24, 80);
+    // デフォルトは Narrow
+    assert_eq!(term.east_asian_ambiguous_width, EastAsianAmbiguousWidth::Narrow);
+    proc.advance(&mut term, "○".as_bytes());
+    let cell0 = &term.grid()[Point::new(Line(0), Column(0))];
+    assert_eq!(cell0.c, '○');
+    // Narrow モードでは WIDE_CHAR フラグなし、カーソルは列1
+    assert!(!cell0.flags.contains(CellFlags::WIDE_CHAR));
+    assert_eq!(term.grid().cursor.point.column, Column(1));
+}
+
+/// Wide モードで ○（U+25CB）が幅2になることを確認する。
+#[test]
+fn east_asian_ambiguous_wide_circle() {
+    use crate::config::EastAsianAmbiguousWidth;
+    let (mut proc, mut term) = make_proc_term(24, 80);
+    term.east_asian_ambiguous_width = EastAsianAmbiguousWidth::Wide;
+    proc.advance(&mut term, "○".as_bytes());
+    let cell0 = &term.grid()[Point::new(Line(0), Column(0))];
+    assert_eq!(cell0.c, '○');
+    // Wide モードでは WIDE_CHAR フラグあり、スペーサーセルあり、カーソルは列2
+    assert!(cell0.flags.contains(CellFlags::WIDE_CHAR));
+    let cell1 = &term.grid()[Point::new(Line(0), Column(1))];
+    assert!(cell1.flags.contains(CellFlags::WIDE_CHAR_SPACER));
+    assert_eq!(term.grid().cursor.point.column, Column(2));
+}
+
+/// Wide モードでも通常の CJK 文字（あ U+3042）は幅2のまま変わらないことを確認する。
+#[test]
+fn east_asian_ambiguous_wide_cjk_unchanged() {
+    use crate::config::EastAsianAmbiguousWidth;
+    let (mut proc, mut term) = make_proc_term(24, 80);
+    term.east_asian_ambiguous_width = EastAsianAmbiguousWidth::Wide;
+    proc.advance(&mut term, "あ".as_bytes());
+    let cell0 = &term.grid()[Point::new(Line(0), Column(0))];
+    assert_eq!(cell0.c, 'あ');
+    assert!(cell0.flags.contains(CellFlags::WIDE_CHAR));
+    let cell1 = &term.grid()[Point::new(Line(0), Column(1))];
+    assert!(cell1.flags.contains(CellFlags::WIDE_CHAR_SPACER));
+    assert_eq!(term.grid().cursor.point.column, Column(2));
+}

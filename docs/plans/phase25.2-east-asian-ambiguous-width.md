@@ -31,9 +31,19 @@ CJK ユーザーが `unicode-width` の Ambiguous 文字を 1 セルで表示す
 - `crates/sdit-core/src/config/mod.rs` — `[terminal] east_asian_ambiguous_width` 追加
 - `crates/sdit-core/src/terminal/` — セル幅計算時に設定値を参照
 
+## 実装結果（2026-03-15 完了）
+
+- `EastAsianAmbiguousWidth` enum（Narrow/Wide）を config に追加
+- `Terminal::print()` で Wide 時に `width_cjk()` を使用（Ambiguous 文字を 2 セル扱い）
+- `.min(2)` の防御的ガードを追加（M-1 セキュリティ修正）
+- ホットリロード対応済み
+
+テスト: 444 件 PASS（ユニットテスト 3 件追加）
+セキュリティ: M-1 修正済み
+
 ## セキュリティ影響
 
-なし
+なし（セキュリティレビュー済み・M-1 修正完了）
 
 ## 参照
 
