@@ -958,3 +958,91 @@ fn parse_clipboard_codepoint_out_of_range_returns_none() {
     // Unicode 範囲外 (> 0x10FFFF) は None を返す
     assert!(super::parse_clipboard_codepoint("U+110000").is_none(), "0x110000 は Unicode 範囲外");
 }
+
+// ---------------------------------------------------------------------------
+// QuickTerminalConfig のテスト
+// ---------------------------------------------------------------------------
+
+#[test]
+fn quick_terminal_default_values() {
+    let cfg = QuickTerminalConfig::default();
+    assert!(!cfg.enabled, "enabled のデフォルトは false");
+    assert_eq!(cfg.position, QuickTerminalPosition::Top, "position のデフォルトは Top");
+    assert!((cfg.size - 0.4).abs() < f32::EPSILON, "size のデフォルトは 0.4");
+    assert_eq!(cfg.hotkey, "ctrl+`", "hotkey のデフォルトは ctrl+`");
+    assert!(
+        (cfg.animation_duration - 0.2).abs() < f32::EPSILON,
+        "animation_duration のデフォルトは 0.2"
+    );
+}
+
+#[test]
+fn quick_terminal_deserialize() {
+    let toml_str = r#"
+[quick_terminal]
+enabled = true
+position = "bottom"
+size = 0.5
+hotkey = "ctrl+shift+t"
+animation_duration = 0.3
+"#;
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+    assert!(cfg.quick_terminal.enabled);
+    assert_eq!(cfg.quick_terminal.position, QuickTerminalPosition::Bottom);
+    assert!((cfg.quick_terminal.size - 0.5).abs() < f32::EPSILON);
+    assert_eq!(cfg.quick_terminal.hotkey, "ctrl+shift+t");
+    assert!((cfg.quick_terminal.animation_duration - 0.3).abs() < f32::EPSILON);
+}
+
+#[test]
+fn quick_terminal_size_clamped() {
+    let cfg = QuickTerminalConfig { size: 0.05, ..Default::default() };
+    assert!((cfg.clamped_size() - 0.1).abs() < f32::EPSILON, "0.05 は 0.1 にクランプ");
+
+    let cfg = QuickTerminalConfig { size: 1.5, ..Default::default() };
+    assert!((cfg.clamped_size() - 1.0).abs() < f32::EPSILON, "1.5 は 1.0 にクランプ");
+
+    let cfg = QuickTerminalConfig { size: f32::NAN, ..Default::default() };
+    assert!((cfg.clamped_size() - 0.4).abs() < f32::EPSILON, "NaN はデフォルト 0.4 を返す");
+}
+
+#[test]
+fn quick_terminal_animation_duration_clamped() {
+    let cfg = QuickTerminalConfig { animation_duration: -0.1, ..Default::default() };
+    assert!(
+        (cfg.clamped_animation_duration() - 0.0).abs() < f32::EPSILON,
+        "-0.1 は 0.0 にクランプ"
+    );
+
+    let cfg = QuickTerminalConfig { animation_duration: 3.0, ..Default::default() };
+    assert!((cfg.clamped_animation_duration() - 2.0).abs() < f32::EPSILON, "3.0 は 2.0 にクランプ");
+
+    let cfg = QuickTerminalConfig { animation_duration: f32::INFINITY, ..Default::default() };
+    assert!(
+        (cfg.clamped_animation_duration() - 0.2).abs() < f32::EPSILON,
+        "Inf はデフォルト 0.2 を返す"
+    );
+}
+
+#[test]
+fn quick_terminal_position_variants() {
+    let positions = [
+        ("top", QuickTerminalPosition::Top),
+        ("bottom", QuickTerminalPosition::Bottom),
+        ("left", QuickTerminalPosition::Left),
+        ("right", QuickTerminalPosition::Right),
+    ];
+    for (s, expected) in positions {
+        let toml_str = format!("[quick_terminal]\nposition = \"{s}\"\n");
+        let cfg: Config = toml::from_str(&toml_str).unwrap();
+        assert_eq!(cfg.quick_terminal.position, expected, "position = {s}");
+    }
+}
+
+#[test]
+fn quick_terminal_default_in_full_config() {
+    let cfg = Config::default();
+    assert!(!cfg.quick_terminal.enabled);
+    assert_eq!(cfg.quick_terminal.position, QuickTerminalPosition::Top);
+    assert!((cfg.quick_terminal.size - 0.4).abs() < f32::EPSILON);
+}

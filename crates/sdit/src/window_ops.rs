@@ -270,6 +270,131 @@ impl SditApp {
             .collect()
     }
 
+    /// Quick Terminal ウィンドウを生成する（macOS のみ）。
+    ///
+    /// ボーダーレス + 透明 + AlwaysOnTop のウィンドウを作成し、
+    /// 指定された位置・サイズに配置する。
+    /// セッションも同時に生成し、`WindowState` に登録する。
+    #[cfg(target_os = "macos")]
+    pub(crate) fn create_quick_terminal_window(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+    ) -> Option<winit::window::WindowId> {
+        let attrs = Window::default_attributes()
+            .with_title("SDIT Quick Terminal")
+            .with_decorations(false)
+            .with_transparent(true)
+            .with_inner_size(winit::dpi::PhysicalSize::new(width, height))
+            .with_position(winit::dpi::PhysicalPosition::new(x, y));
+
+        let window = match event_loop.create_window(attrs) {
+            Ok(w) => {
+                w.set_ime_allowed(true);
+                w.set_window_level(WindowLevel::AlwaysOnTop);
+                #[cfg(target_os = "macos")]
+                w.set_option_as_alt(config_option_as_alt_to_winit(self.config.option_as_alt));
+                std::sync::Arc::new(w)
+            }
+            Err(e) => {
+                log::error!("Quick Terminal window creation failed: {e}");
+                return None;
+            }
+        };
+
+        let gpu = match sdit_core::render::pipeline::GpuContext::new(&window) {
+            Ok(g) => g,
+            Err(e) => {
+                log::error!("Quick Terminal GPU context creation failed: {e}");
+                return None;
+            }
+        };
+
+        let metrics = *self.font_ctx.metrics();
+        let padding_x = f32::from(self.config.window.clamped_padding_x());
+        let padding_y = f32::from(self.config.window.clamped_padding_y());
+        let (cols, rows) = calc_grid_size(
+            (gpu.surface_config.width as f32 - 2.0 * padding_x).max(0.0),
+            (gpu.surface_config.height as f32 - 2.0 * padding_y).max(0.0),
+            metrics.cell_width,
+            metrics.cell_height,
+        );
+
+        let Some(session_id) = self.spawn_session_with_cwd(rows, cols, None) else {
+            return None;
+        };
+        let session = self.session_mgr.get(session_id).unwrap();
+
+        let mut atlas = sdit_core::render::atlas::Atlas::new(&gpu.device, 512);
+        let cell_size = [metrics.cell_width, metrics.cell_height];
+        let surface_size = [gpu.surface_config.width as f32, gpu.surface_config.height as f32];
+        let atlas_size_f32 = atlas.size() as f32;
+
+        let state_lock =
+            session.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let grid = state_lock.terminal.grid();
+        let mut cell_pipeline = sdit_core::render::pipeline::CellPipeline::new(
+            &gpu.device,
+            gpu.surface_config.format,
+            &atlas,
+            rows * cols,
+        );
+        let cursor_col = grid.cursor.point.column.0;
+        #[allow(clippy::cast_sign_loss)]
+        let cursor_row = grid.cursor.point.line.0 as usize;
+        cell_pipeline.update_from_grid(
+            &gpu.queue,
+            grid,
+            &mut self.font_ctx,
+            &mut atlas,
+            atlas_size_f32,
+            cell_size,
+            surface_size,
+            Some((cursor_col, cursor_row)),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            1.0,
+        );
+        drop(state_lock);
+        atlas.upload_if_dirty(&gpu.queue);
+
+        let sidebar_pipeline = sdit_core::render::pipeline::CellPipeline::new(
+            &gpu.device,
+            gpu.surface_config.format,
+            &atlas,
+            100,
+        );
+
+        let window_id = window.id();
+        self.session_to_window.insert(session_id, window_id);
+        self.windows.insert(
+            window_id,
+            crate::app::WindowState {
+                window,
+                gpu,
+                cell_pipeline,
+                sidebar_pipeline,
+                bg_pipeline: None,
+                atlas,
+                sessions: vec![session_id],
+                active_index: 0,
+                sidebar: sdit_core::session::SidebarState::new(),
+                visual_bell: crate::app::VisualBell::new(self.config.bell.clamped_duration_ms()),
+            },
+        );
+
+        log::info!("Created Quick Terminal window {window_id:?} with session {}", session_id.0);
+        Some(window_id)
+    }
+
     /// 新しいウィンドウ + セッションを生成する。
     ///
     /// `geometry` が `Some` の場合、指定サイズ・位置でウィンドウを作成する。
@@ -759,6 +884,198 @@ impl SditApp {
         let source_active = self.windows.get(&source_window_id).unwrap().active_session_id();
         self.redraw_session(source_active);
         self.redraw_session(detach_sid);
+    }
+
+    /// Quick Terminal をトグルする（macOS のみ）。
+    ///
+    /// ウィンドウが未生成の場合は新規作成してスライドイン。
+    /// 表示中の場合はスライドアウト（非表示）、非表示の場合はスライドイン（表示）。
+    #[cfg(target_os = "macos")]
+    pub(crate) fn handle_quick_terminal_toggle(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+    ) {
+        use crate::quick_terminal::calc_quick_terminal_geometry;
+
+        let Some(qt) = &self.quick_terminal_state else { return };
+        let _ = qt; // borrow check のため一旦解放
+
+        let position = self.config.quick_terminal.position;
+        let size_ratio = self.config.quick_terminal.clamped_size();
+        let anim_duration = self.config.quick_terminal.clamped_animation_duration();
+
+        // 画面サイズを取得（最初のモニターを使用）
+        let screen_size = match event_loop.available_monitors().next() {
+            Some(m) => {
+                let s = m.size();
+                if s.width == 0 || s.height == 0 {
+                    log::warn!(
+                        "handle_quick_terminal_toggle: monitor size is zero ({}x{}), \
+                         using fallback (1920, 1080)",
+                        s.width,
+                        s.height
+                    );
+                    (1920u32, 1080u32)
+                } else {
+                    (s.width, s.height)
+                }
+            }
+            None => {
+                log::warn!(
+                    "handle_quick_terminal_toggle: no monitor found, using fallback (1920, 1080)"
+                );
+                (1920u32, 1080u32)
+            }
+        };
+
+        // ウィンドウが未生成の場合は作成する
+        let qt = self.quick_terminal_state.as_mut().unwrap();
+        if !qt.window_created {
+            // t=1.0 の最終位置でウィンドウを作成（画面外に配置してからアニメーション）
+            let (x, y, w, h) = calc_quick_terminal_geometry(position, size_ratio, screen_size, 0.0);
+            let window_id = self.create_quick_terminal_window(event_loop, x, y, w, h);
+            let qt = self.quick_terminal_state.as_mut().unwrap();
+            qt.window_id = window_id;
+            qt.window_created = window_id.is_some();
+        }
+
+        let qt = self.quick_terminal_state.as_mut().unwrap();
+
+        if qt.visible {
+            // スライドアウト開始
+            qt.start_slide_out(anim_duration);
+            log::info!("Quick Terminal: starting slide-out");
+        } else {
+            // スライドイン開始
+            qt.start_slide_in(anim_duration);
+            // ウィンドウを画面外の初期位置に移動してから表示
+            if let Some(wid) = qt.window_id {
+                if let Some(ws) = self.windows.get(&wid) {
+                    let (x, y, _, _) =
+                        calc_quick_terminal_geometry(position, size_ratio, screen_size, 0.0);
+                    let _ = ws.window.set_outer_position(winit::dpi::PhysicalPosition::new(x, y));
+                    ws.window.set_visible(true);
+                    ws.window.request_redraw();
+                }
+            }
+            log::info!("Quick Terminal: starting slide-in");
+        }
+
+        // アニメーション駆動: ウィンドウに再描画を要求してフレームループで位置更新
+        if let Some(wid) = self.quick_terminal_state.as_ref().unwrap().window_id {
+            if let Some(ws) = self.windows.get(&wid) {
+                ws.window.request_redraw();
+            }
+        }
+    }
+
+    /// Quick Terminal のアニメーションフレームを処理する（macOS のみ）。
+    ///
+    /// `about_to_wait` から呼ばれ、アニメーション中はウィンドウ位置を更新し再描画を要求する。
+    #[cfg(target_os = "macos")]
+    pub(crate) fn tick_quick_terminal_animation(&mut self) {
+        use crate::quick_terminal::{AnimationDirection, calc_quick_terminal_geometry};
+
+        let Some(qt) = &self.quick_terminal_state else { return };
+        let Some(wid) = qt.window_id else { return };
+
+        if !qt.is_animating() {
+            // アニメーション完了後の後処理（スライドアウト完了 → ウィンドウを非表示）
+            // finish_animation() が SlideOut 完了時に visible = false をセットするため、
+            // ここではウィンドウの set_visible(false) と finish_animation() のみ呼び出す
+            let is_slide_out_complete = self
+                .quick_terminal_state
+                .as_ref()
+                .and_then(|qt| qt.animation.as_ref())
+                .is_some_and(|a| a.is_complete() && a.direction == AnimationDirection::SlideOut);
+            if is_slide_out_complete {
+                if let Some(ws) = self.windows.get(&wid) {
+                    ws.window.set_visible(false);
+                }
+            }
+            if let Some(qt) = self.quick_terminal_state.as_mut() {
+                qt.finish_animation();
+            }
+            return;
+        }
+
+        let position = self.config.quick_terminal.position;
+        let size_ratio = self.config.quick_terminal.clamped_size();
+
+        // 画面サイズ（簡略化: 現在のウィンドウサイズから逆算、実際はモニターサイズを使う）
+        // ここでは Quick Terminal ウィンドウ自体のサイズから position に基づいてサイズを計算
+        let screen_size = {
+            // アニメーション tick ではイベントループが不要なため保存された値を使用
+            // Quick Terminal ウィンドウのサイズから逆算する（position と size_ratio に基づく）
+            if let Some(ws) = self.windows.get(&wid) {
+                let sz = ws.window.inner_size();
+                match position {
+                    sdit_core::config::QuickTerminalPosition::Top
+                    | sdit_core::config::QuickTerminalPosition::Bottom => {
+                        // win_w = screen_w, win_h = screen_h * size_ratio
+                        let screen_w = sz.width;
+                        let screen_h = if size_ratio > 0.0 {
+                            (sz.height as f32 / size_ratio) as u32
+                        } else {
+                            sz.height
+                        };
+                        (screen_w, screen_h)
+                    }
+                    sdit_core::config::QuickTerminalPosition::Left
+                    | sdit_core::config::QuickTerminalPosition::Right => {
+                        let screen_w = if size_ratio > 0.0 {
+                            (sz.width as f32 / size_ratio) as u32
+                        } else {
+                            sz.width
+                        };
+                        let screen_h = sz.height;
+                        (screen_w, screen_h)
+                    }
+                }
+            } else {
+                (1920, 1080)
+            }
+        };
+
+        let qt = self.quick_terminal_state.as_ref().unwrap();
+        let anim = qt.animation.as_ref().unwrap();
+        let raw_t = anim.progress();
+        let t = match anim.direction {
+            AnimationDirection::SlideIn => {
+                crate::quick_terminal::QuickTerminalAnimation::ease_in_out(raw_t)
+            }
+            AnimationDirection::SlideOut => {
+                crate::quick_terminal::QuickTerminalAnimation::ease_in_out(1.0 - raw_t)
+            }
+        };
+
+        let (x, y, _, _) = calc_quick_terminal_geometry(position, size_ratio, screen_size, t);
+        if let Some(ws) = self.windows.get(&wid) {
+            let _ = ws.window.set_outer_position(winit::dpi::PhysicalPosition::new(x, y));
+            ws.window.request_redraw();
+        }
+
+        // アニメーション完了チェック
+        let is_complete = self
+            .quick_terminal_state
+            .as_ref()
+            .and_then(|qt| qt.animation.as_ref())
+            .is_some_and(|a| a.is_complete());
+        if is_complete {
+            let is_slide_out = self
+                .quick_terminal_state
+                .as_ref()
+                .and_then(|qt| qt.animation.as_ref())
+                .is_some_and(|a| a.direction == AnimationDirection::SlideOut);
+            if is_slide_out {
+                if let Some(ws) = self.windows.get(&wid) {
+                    ws.window.set_visible(false);
+                }
+            }
+            if let Some(qt) = self.quick_terminal_state.as_mut() {
+                qt.finish_animation();
+            }
+        }
     }
 
     /// 現在のアプリケーション全体状態をスナップショットとして保存する。

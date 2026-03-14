@@ -1,5 +1,6 @@
 mod action_handlers;
 mod app;
+mod command_palette;
 mod config_watcher;
 mod confirm_close;
 mod cwd_utils;
@@ -9,6 +10,7 @@ mod input;
 #[cfg(target_os = "macos")]
 mod menu;
 mod quick_select;
+mod quick_terminal;
 mod rename;
 mod render;
 mod scrollbar;

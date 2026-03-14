@@ -187,6 +187,8 @@ pub(crate) enum SditEvent {
     DesktopNotification { title: String, body: String },
     /// OSC 7 で CWD が変更された → Session の cwd フィールドを更新する。
     CwdChanged { session_id: SessionId, cwd: String },
+    /// Quick Terminal グローバルホットキーが押された（macOS のみ）。
+    QuickTerminalToggle,
 }
 
 // ---------------------------------------------------------------------------
@@ -369,6 +371,9 @@ pub(crate) struct SditApp {
     /// Secure Keyboard Entry が現在有効かどうか（macOS のみ有効）。
     #[cfg(target_os = "macos")]
     pub(crate) secure_input_enabled: bool,
+    /// Quick Terminal の状態（macOS のみ、設定が有効な場合に Some）。
+    #[cfg(target_os = "macos")]
+    pub(crate) quick_terminal_state: Option<crate::quick_terminal::QuickTerminalState>,
     /// メニューバー + コンテキストメニューの共有 `MenuId` マップ。
     /// `MenuEvent` ハンドラのクロージャが `Arc` クローンを保持するため、
     /// フィールドとしては直接読まれないが、ドロップ防止のため保持する。
@@ -433,6 +438,8 @@ impl SditApp {
             pending_close: None,
             #[cfg(target_os = "macos")]
             secure_input_enabled: false,
+            #[cfg(target_os = "macos")]
+            quick_terminal_state: None,
             #[cfg(target_os = "macos")]
             menu_actions: menu_actions.clone(),
             #[cfg(target_os = "macos")]

@@ -95,6 +95,61 @@ impl ApplicationHandler<SditEvent> for SditApp {
             let geometry = snapshot.windows.first().cloned().map(WindowGeometry::validated);
             self.create_window(event_loop, geometry.as_ref());
         }
+
+        // Quick Terminal グローバルホットキーの初期化（macOS のみ）
+        #[cfg(target_os = "macos")]
+        if self.config.quick_terminal.enabled {
+            let mut qt_state = crate::quick_terminal::QuickTerminalState::new();
+            let hotkey_str = self.config.quick_terminal.hotkey.clone();
+            if let Some((manager, hotkey_id)) =
+                crate::quick_terminal::register_global_hotkey(&hotkey_str)
+            {
+                qt_state.hotkey_manager = Some(manager);
+                qt_state.hotkey_id = Some(hotkey_id);
+
+                // グローバルホットキーイベントの受信スレッドを起動
+                // 注: 登録失敗時は quick_terminal_state は Some のまま保存されるが、
+                // hotkey_manager が None のためホットキーによるトグルは機能しない
+                let proxy = self.event_proxy.clone();
+                let registered_id = hotkey_id;
+                if let Err(e) = std::thread::Builder::new()
+                    .name("quick-terminal-hotkey".to_string())
+                    .spawn(move || {
+                        let receiver = global_hotkey::GlobalHotKeyEvent::receiver();
+                        loop {
+                            match receiver.recv() {
+                                Ok(event) => {
+                                    if event.id == registered_id
+                                        && event.state == global_hotkey::HotKeyState::Pressed
+                                    {
+                                        if proxy.send_event(SditEvent::QuickTerminalToggle).is_err()
+                                        {
+                                            break; // イベントループが終了した
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    log::error!(
+                                        "quick-terminal-hotkey: receiver error: {e}. Stopping."
+                                    );
+                                    break;
+                                }
+                            }
+                        }
+                    })
+                {
+                    log::error!("quick-terminal-hotkey: failed to spawn thread: {e}");
+                }
+            } else {
+                log::warn!(
+                    "quick_terminal: hotkey '{}' registration failed. \
+                     Quick Terminal toggle via hotkey will not work. \
+                     Check Accessibility permissions in System Settings > Privacy & Security.",
+                    hotkey_str
+                );
+            }
+            self.quick_terminal_state = Some(qt_state);
+        }
     }
 
     #[allow(clippy::too_many_lines)]
@@ -1331,6 +1386,14 @@ impl ApplicationHandler<SditEvent> for SditApp {
                     self.handle_action(action, wid, event_loop);
                 }
             }
+            #[cfg(target_os = "macos")]
+            SditEvent::QuickTerminalToggle => {
+                self.handle_quick_terminal_toggle(event_loop);
+            }
+            #[cfg(not(target_os = "macos"))]
+            SditEvent::QuickTerminalToggle => {
+                // macOS 以外では無視する
+            }
         }
     }
 
@@ -1345,5 +1408,9 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 ws.window.request_redraw();
             }
         }
+
+        // Quick Terminal アニメーション tick（macOS のみ）
+        #[cfg(target_os = "macos")]
+        self.tick_quick_terminal_animation();
     }
 }

@@ -637,6 +637,95 @@ impl ScrollbackConfig {
     }
 }
 
+/// Quick Terminal のドロップダウン位置。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum QuickTerminalPosition {
+    /// 画面上端からスライドイン（デフォルト）。
+    Top,
+    /// 画面下端からスライドイン。
+    Bottom,
+    /// 画面左端からスライドイン。
+    Left,
+    /// 画面右端からスライドイン。
+    Right,
+}
+
+impl Default for QuickTerminalPosition {
+    fn default() -> Self {
+        Self::Top
+    }
+}
+
+fn default_quick_terminal_size() -> f32 {
+    0.4
+}
+
+fn default_quick_terminal_hotkey() -> String {
+    "ctrl+`".to_owned()
+}
+
+fn default_quick_terminal_animation_duration() -> f32 {
+    0.2
+}
+
+/// Quick Terminal（ドロップダウンターミナル）設定。
+///
+/// グローバルホットキーで画面端からスライドインするターミナルウィンドウを制御する。
+/// macOS 固有機能。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct QuickTerminalConfig {
+    /// Quick Terminal を有効にする（デフォルト: false）。
+    pub enabled: bool,
+    /// ドロップダウンの出現位置: "top" (デフォルト), "bottom", "left", "right"。
+    #[serde(default)]
+    pub position: QuickTerminalPosition,
+    /// ウィンドウが占める画面比率（0.1〜1.0、デフォルト: 0.4）。
+    #[serde(default = "default_quick_terminal_size")]
+    pub size: f32,
+    /// グローバルホットキー文字列（デフォルト: "ctrl+`"）。
+    ///
+    /// 形式: "ctrl+`", "ctrl+shift+t" 等。
+    #[serde(default = "default_quick_terminal_hotkey")]
+    pub hotkey: String,
+    /// スライドイン/アウトのアニメーション時間（秒、デフォルト: 0.2）。
+    #[serde(default = "default_quick_terminal_animation_duration")]
+    pub animation_duration: f32,
+}
+
+impl Default for QuickTerminalConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            position: QuickTerminalPosition::Top,
+            size: default_quick_terminal_size(),
+            hotkey: default_quick_terminal_hotkey(),
+            animation_duration: default_quick_terminal_animation_duration(),
+        }
+    }
+}
+
+impl QuickTerminalConfig {
+    /// size を安全な範囲（0.1〜1.0）にクランプする。
+    ///
+    /// NaN や Inf が渡された場合はデフォルト値 0.4 を返す。
+    pub fn clamped_size(&self) -> f32 {
+        if self.size.is_finite() { self.size.clamp(0.1, 1.0) } else { 0.4 }
+    }
+
+    /// animation_duration を安全な範囲（0.0〜2.0）にクランプする。
+    ///
+    /// NaN や Inf が渡された場合はデフォルト値 0.2 を返す。
+    pub fn clamped_animation_duration(&self) -> f32 {
+        if self.animation_duration.is_finite() {
+            self.animation_duration.clamp(0.0, 2.0)
+        } else {
+            0.2
+        }
+    }
+}
+
 /// カスタムリンク設定のバリデーション定数。
 const MAX_LINK_ENTRIES: usize = 32;
 const MAX_LINK_REGEX_LEN: usize = 512;
@@ -684,6 +773,8 @@ pub struct Config {
     pub scrollbar: ScrollbarConfig,
     /// セキュリティ設定。
     pub security: SecurityConfig,
+    /// Quick Terminal 設定。
+    pub quick_terminal: QuickTerminalConfig,
     /// カスタムリンク設定。最大 32 エントリ。
     ///
     /// ```toml
@@ -950,6 +1041,17 @@ impl Config {
                 content.push_str(
                     "#   prevents other apps from capturing keystrokes while SDIT is focused\n",
                 );
+            } else if line == "[quick_terminal]" {
+                content.push('\n');
+                content.push_str("# ── Quick Terminal ─────────────────────────────────────────\n");
+                content.push_str(
+                    "# enabled: enable the Quick Terminal dropdown (default: false, macOS only)\n",
+                );
+                content.push_str("# position: slide-in direction: \"top\" (default), \"bottom\", \"left\", \"right\"\n");
+                content
+                    .push_str("# size: fraction of screen width/height (0.1-1.0, default: 0.4)\n");
+                content.push_str("# hotkey: global hotkey string (default: \"ctrl+`\")\n");
+                content.push_str("# animation_duration: slide-in/out animation in seconds (0.0-2.0, default: 0.2)\n");
             } else if line == "[[links]]" {
                 content.push('\n');
                 content.push_str("# ── Custom Links ───────────────────────────────────────────\n");
