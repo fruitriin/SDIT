@@ -37,6 +37,13 @@ working_directory = "~/Projects"  # inherit_working_directory より優先
 - `working_directory` は `~` 展開に対応
 - 解決順: 引数 `working_dir` → `config.window.working_directory`
 
+## セキュリティレビュー結果
+
+| 重要度 | ID | 内容 | 対応 |
+|---|---|---|---|
+| Low | L-1.1 | PATH 上書きを許可（警告のみ） | 記録のみ: 意図的設計 |
+| Info | I-2.1 | 相対パスの挙動が未文書化 | 記録のみ: ~ 展開失敗時は相対パスとして扱われる |
+
 ## 参照
 
 - `refs/ghostty/src/config/Config.zig` — env, working-directory
