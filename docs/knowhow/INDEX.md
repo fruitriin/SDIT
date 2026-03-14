@@ -26,7 +26,6 @@
 | ファイル | 要約 | キーワード |
 |---|---|---|
 | [pty-threading-model.md](pty-threading-model.md) | 3スレッドモデル（Main/Reader/Writer）、fd クローン分離、シャットダウンシーケンスの設計 | `try_clone_writer`, `try_clone_to_owned`, `dup(2)`, `AsFd`, `OwnedFd`, `sync_channel(64)`, `try_send`, `WouldBlock`, `EIO`, `PoisonError::into_inner`, `SIGHUP`, `SIGKILL`, `child_exited: AtomicBool`, `to_rustix_pid`, `tcsetwinsize`, `APP_CURSOR` |
-| [macos26-pty-compat.md](macos26-pty-compat.md) | macOS 26 で TIOCSWINSZ ioctl が spawn 前に ENOTTY を返す問題と回避策 | `TIOCSWINSZ`, `ENOTTY`, `errno 25`, `pty-process 0.4`, `Pty::new`, `Pty::resize`, `cmd.spawn(&pts)`, `Darwin 25.3.0`, `macOS 26` |
 
 ## アーキテクチャ・設計
 
@@ -66,7 +65,15 @@
 | ファイル | 要約 | キーワード |
 |---|---|---|
 | [integration-testing-patterns.md](integration-testing-patterns.md) | 3層テスト構成（ヘッドレス/GUI スモーク/GUI 操作）と macOS 権限モデルの知見 | `--headless`, `SDIT_SMOKE_TEST=1`, `smoke_headless.rs`, `smoke_gui.rs`, `gui_interaction.rs`, `wait_with_timeout`, `try_wait`, `AXUIElement`, `ScreenCaptureKit`, `send-keys.sh`, `osascript`, `Screen Recording 権限` |
-| [gui-test-ime-interference.md](gui-test-ime-interference.md) | macOS GUI テストで日本語 IME が有効だと AppleScript keystroke が文字化けする問題と回避策 | `keystroke`, `key code 102`, `英数キー`, `pbcopy`, `Cmd+V`, `set_ime_allowed`, `AppleScript`, `IME バイパス`, `クリップボード経由` |
+| [gui-test-cjk-validation.md](gui-test-cjk-validation.md) | CJK テキスト描画の対照群検証: render-text (CoreText) + verify-text (OCR/輝度/SSIM 3層)。トークン効率設計、セル単位 SSIM、左右非対称クリッピング検出 | `render-text`, `verify-text`, `CoreText`, `Vision.framework OCR`, `SSIM`, `per-cell SSIM`, `輝度分析`, `右端クリッピング`, `--mono`, `--cell-info`, `/render-text`, `/verify-text` |
+| [gui-test-ime-interference.md](gui-test-ime-interference.md) | macOS GUI テストで日本語 IME が有効だと AppleScript keystroke が文字化けする問題。英数キー送信またはクリップボード経由で回避 | `keystroke`, `key code 102`, `英数キー`, `pbcopy`, `Cmd+V`, `set_ime_allowed`, `AppleScript`, `IME バイパス`, `クリップボード経由` |
 | [gui-test-process-identification.md](gui-test-process-identification.md) | 同名プロセス複数存在時にテストツールが意図しないプロセスを操作する問題と回避策 | `pgrep -x`, `ps -eo pid,comm`, `window-info`, `send-keys.sh`, `capture-window`, `--pid`, `pkill`, `trap cleanup EXIT` |
 | [gui-test-screen-recording-permission.md](gui-test-screen-recording-permission.md) | capture-window の CGS_REQUIRE_INIT アサーション失敗・ディスプレイスリープ中の黒画像問題と対処法 | `CGS_REQUIRE_INIT`, `ScreenCaptureKit`, `exit code 134`, `SIGABRT`, `screencapture -R`, `画面収録権限`, `VSCode 再起動`, `Display Asleep`, `黒画像`, `window size 0` |
-| [gui-test-cjk-validation.md](gui-test-cjk-validation.md) | CJK テキスト描画の対照群検証: render-text (CoreText) + verify-text (OCR/輝度/SSIM 3層)。トークン効率設計、セル単位 SSIM、左右非対称クリッピング検出 | `render-text`, `verify-text`, `CoreText`, `Vision.framework OCR`, `SSIM`, `per-cell SSIM`, `輝度分析`, `右端クリッピング`, `--mono`, `--cell-info`, `/render-text`, `/verify-text` |
+
+## アーカイブ済み
+
+特定の問題のワークアラウンドで、今後同じ問題に遭遇する可能性が低いもの。
+
+| ファイル | 要約 |
+|---|---|
+| [archived/macos26-pty-compat.md](archived/macos26-pty-compat.md) | macOS 26 で TIOCSWINSZ ioctl が spawn 前に ENOTTY を返す問題。spawn 後に resize を呼ぶことで回避 |
