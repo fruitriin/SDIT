@@ -6,6 +6,7 @@ mod input;
 #[cfg(target_os = "macos")]
 mod menu;
 mod quick_select;
+mod rename;
 mod render;
 mod vi_mode;
 mod window;

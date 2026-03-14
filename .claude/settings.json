@@ -17,7 +17,8 @@
       "Bash(cargo metadata:*)",
       "Bash(cargo build:*)",
       "Bash(savanna-smell-detector:*)",
-      "Bash(cargo tree:*)"
+      "Bash(cargo tree:*)",
+      "Read(//Users/riin/.config/claude/**)"
     ]
   }
 }

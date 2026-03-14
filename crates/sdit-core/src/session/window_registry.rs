@@ -33,6 +33,11 @@ impl SessionManager {
         self.sessions.get(&id)
     }
 
+    /// セッションを可変参照で取得する。
+    pub fn get_mut(&mut self, id: SessionId) -> Option<&mut Session> {
+        self.sessions.get_mut(&id)
+    }
+
     /// セッションを削除する。
     pub fn remove(&mut self, id: SessionId) -> Option<Session> {
         self.sessions.remove(&id)

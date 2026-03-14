@@ -133,9 +133,13 @@ pub(crate) fn calc_grid_size(
 /// サイドバー用の `CellVertex` 列を生成する。
 ///
 /// 各セッションに1行を割り当て、アクティブセッションをハイライトする。
+/// `session_names` にカスタム名（`Some(name)`）がある場合はそちらを優先表示する。
+/// `renaming_row` が `Some((row, text))` の場合、その行をリネームモードとして `text` を表示する。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_sidebar_cells(
     sessions: &[SessionId],
+    session_names: &[Option<String>],
+    renaming_row: Option<(usize, &str)>,
     active_index: usize,
     sidebar: &SidebarState,
     metrics: &sdit_core::render::font::CellMetrics,
@@ -161,10 +165,30 @@ pub(crate) fn build_sidebar_cells(
         let bg = if is_active { active_bg } else { sidebar_bg };
         let fg = if is_session_row { fg_color } else { dim_fg };
 
-        // セッション名を生成（例: "> Session 0" or "  Session 1"）
+        // セッション名を生成（例: "> My Session" or "  Session 1"）
         let label = if is_session_row {
             let prefix = if is_active { "> " } else { "  " };
-            format!("{prefix}Session {}", sessions[row].0)
+            // リネームモード中の行はテキスト入力を表示する
+            if let Some((renaming_r, text)) = renaming_row {
+                if row == renaming_r {
+                    format!("{prefix}{text}_")
+                } else {
+                    let name =
+                        session_names.get(row).and_then(|n| n.as_deref()).unwrap_or_default();
+                    if name.is_empty() {
+                        format!("{prefix}Session {}", sessions[row].0)
+                    } else {
+                        format!("{prefix}{name}")
+                    }
+                }
+            } else {
+                let name = session_names.get(row).and_then(|n| n.as_deref()).unwrap_or_default();
+                if name.is_empty() {
+                    format!("{prefix}Session {}", sessions[row].0)
+                } else {
+                    format!("{prefix}{name}")
+                }
+            }
         } else {
             String::new()
         };

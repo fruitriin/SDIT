@@ -76,6 +76,13 @@ impl ApplicationHandler<SditEvent> for SditApp {
 
             WindowEvent::KeyboardInput { event: key_event, .. } => {
                 if key_event.state == ElementState::Pressed {
+                    // --- リネームモード中のキー入力処理（最優先で評価）---
+                    if self.renaming_session.is_some() {
+                        if self.handle_rename_key(&key_event.logical_key, id) {
+                            return;
+                        }
+                    }
+
                     // --- QuickSelect モード中のキー入力処理（通常のキー処理より先に評価）---
                     if self.quick_select.is_some() {
                         if self.handle_quick_select_key(&key_event.logical_key, id) {
@@ -362,15 +369,8 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                 metrics.cell_height,
                                 ws.sessions.len(),
                             ) {
-                                // ドラッグ開始を記録
-                                self.drag_source_row = Some(row);
-                                // クリックでセッション切替
-                                if row != ws.active_index {
-                                    let ws = self.windows.get_mut(&id).unwrap();
-                                    ws.active_index = row;
-                                    let sid = ws.active_session_id();
-                                    self.redraw_session(sid);
-                                }
+                                self.handle_sidebar_click(id, row);
+                                // handle_sidebar_click 内で ws を借用するため、早期リターン
                             }
                         } else {
                             // URL Cmd+Click 処理
@@ -413,9 +413,12 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                     }
                                 };
                                 if let Some(url) = url {
-                                    // セキュリティ: http(s) スキーム + 制御文字なしを確認
-                                    let is_safe = (url.starts_with("http://")
-                                        || url.starts_with("https://"))
+                                    // セキュリティ: 危険なスキームを拒否 + 制御文字なしを確認
+                                    // カスタムリンク（vscode:// 等）も許可するが
+                                    // javascript: / data: は拒否（extract_url_from_action 内でも拒否済み）
+                                    let lower_url = url.to_ascii_lowercase();
+                                    let is_safe = !lower_url.starts_with("javascript:")
+                                        && !lower_url.starts_with("data:")
                                         && url.bytes().all(|b| b >= 0x20 && b != 0x7F);
                                     if is_safe {
                                         #[cfg(target_os = "macos")]

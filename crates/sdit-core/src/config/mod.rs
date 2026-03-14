@@ -261,6 +261,24 @@ pub struct MouseConfig {
     pub hide_when_typing: bool,
 }
 
+/// カスタムリンク設定の1エントリ。
+///
+/// `regex` に一致したテキストをクリックすると `action` が実行される。
+///
+/// ```toml
+/// [[links]]
+/// regex = "JIRA-\\d+"
+/// action = "open:https://jira.example.com/browse/$0"
+/// ```
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LinkConfig {
+    /// マッチさせる正規表現パターン。
+    pub regex: String,
+    /// アクション文字列。`"open:<URL_TEMPLATE>"` 形式で指定する。
+    /// テンプレート内の `$0` はマッチ全体、`$1` 等はキャプチャグループに展開される。
+    pub action: String,
+}
+
 impl Default for MouseConfig {
     fn default() -> Self {
         Self { hide_when_typing: false }
@@ -302,6 +320,11 @@ impl ScrollbackConfig {
     }
 }
 
+/// カスタムリンク設定のバリデーション定数。
+const MAX_LINK_ENTRIES: usize = 32;
+const MAX_LINK_REGEX_LEN: usize = 512;
+const MAX_LINK_ACTION_LEN: usize = 1024;
+
 /// SDIT 設定全体。
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default)]
@@ -340,9 +363,25 @@ pub struct Config {
     pub selection: SelectionConfig,
     /// マウス設定。
     pub mouse: MouseConfig,
+    /// カスタムリンク設定。最大 32 エントリ。
+    ///
+    /// ```toml
+    /// [[links]]
+    /// regex = "JIRA-\\d+"
+    /// action = "open:https://jira.example.com/browse/$0"
+    /// ```
+    #[serde(default)]
+    pub links: Vec<LinkConfig>,
 }
 
 impl Config {
+    /// カスタムリンク設定を最大 32 件・regex/action 文字列長を制限して返す。
+    pub fn clamped_links(&self) -> impl Iterator<Item = &LinkConfig> {
+        self.links.iter().take(MAX_LINK_ENTRIES).filter(|lc| {
+            lc.regex.len() <= MAX_LINK_REGEX_LEN && lc.action.len() <= MAX_LINK_ACTION_LEN
+        })
+    }
+
     /// 設定ファイルを読み込む。
     ///
     /// ファイルが存在しない場合はデフォルト設定を返す。
@@ -542,6 +581,20 @@ impl Config {
                 content.push_str(
                     "# hide_when_typing: hide mouse cursor while typing (default: false)\n",
                 );
+            } else if line == "[[links]]" {
+                content.push('\n');
+                content.push_str("# ── Custom Links ───────────────────────────────────────────\n");
+                content.push_str(
+                    "# Custom link patterns. Each entry defines a regex and an action.\n",
+                );
+                content.push_str(
+                    "# regex: regular expression pattern (max 512 chars, max 32 entries)\n",
+                );
+                content.push_str("# action: \"open:<URL_TEMPLATE>\" where $0 = full match, $1/$2 = capture groups\n");
+                content.push_str("# Example:\n");
+                content.push_str("#   [[links]]\n");
+                content.push_str("#   regex = \"JIRA-\\\\d+\"\n");
+                content.push_str("#   action = \"open:https://jira.example.com/browse/$0\"\n");
             }
             content.push_str(line);
             content.push('\n');
@@ -1005,5 +1058,65 @@ line_height = 1.3
         let toml_str = "[mouse]\nhide_when_typing = true\n";
         let config: Config = toml::from_str(toml_str).unwrap();
         assert!(config.mouse.hide_when_typing);
+    }
+
+    // -----------------------------------------------------------------------
+    // LinkConfig のテスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn link_config_deserialize() {
+        let toml_str = r#"
+[[links]]
+regex = "JIRA-\\d+"
+action = "open:https://jira.example.com/browse/$0"
+
+[[links]]
+regex = "GH-\\d+"
+action = "open:https://github.com/issues/$0"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.links.len(), 2);
+        assert_eq!(config.links[0].regex, "JIRA-\\d+");
+        assert_eq!(config.links[0].action, "open:https://jira.example.com/browse/$0");
+        assert_eq!(config.links[1].regex, "GH-\\d+");
+    }
+
+    #[test]
+    fn link_config_empty_by_default() {
+        let config: Config = toml::from_str("").unwrap();
+        assert!(config.links.is_empty());
+    }
+
+    #[test]
+    fn link_config_entry_limit() {
+        // 33 エントリを設定しても clamped_links は 32 件しか返さない
+        let entries: String = (0..33)
+            .map(|i| {
+                format!("[[links]]\nregex = \"PAT-{i}\"\naction = \"open:https://example.com\"\n")
+            })
+            .collect();
+        let config: Config = toml::from_str(&entries).unwrap();
+        assert_eq!(config.links.len(), 33);
+        assert_eq!(config.clamped_links().count(), 32);
+    }
+
+    #[test]
+    fn link_config_regex_length_limit() {
+        // regex が 512 文字を超えるエントリは clamped_links に含まれない
+        let long_regex = "a".repeat(513);
+        let toml_str =
+            format!("[[links]]\nregex = \"{long_regex}\"\naction = \"open:https://example.com\"\n");
+        let config: Config = toml::from_str(&toml_str).unwrap();
+        assert_eq!(config.clamped_links().count(), 0);
+    }
+
+    #[test]
+    fn link_config_action_length_limit() {
+        // action が 1024 文字を超えるエントリは clamped_links に含まれない
+        let long_action = format!("open:https://example.com/{}", "a".repeat(1000));
+        let toml_str = format!("[[links]]\nregex = \"PAT\"\naction = \"{long_action}\"\n");
+        let config: Config = toml::from_str(&toml_str).unwrap();
+        assert_eq!(config.clamped_links().count(), 0);
     }
 }

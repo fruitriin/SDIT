@@ -38,6 +38,8 @@ pub struct Session {
     pub id: SessionId,
     pub term_state: Arc<Mutex<TerminalState>>,
     pub pty_io: PtyIo,
+    /// ユーザーが設定したカスタムセッション名。`None` の場合はデフォルト名を表示する。
+    pub custom_name: Option<String>,
     /// PTY master fd のクローン（リサイズ ioctl 専用）。
     resize_fd: OwnedFd,
     /// 子プロセスの PID（Drop 時のシグナル送信用）。
@@ -103,6 +105,7 @@ impl Session {
             id,
             term_state,
             pty_io: PtyIo { write_tx, reader: Some(reader_handle), writer: Some(writer_handle) },
+            custom_name: None,
             resize_fd,
             child_pid,
             child_exited,

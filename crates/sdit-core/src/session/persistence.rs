@@ -71,6 +71,9 @@ pub struct AppSnapshot {
 pub struct SessionSnapshot {
     /// セッションの作業ディレクトリ。
     pub cwd: PathBuf,
+    /// ユーザーが設定したカスタムセッション名。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_name: Option<String>,
 }
 
 impl AppSnapshot {
@@ -153,8 +156,8 @@ mod tests {
 
         let snap = AppSnapshot {
             sessions: vec![
-                SessionSnapshot { cwd: PathBuf::from("/home/user") },
-                SessionSnapshot { cwd: PathBuf::from("/tmp") },
+                SessionSnapshot { cwd: PathBuf::from("/home/user"), custom_name: None },
+                SessionSnapshot { cwd: PathBuf::from("/tmp"), custom_name: None },
             ],
             windows: vec![],
         };
@@ -203,7 +206,7 @@ mod tests {
         let path = dir.join("session.toml");
 
         let snap = AppSnapshot {
-            sessions: vec![SessionSnapshot { cwd: PathBuf::from("/home/user") }],
+            sessions: vec![SessionSnapshot { cwd: PathBuf::from("/home/user"), custom_name: None }],
             windows: vec![
                 WindowGeometry { width: 800.0, height: 600.0, x: 100, y: 200 },
                 WindowGeometry { width: 1024.0, height: 768.0, x: 300, y: 400 },
@@ -302,6 +305,58 @@ cwd = "/home/user"
         let loaded = AppSnapshot::load(&path);
         assert!(loaded.windows.is_empty());
         assert!(loaded.sessions.is_empty());
+
+        // クリーンアップ
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // -----------------------------------------------------------------------
+    // SessionSnapshot custom_name テスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn session_snapshot_custom_name_roundtrip() {
+        let dir = PathBuf::from("tmp/test-persistence-custom-name");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("session.toml");
+
+        let snap = AppSnapshot {
+            sessions: vec![
+                SessionSnapshot {
+                    cwd: PathBuf::from("/home/user"),
+                    custom_name: Some("My Shell".to_owned()),
+                },
+                SessionSnapshot { cwd: PathBuf::from("/tmp"), custom_name: None },
+            ],
+            windows: vec![],
+        };
+
+        snap.save(&path).expect("save failed");
+        let loaded = AppSnapshot::load(&path);
+        assert_eq!(loaded.sessions.len(), 2);
+        assert_eq!(loaded.sessions[0].custom_name, Some("My Shell".to_owned()));
+        assert!(loaded.sessions[1].custom_name.is_none());
+
+        // クリーンアップ
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn session_snapshot_backward_compat_no_custom_name() {
+        // custom_name フィールドなしの旧形式 TOML を読み込んでも None になる
+        let dir = PathBuf::from("tmp/test-persistence-compat-name");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("session.toml");
+
+        let old_toml = r#"[[sessions]]
+cwd = "/home/user"
+"#;
+        std::fs::write(&path, old_toml).expect("write failed");
+        let snap = AppSnapshot::load(&path);
+        assert_eq!(snap.sessions.len(), 1);
+        assert!(snap.sessions[0].custom_name.is_none());
 
         // クリーンアップ
         let _ = std::fs::remove_file(&path);

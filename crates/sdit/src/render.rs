@@ -143,8 +143,20 @@ impl SditApp {
 
         // サイドバー描画
         if ws.sidebar.visible {
+            // セッション名リストを構築（カスタム名があればそれを使用）
+            let session_names: Vec<Option<String>> = ws
+                .sessions
+                .iter()
+                .map(|sid| self.session_mgr.get(*sid).and_then(|s| s.custom_name.clone()))
+                .collect();
+            // リネームモード中の行インデックスと入力テキスト
+            let renaming_row = self.renaming_session.as_ref().and_then(|(rename_sid, text)| {
+                ws.sessions.iter().position(|sid| sid == rename_sid).map(|row| (row, text.as_str()))
+            });
             let sidebar_cells = build_sidebar_cells(
                 &ws.sessions,
+                &session_names,
+                renaming_row,
                 ws.active_index,
                 &ws.sidebar,
                 &metrics,

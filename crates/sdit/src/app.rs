@@ -341,6 +341,8 @@ pub(crate) struct SditApp {
     pub(crate) compiled_quick_select_patterns: Vec<Regex>,
     /// 通知スレッドが飛行中かどうか（レート制限：同時に複数スレッドを立ち上げない）。
     pub(crate) notification_in_flight: Arc<AtomicBool>,
+    /// セッションリネームモードの状態。`Some((SessionId, 入力中テキスト))` のとき編集中。
+    pub(crate) renaming_session: Option<(sdit_core::session::SessionId, String)>,
     /// メニューバー + コンテキストメニューの共有 `MenuId` マップ。
     /// `MenuEvent` ハンドラのクロージャが `Arc` クローンを保持するため、
     /// フィールドとしては直接読まれないが、ドロップ防止のため保持する。
@@ -389,7 +391,9 @@ impl SditApp {
             cursor_blink_last_toggle: std::time::Instant::now(),
             preedit: None,
             default_font_size,
-            url_detector: UrlDetector::new(),
+            url_detector: UrlDetector::with_links(
+                &config.clamped_links().cloned().collect::<Vec<_>>(),
+            ),
             hovered_url: None,
             search: None,
             quick_select: None,
@@ -397,6 +401,7 @@ impl SditApp {
             config: config.clone(),
             compiled_quick_select_patterns: compile_quick_select_patterns(config),
             notification_in_flight: Arc::new(AtomicBool::new(false)),
+            renaming_session: None,
             #[cfg(target_os = "macos")]
             menu_actions: menu_actions.clone(),
             #[cfg(target_os = "macos")]
@@ -685,6 +690,10 @@ impl SditApp {
 
         // 11. 設定を置換
         self.compiled_quick_select_patterns = compile_quick_select_patterns(&new_config);
+        // カスタムリンク変更時に UrlDetector を再構築
+        self.url_detector = sdit_core::terminal::url_detector::UrlDetector::with_links(
+            &new_config.clamped_links().cloned().collect::<Vec<_>>(),
+        );
         self.config = new_config;
 
         log::info!("Config reloaded successfully");
