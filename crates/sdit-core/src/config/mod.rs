@@ -395,17 +395,33 @@ impl SelectionConfig {
     ///
     /// マップのエントリ数は最大 64 に制限する。
     /// キーは "U+XXXX-U+YYYY" または "U+XXXX" 形式。
+    /// replacement 文字列の最大長は 256 文字（超えるエントリは除外して warn ログを出す）。
+    /// 出力サイズが入力の 10 倍を超えたら処理を中断する（DoS 防止）。
     pub fn apply_codepoint_map(&self, text: &str) -> String {
         if self.clipboard_codepoint_map.is_empty() {
             return text.to_owned();
         }
 
+        /// replacement 文字列の最大長（chars 単位）。
+        const MAX_REPLACEMENT_CHARS: usize = 256;
+        /// 出力サイズ上限: 入力の 10 倍まで。
+        const MAX_OUTPUT_MULTIPLIER: usize = 10;
+
         // キーをパースしてレンジリストを構築（最大 64 エントリ）
+        // replacement が長すぎるエントリは除外して warn する。
         let ranges: Vec<(u32, u32, &str)> = self
             .clipboard_codepoint_map
             .iter()
             .take(64)
             .filter_map(|(range_str, replacement)| {
+                if replacement.chars().count() > MAX_REPLACEMENT_CHARS {
+                    log::warn!(
+                        "apply_codepoint_map: replacement for \"{}\" exceeds {} chars, skipping",
+                        range_str,
+                        MAX_REPLACEMENT_CHARS
+                    );
+                    return None;
+                }
                 parse_clipboard_range(range_str)
                     .map(|(start, end)| (start, end, replacement.as_str()))
             })
@@ -415,8 +431,17 @@ impl SelectionConfig {
             return text.to_owned();
         }
 
+        let max_output_len = text.len().saturating_mul(MAX_OUTPUT_MULTIPLIER);
         let mut result = String::with_capacity(text.len());
         for c in text.chars() {
+            // 出力膨張チェック
+            if result.len() > max_output_len {
+                log::warn!(
+                    "apply_codepoint_map: output exceeded {}x input size, truncating",
+                    MAX_OUTPUT_MULTIPLIER
+                );
+                break;
+            }
             let cp = c as u32;
             let mut replaced = false;
             for &(start, end, replacement) in &ranges {
@@ -454,13 +479,29 @@ fn parse_clipboard_range(range_str: &str) -> Option<(u32, u32)> {
 }
 
 /// "U+XXXX" または "XXXX" 形式のコードポイント文字列を u32 にパースする。
-fn parse_clipboard_codepoint(s: &str) -> Option<u32> {
+///
+/// - 空文字列の場合は `None` を返す
+/// - hex 部分が 8 文字を超える場合は `None` を返す
+/// - 全文字が ASCII 16 進数でない場合は `None` を返す
+pub(super) fn parse_clipboard_codepoint(s: &str) -> Option<u32> {
     let s = s.trim();
     let hex = if let Some(stripped) = s.strip_prefix("U+").or_else(|| s.strip_prefix("u+")) {
         stripped
     } else {
         s
     };
+    // 空文字列チェック
+    if hex.is_empty() {
+        return None;
+    }
+    // 8 文字超チェック（U+10FFFF は 6 桁だが、余裕を持って 8 文字まで許可）
+    if hex.len() > 8 {
+        return None;
+    }
+    // 全文字が ASCII 16 進数であることを確認
+    if !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
     u32::from_str_radix(hex, 16).ok().filter(|&cp| cp <= 0x10FFFF)
 }
 

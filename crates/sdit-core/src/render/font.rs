@@ -426,7 +426,8 @@ fn rasterize_physical_glyph(
             let a = pixel[3];
             if a > 0 {
                 // alpha を 1.6 倍に増幅（整数演算で overflow を防ぐ）
-                let amplified = ((u16::from(a) * 205) >> 7).min(255) as u8;
+                // 205 / 128 ≒ 1.6015625 ≈ 1.6
+                let amplified = ((u16::from(a) * 205) / 128).min(255) as u8;
                 pixel[3] = amplified;
             }
         }

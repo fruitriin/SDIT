@@ -773,6 +773,31 @@ pub struct BackgroundPipeline {
     pub image_size: [f32; 2],
 }
 
+/// 背景画像パイプラインの入力パラメータを検証する。
+///
+/// バリデーション成功時は `bytes_per_row` を返す。失敗時は `None`。
+/// wgpu device を必要とせずユニットテスト可能。
+pub(crate) fn validate_background_image_params(
+    image_data: &[u8],
+    image_width: u32,
+    image_height: u32,
+) -> Option<u32> {
+    const MAX_DIM: u32 = 4096;
+    const MAX_PIXELS: u64 = 4096 * 4096;
+    if image_width == 0 || image_height == 0 || image_width > MAX_DIM || image_height > MAX_DIM {
+        return None;
+    }
+    let pixel_count = u64::from(image_width) * u64::from(image_height);
+    if pixel_count > MAX_PIXELS {
+        return None;
+    }
+    let expected_len = (pixel_count * 4) as usize;
+    if image_data.len() != expected_len {
+        return None;
+    }
+    image_width.checked_mul(4)
+}
+
 impl BackgroundPipeline {
     /// 背景画像テクスチャから `BackgroundPipeline` を作成する。
     ///
@@ -780,6 +805,12 @@ impl BackgroundPipeline {
     /// `image_width` / `image_height`: 画像サイズ（ピクセル）
     /// `fit_mode`: 0=contain, 1=cover, 2=fill
     /// `opacity`: 不透明度 (0.0-1.0)
+    ///
+    /// バリデーション失敗時は `None` を返す:
+    /// - `image_width` または `image_height` が 0 または 4096 超
+    /// - ピクセル数が 16,777,216 (4096×4096) 超
+    /// - `image_data` の長さが `width * height * 4` と一致しない
+    /// - `bytes_per_row` の計算がオーバーフローする場合
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -790,7 +821,21 @@ impl BackgroundPipeline {
         fit_mode: u32,
         opacity: f32,
         surface_size: [f32; 2],
-    ) -> Self {
+    ) -> Option<Self> {
+        // バリデーション（寸法・ピクセル数・データ長・bytes_per_row）
+        let bytes_per_row = validate_background_image_params(image_data, image_width, image_height)
+            .unwrap_or_else(|| {
+                log::warn!(
+                    "BackgroundPipeline::new: validation failed for image {}x{}",
+                    image_width,
+                    image_height
+                );
+                0
+            });
+        if bytes_per_row == 0 {
+            return None;
+        }
+
         // テクスチャ作成
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("bg_image_texture"),
@@ -816,7 +861,7 @@ impl BackgroundPipeline {
             image_data,
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: Some(image_width * 4),
+                bytes_per_row: Some(bytes_per_row),
                 rows_per_image: Some(image_height),
             },
             wgpu::Extent3d { width: image_width, height: image_height, depth_or_array_layers: 1 },
@@ -938,12 +983,12 @@ impl BackgroundPipeline {
             multiview: None,
         });
 
-        Self {
+        Some(Self {
             pipeline,
             bind_group,
             uniform_buffer,
             image_size: [image_width as f32, image_height as f32],
-        }
+        })
     }
 
     /// サーフェスサイズが変わったときにユニフォームを更新する。
@@ -1000,5 +1045,76 @@ fn xterm256_to_rgba(idx: u8) -> [f32; 4] {
             let v = (f32::from(idx - 232) * 10.0 + 8.0) / 255.0;
             [v, v, v, 1.0]
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// テスト
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- H-1: BackgroundPipeline バリデーション関数テスト ---
+
+    #[test]
+    fn validate_bg_image_zero_width_returns_none() {
+        let data = vec![0u8; 4]; // 1x1 の RGBA データだが width=0 に設定
+        assert!(validate_background_image_params(&data, 0, 1).is_none(), "width=0 は None を返す");
+    }
+
+    #[test]
+    fn validate_bg_image_zero_height_returns_none() {
+        let data = vec![0u8; 4];
+        assert!(validate_background_image_params(&data, 1, 0).is_none(), "height=0 は None を返す");
+    }
+
+    #[test]
+    fn validate_bg_image_too_large_dimension_returns_none() {
+        // 4097x1 は MAX_DIM(4096) 超
+        let data = vec![0u8; 4097 * 1 * 4];
+        assert!(
+            validate_background_image_params(&data, 4097, 1).is_none(),
+            "width=4097 は None を返す"
+        );
+    }
+
+    #[test]
+    fn validate_bg_image_max_allowed_dimension() {
+        // 4096x1 は許容範囲内
+        let data = vec![0u8; 4096 * 1 * 4];
+        assert!(
+            validate_background_image_params(&data, 4096, 1).is_some(),
+            "width=4096 は許容される"
+        );
+    }
+
+    #[test]
+    fn validate_bg_image_data_length_mismatch_returns_none() {
+        // 2x2 には 16 bytes 必要だが、8 bytes しか渡さない
+        let data = vec![0u8; 8];
+        assert!(
+            validate_background_image_params(&data, 2, 2).is_none(),
+            "データ長不一致は None を返す"
+        );
+    }
+
+    #[test]
+    fn validate_bg_image_valid_params() {
+        // 正常な 2x2 RGBA8 画像
+        let data = vec![0u8; 2 * 2 * 4];
+        let result = validate_background_image_params(&data, 2, 2);
+        assert!(result.is_some(), "正常パラメータは Some を返す");
+        assert_eq!(result.unwrap(), 8, "bytes_per_row = width * 4 = 8");
+    }
+
+    #[test]
+    fn validate_bg_image_1x1() {
+        // 1x1 の最小ケース
+        let data = vec![255u8, 0, 0, 255]; // 赤い 1 ピクセル
+        let result = validate_background_image_params(&data, 1, 1);
+        assert!(result.is_some(), "1x1 は許容される");
+        assert_eq!(result.unwrap(), 4, "bytes_per_row = 1 * 4 = 4");
     }
 }

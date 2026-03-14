@@ -870,3 +870,91 @@ fn apply_codepoint_map_empty_replacement() {
     let result = sel.apply_codepoint_map(text);
     assert_eq!(result, "ab");
 }
+
+// --- M-1: apply_codepoint_map DoS 防止テスト ---
+
+#[test]
+fn apply_codepoint_map_long_replacement_is_skipped() {
+    // 257 文字の replacement は除外される（warn ログのみ、エントリ自体がスキップされる）
+    let mut sel = SelectionConfig::default();
+    let long_replacement = "x".repeat(257);
+    sel.clipboard_codepoint_map.insert("U+0041".to_owned(), long_replacement); // 'A'
+    let text = "ABC";
+    // replacement が除外されるため、テキストは変換されずそのまま返る
+    let result = sel.apply_codepoint_map(text);
+    assert_eq!(result, "ABC", "長すぎる replacement はスキップされる");
+}
+
+#[test]
+fn apply_codepoint_map_256_char_replacement_is_accepted() {
+    // 256 文字の replacement は許容される
+    let mut sel = SelectionConfig::default();
+    let replacement = "y".repeat(256);
+    sel.clipboard_codepoint_map.insert("U+0041".to_owned(), replacement.clone()); // 'A'
+    let text = "A";
+    let result = sel.apply_codepoint_map(text);
+    assert_eq!(result, replacement, "256 文字の replacement は許容される");
+}
+
+#[test]
+fn apply_codepoint_map_output_expansion_limit() {
+    // 入力 1 文字 → replacement 256 文字 のマップで、入力 100 文字 = 出力 25600 文字
+    // 入力 len = 100 bytes, max_output = 1000 bytes → 4 文字目付近で打ち切られる
+    let mut sel = SelectionConfig::default();
+    let replacement = "z".repeat(256); // 256 chars = 256 bytes (ASCII)
+    sel.clipboard_codepoint_map.insert("U+0041".to_owned(), replacement); // 'A' → "zzz..."
+    // 入力: "A" * 100, len = 100 bytes, max_output = 1000 bytes
+    // 1 文字変換で 256 bytes 消費 → 4 文字目 (4*256=1024 > 1000) で打ち切り
+    let text = "A".repeat(100);
+    let result = sel.apply_codepoint_map(&text);
+    // 出力は max_output (1000 bytes) 以内に収まる（最後の文字追加前にチェックするため若干超える場合あり）
+    // 少なくとも全入力が変換されて 25600 文字にはならないことを確認
+    assert!(result.len() < 25600, "出力膨張制限が機能していない: result.len() = {}", result.len());
+}
+
+// --- M-2: parse_clipboard_codepoint バリデーションテスト ---
+
+#[test]
+fn parse_clipboard_codepoint_empty_returns_none() {
+    // 空文字列は None を返す
+    assert!(super::parse_clipboard_codepoint("").is_none(), "空文字列は None を返す");
+    assert!(super::parse_clipboard_codepoint("U+").is_none(), "U+ のみは None を返す");
+}
+
+#[test]
+fn parse_clipboard_codepoint_too_long_returns_none() {
+    // 9 文字以上の hex は None を返す
+    assert!(
+        super::parse_clipboard_codepoint("U+123456789").is_none(),
+        "9 文字以上の hex は None を返す"
+    );
+    assert!(
+        super::parse_clipboard_codepoint("123456789").is_none(),
+        "9 文字以上の hex (prefix なし) は None を返す"
+    );
+}
+
+#[test]
+fn parse_clipboard_codepoint_non_hex_returns_none() {
+    // 非 16 進数文字を含む場合は None を返す
+    assert!(super::parse_clipboard_codepoint("U+00GG").is_none(), "非 16 進数文字は None を返す");
+    assert!(
+        super::parse_clipboard_codepoint("ZZZZ").is_none(),
+        "非 16 進数文字 (prefix なし) は None を返す"
+    );
+}
+
+#[test]
+fn parse_clipboard_codepoint_valid_values() {
+    // 正常なコードポイントは Some を返す
+    assert_eq!(super::parse_clipboard_codepoint("U+0041"), Some(0x41)); // 'A'
+    assert_eq!(super::parse_clipboard_codepoint("U+10FFFF"), Some(0x10FFFF));
+    assert_eq!(super::parse_clipboard_codepoint("0041"), Some(0x41));
+    assert_eq!(super::parse_clipboard_codepoint("u+0041"), Some(0x41)); // 小文字プレフィックス
+}
+
+#[test]
+fn parse_clipboard_codepoint_out_of_range_returns_none() {
+    // Unicode 範囲外 (> 0x10FFFF) は None を返す
+    assert!(super::parse_clipboard_codepoint("U+110000").is_none(), "0x110000 は Unicode 範囲外");
+}

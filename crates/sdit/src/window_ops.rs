@@ -17,12 +17,18 @@ use sdit_core::session::{
 use crate::app::{SditApp, VisualBell, WindowState};
 use crate::window::calc_grid_size;
 
+/// 画像の最大許容寸法（ピクセル）。4096x4096 を超えるとメモリ枯渇の恐れがある。
+const MAX_DIMENSION: u32 = 4096;
+
 /// 背景画像を読み込んで RGBA8 ピクセルデータと寸法を返す。
 ///
 /// - パスが `~` で始まる場合はホームディレクトリに展開する
+/// - `~` 展開後に `canonicalize()` してホームディレクトリ内であることを確認する
+/// - `..` を含むパスを拒否する（パストラバーサル防止）
 /// - ファイルが見つからない場合は `None` を返して warn ログを出す
 /// - ファイルサイズが 10MB を超える場合はスキップする
 /// - パス内に制御文字が含まれる場合はスキップする
+/// - 画像の寸法が `MAX_DIMENSION` を超える場合はスキップする
 pub(crate) fn load_background_image(path_str: &str) -> Option<(Vec<u8>, u32, u32)> {
     // 制御文字チェック
     if path_str.chars().any(|c| c.is_control()) {
@@ -30,45 +36,180 @@ pub(crate) fn load_background_image(path_str: &str) -> Option<(Vec<u8>, u32, u32
         return None;
     }
 
+    // `..` コンポーネントを含むパスを拒否する（パストラバーサル防止）
+    let raw_path = std::path::Path::new(path_str);
+    for component in raw_path.components() {
+        if component == std::path::Component::ParentDir {
+            log::warn!("background_image: path traversal detected (\"..\" component), skipping");
+            return None;
+        }
+    }
+
     // `~` をホームディレクトリに展開
     let expanded: std::path::PathBuf = if let Some(rest) = path_str.strip_prefix("~/") {
-        let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+        let home = match dirs::home_dir() {
+            Some(h) => h,
+            None => {
+                log::warn!("background_image: cannot determine home directory, skipping");
+                return None;
+            }
+        };
         home.join(rest)
     } else if path_str == "~" {
-        dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."))
+        match dirs::home_dir() {
+            Some(h) => h,
+            None => {
+                log::warn!("background_image: cannot determine home directory, skipping");
+                return None;
+            }
+        }
     } else {
         std::path::PathBuf::from(path_str)
     };
 
-    // ファイルサイズチェック（10MB 上限）
+    // canonicalize して実際のパスを解決する（シンボリックリンク展開後もチェック）
+    let canonical = match expanded.canonicalize() {
+        Ok(p) => p,
+        Err(e) => {
+            log::warn!("background_image: cannot resolve path {}: {e}", expanded.display());
+            return None;
+        }
+    };
+
+    // `~` で始まるパスはホームディレクトリ内であることを確認する
+    if path_str.starts_with("~/") || path_str == "~" {
+        if let Some(home) = dirs::home_dir() {
+            if let Ok(canonical_home) = home.canonicalize() {
+                if !canonical.starts_with(&canonical_home) {
+                    log::warn!(
+                        "background_image: path escapes home directory, skipping: {}",
+                        canonical.display()
+                    );
+                    return None;
+                }
+            }
+        }
+    }
+
+    // ファイルを先に open してから metadata でサイズチェックする（TOCTOU 防止）
     const MAX_SIZE: u64 = 10 * 1024 * 1024;
-    match std::fs::metadata(&expanded) {
+    let file = match std::fs::File::open(&canonical) {
+        Ok(f) => f,
+        Err(e) => {
+            log::warn!("background_image: cannot open file {}: {e}", canonical.display());
+            return None;
+        }
+    };
+    match file.metadata() {
         Ok(meta) if meta.len() > MAX_SIZE => {
             log::warn!(
                 "background_image: file too large ({} bytes > 10MB), skipping: {}",
                 meta.len(),
-                expanded.display()
+                canonical.display()
             );
             return None;
         }
         Err(e) => {
-            log::warn!("background_image: cannot read file {}: {e}", expanded.display());
+            log::warn!("background_image: cannot read file metadata {}: {e}", canonical.display());
             return None;
         }
         _ => {}
     }
+    drop(file); // ImageReader が canonical を直接 open するため、ここで閉じる
 
-    match image::open(&expanded) {
+    // フォーマット推測 → 寸法チェック → デコードの順で処理する
+    let reader = match image::ImageReader::open(&canonical) {
+        Ok(r) => r,
+        Err(e) => {
+            log::warn!("background_image: failed to open {}: {e}", canonical.display());
+            return None;
+        }
+    };
+    let reader = match reader.with_guessed_format() {
+        Ok(r) => r,
+        Err(e) => {
+            log::warn!("background_image: failed to guess format for {}: {e}", canonical.display());
+            return None;
+        }
+    };
+
+    // 寸法チェック（デコード前）
+    match reader.into_dimensions() {
+        Ok((w, h)) => {
+            if w == 0 || h == 0 || w > MAX_DIMENSION || h > MAX_DIMENSION {
+                log::warn!(
+                    "background_image: image dimensions {}x{} exceed limit (max {}), skipping: {}",
+                    w,
+                    h,
+                    MAX_DIMENSION,
+                    canonical.display()
+                );
+                return None;
+            }
+        }
+        Err(e) => {
+            log::warn!(
+                "background_image: failed to read dimensions for {}: {e}",
+                canonical.display()
+            );
+            return None;
+        }
+    }
+
+    // 再度 open してデコードする（into_dimensions で reader を消費するため）
+    match image::open(&canonical) {
         Ok(img) => {
             let rgba = img.into_rgba8();
             let width = rgba.width();
             let height = rgba.height();
+            // デコード後も寸法が制限内であることを確認する
+            if width == 0 || height == 0 || width > MAX_DIMENSION || height > MAX_DIMENSION {
+                log::warn!(
+                    "background_image: decoded dimensions {}x{} exceed limit, skipping",
+                    width,
+                    height
+                );
+                return None;
+            }
             Some((rgba.into_raw(), width, height))
         }
         Err(e) => {
-            log::warn!("background_image: failed to load {}: {e}", expanded.display());
+            log::warn!("background_image: failed to load {}: {e}", canonical.display());
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_background_image_path_traversal_dotdot() {
+        // `..` コンポーネントを含むパスは拒否される
+        assert!(load_background_image("../foo.png").is_none());
+        assert!(load_background_image("../../etc/passwd").is_none());
+    }
+
+    #[test]
+    fn load_background_image_path_traversal_tilde_escape() {
+        // `~/../../etc/passwd` 形式（`~` 展開後にホームを脱出しようとするパス）
+        // `..` チェックで先にブロックされる
+        assert!(load_background_image("~/../../../etc/passwd").is_none());
+    }
+
+    #[test]
+    fn load_background_image_control_characters() {
+        // パスに制御文字が含まれる場合はスキップ
+        assert!(load_background_image("foo\x00bar.png").is_none());
+        assert!(load_background_image("foo\nbar.png").is_none());
+        assert!(load_background_image("foo\tbar.png").is_none());
+    }
+
+    #[test]
+    fn load_background_image_nonexistent_file() {
+        // 存在しないファイルは None を返す
+        assert!(load_background_image("/nonexistent/path/image.png").is_none());
     }
 }
 
@@ -268,7 +409,7 @@ impl SditApp {
 
         // 背景画像パイプライン（設定されている場合のみ）
         let bg_pipeline = self.config.window.background_image.as_deref().and_then(|path| {
-            load_background_image(path).map(|(data, w, h)| {
+            load_background_image(path).and_then(|(data, w, h)| {
                 let fit_mode = match self.config.window.background_image_fit {
                     BackgroundImageFit::Contain => 0,
                     BackgroundImageFit::Cover => 1,
@@ -550,7 +691,7 @@ impl SditApp {
 
         // 背景画像パイプライン（設定されている場合のみ）
         let detach_bg_pipeline = self.config.window.background_image.as_deref().and_then(|path| {
-            load_background_image(path).map(|(data, w, h)| {
+            load_background_image(path).and_then(|(data, w, h)| {
                 let fit_mode = match self.config.window.background_image_fit {
                     BackgroundImageFit::Contain => 0,
                     BackgroundImageFit::Cover => 1,
