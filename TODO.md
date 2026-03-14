@@ -3,7 +3,7 @@
 `docs/plans/` の完了状態・優先度をトラックする。
 `docs/plans/` と TODO が一致しなければ TODO を編集する。
 
-## 現在のフェーズ: （全タスク完了 — 機能発見フロー実行待ち）
+## 現在のフェーズ: Phase 18.1（次に着手）
 
 ## バックログ
 
@@ -67,6 +67,10 @@
 | done | 17.4 | `docs/plans/phase17.4-right-click-action.md` | **完了** |
 | done | 17.5 | `docs/plans/phase17.5-command-palette.md` | **完了** |
 | done | 17.6 | `docs/plans/phase17.6-session-restore.md` | **完了** |
+| 中高 | 18.1 | `docs/plans/phase18.1-background-image.md` | 未着手 |
+| 中 | 18.2 | `docs/plans/phase18.2-quick-terminal.md` | 未着手 |
+| 中 | 18.3 | `docs/plans/phase18.3-font-thicken.md` | 未着手 |
+| 低 | 18.4 | `docs/plans/phase18.4-clipboard-codepoint-map.md` | 未着手 |
 
 
 オーナーリクエスト:

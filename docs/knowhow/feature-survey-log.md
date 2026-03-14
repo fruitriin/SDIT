@@ -170,3 +170,20 @@
 - Ghostty: `src/terminal/kitty/graphics_exec.zig`（Kitty グラフィクス実行詳細）
 - WezTerm: `wezterm-mux/src/`（Mux 層の詳細セッション管理）
 - Zellij: `default-plugins/`（プラグイン UI 設計の詳細）
+
+### 2026-03-14: Phase 18 策定（ビジュアル・高度機能）
+
+**調査対象リファレンス:**
+- Ghostty: `src/config/Config.zig`（background-image, quick-terminal, font-thicken, clipboard-codepoint-map）
+- Ghostty: `src/apprt/action.zig`（float_window, toggle_quick_terminal, inspector）
+- WezTerm: `wezterm-gui/src/`（scripting, overlay 再スキャン）
+- Alacritty: `alacritty/src/`（再スキャン）
+
+**発見した機能ギャップ（Phase 18 Plan に反映済み）:**
+- 背景画像 → Phase 18.1
+- Quick Terminal（macOS ドロップダウン） → Phase 18.2
+- フォント太さ調整（macOS） → Phase 18.3
+- クリップボード文字変換 → Phase 18.4
+
+**将来検討（Phase 19+）:**
+- Kitty グラフィクスプロトコル / カスタムシェーダー / Lua スクリプティング / デバッグインスペクター / キーリマップ
