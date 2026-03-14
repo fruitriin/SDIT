@@ -6,14 +6,71 @@ use winit::window::{Fullscreen, Window, WindowId, WindowLevel};
 #[cfg(target_os = "macos")]
 use winit::platform::macos::{OptionAsAlt as WinitOptionAsAlt, WindowExtMacOS};
 
-use sdit_core::config::{Decorations, StartupMode};
+use sdit_core::config::{BackgroundImageFit, Decorations, StartupMode};
 use sdit_core::pty::PtySize;
 use sdit_core::render::atlas::Atlas;
-use sdit_core::render::pipeline::{CellPipeline, GpuContext};
-use sdit_core::session::{AppSnapshot, SessionSnapshot, SidebarState, WindowGeometry};
+use sdit_core::render::pipeline::{BackgroundPipeline, CellPipeline, GpuContext};
+use sdit_core::session::{
+    AppSnapshot, SessionRestoreInfo, SidebarState, WindowGeometry, WindowSnapshot,
+};
 
 use crate::app::{SditApp, VisualBell, WindowState};
 use crate::window::calc_grid_size;
+
+/// 背景画像を読み込んで RGBA8 ピクセルデータと寸法を返す。
+///
+/// - パスが `~` で始まる場合はホームディレクトリに展開する
+/// - ファイルが見つからない場合は `None` を返して warn ログを出す
+/// - ファイルサイズが 10MB を超える場合はスキップする
+/// - パス内に制御文字が含まれる場合はスキップする
+pub(crate) fn load_background_image(path_str: &str) -> Option<(Vec<u8>, u32, u32)> {
+    // 制御文字チェック
+    if path_str.chars().any(|c| c.is_control()) {
+        log::warn!("background_image: path contains control characters, skipping");
+        return None;
+    }
+
+    // `~` をホームディレクトリに展開
+    let expanded: std::path::PathBuf = if let Some(rest) = path_str.strip_prefix("~/") {
+        let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+        home.join(rest)
+    } else if path_str == "~" {
+        dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."))
+    } else {
+        std::path::PathBuf::from(path_str)
+    };
+
+    // ファイルサイズチェック（10MB 上限）
+    const MAX_SIZE: u64 = 10 * 1024 * 1024;
+    match std::fs::metadata(&expanded) {
+        Ok(meta) if meta.len() > MAX_SIZE => {
+            log::warn!(
+                "background_image: file too large ({} bytes > 10MB), skipping: {}",
+                meta.len(),
+                expanded.display()
+            );
+            return None;
+        }
+        Err(e) => {
+            log::warn!("background_image: cannot read file {}: {e}", expanded.display());
+            return None;
+        }
+        _ => {}
+    }
+
+    match image::open(&expanded) {
+        Ok(img) => {
+            let rgba = img.into_rgba8();
+            let width = rgba.width();
+            let height = rgba.height();
+            Some((rgba.into_raw(), width, height))
+        }
+        Err(e) => {
+            log::warn!("background_image: failed to load {}: {e}", expanded.display());
+            None
+        }
+    }
+}
 
 /// sdit-core の `OptionAsAlt` を winit の `WinitOptionAsAlt` に変換する。
 #[cfg(target_os = "macos")]
@@ -39,12 +96,37 @@ impl SditApp {
             .collect()
     }
 
-    /// 現在のセッション群のスナップショットを収集する。
+    /// 現在のウィンドウ群のセッション情報を収集する。
     ///
-    /// 現時点では cwd の取得はサポートしていないため、空のリストを返す。
-    /// セッション復元は将来のフェーズで実装予定。
-    fn collect_session_snapshots() -> Vec<SessionSnapshot> {
-        Vec::new()
+    /// 各ウィンドウのジオメトリ・セッション一覧・アクティブインデックスを収集する。
+    fn collect_window_sessions(&self) -> Vec<WindowSnapshot> {
+        self.windows
+            .values()
+            .filter_map(|ws| {
+                let size = ws.window.inner_size().to_logical::<f64>(ws.window.scale_factor());
+                let pos = ws.window.outer_position().ok()?;
+                let geometry =
+                    WindowGeometry { width: size.width, height: size.height, x: pos.x, y: pos.y };
+
+                let sessions: Vec<SessionRestoreInfo> = ws
+                    .sessions
+                    .iter()
+                    .map(|&sid| {
+                        let session = self.session_mgr.get(sid);
+                        SessionRestoreInfo {
+                            custom_name: session.as_ref().and_then(|s| s.custom_name.clone()),
+                            working_directory: session
+                                .as_ref()
+                                .and_then(|s| s.cwd.as_ref())
+                                .and_then(|p| p.to_str())
+                                .map(|s| s.to_owned()),
+                        }
+                    })
+                    .collect();
+
+                Some(WindowSnapshot { geometry, sessions, active_session_index: ws.active_index })
+            })
+            .collect()
     }
 
     /// 新しいウィンドウ + セッションを生成する。
@@ -184,6 +266,29 @@ impl SditApp {
         let sidebar_pipeline =
             CellPipeline::new(&gpu.device, gpu.surface_config.format, &atlas, 100);
 
+        // 背景画像パイプライン（設定されている場合のみ）
+        let bg_pipeline = self.config.window.background_image.as_deref().and_then(|path| {
+            load_background_image(path).map(|(data, w, h)| {
+                let fit_mode = match self.config.window.background_image_fit {
+                    BackgroundImageFit::Contain => 0,
+                    BackgroundImageFit::Cover => 1,
+                    BackgroundImageFit::Fill => 2,
+                };
+                let opacity = self.config.window.clamped_background_image_opacity();
+                BackgroundPipeline::new(
+                    &gpu.device,
+                    &gpu.queue,
+                    gpu.surface_config.format,
+                    &data,
+                    w,
+                    h,
+                    fit_mode,
+                    opacity,
+                    surface_size,
+                )
+            })
+        });
+
         // --- 登録 ---
         let window_id = window.id();
         self.session_to_window.insert(session_id, window_id);
@@ -194,6 +299,7 @@ impl SditApp {
                 gpu,
                 cell_pipeline,
                 sidebar_pipeline,
+                bg_pipeline,
                 atlas,
                 sessions: vec![session_id],
                 active_index: 0,
@@ -248,6 +354,44 @@ impl SditApp {
 
         // 新しいアクティブセッションで再描画
         self.redraw_session(session_id);
+    }
+
+    /// 既存ウィンドウに CWD を指定して新しいセッションを追加する。
+    ///
+    /// セッション復元時に使用する。`cwd` が `None` の場合は通常の CWD 継承ロジックを使わず
+    /// デフォルト（ホームディレクトリ）で起動する。
+    pub(crate) fn add_session_to_window_with_cwd(
+        &mut self,
+        window_id: WindowId,
+        cwd: Option<std::path::PathBuf>,
+    ) {
+        let Some(ws) = self.windows.get(&window_id) else { return };
+        let metrics = *self.font_ctx.metrics();
+        let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
+        let padding_x = f32::from(self.config.window.clamped_padding_x());
+        let padding_y = f32::from(self.config.window.clamped_padding_y());
+        let term_width =
+            (ws.gpu.surface_config.width as f32 - sidebar_w - 2.0 * padding_x).max(0.0);
+        let term_height = (ws.gpu.surface_config.height as f32 - 2.0 * padding_y).max(0.0);
+        let (cols, rows) =
+            calc_grid_size(term_width, term_height, metrics.cell_width, metrics.cell_height);
+
+        let Some(session_id) = self.spawn_session_with_cwd(rows, cols, cwd) else {
+            return;
+        };
+
+        self.session_to_window.insert(session_id, window_id);
+
+        let ws = self.windows.get_mut(&window_id).unwrap();
+        ws.sessions.push(session_id);
+        // アクティブインデックスは呼び出し側が設定するためここでは変更しない
+        ws.sidebar.auto_update(ws.sessions.len());
+
+        log::info!(
+            "Added session {} (with cwd) to window {window_id:?} (total: {})",
+            session_id.0,
+            ws.sessions.len()
+        );
     }
 
     /// アクティブセッションを閉じる。最後の1つならウィンドウごと閉じる。
@@ -313,13 +457,7 @@ impl SditApp {
         }
 
         // 残存ウィンドウのジオメトリとセッションを保存する
-        let snapshot = AppSnapshot {
-            sessions: Self::collect_session_snapshots(),
-            windows: self.collect_window_geometries(),
-        };
-        if let Err(e) = snapshot.save(&AppSnapshot::default_path()) {
-            log::warn!("Failed to save window geometry: {e}");
-        }
+        self.save_session_snapshot();
     }
 
     /// アクティブセッションを新しいウィンドウに切り出す（PTY は維持）。
@@ -402,11 +540,36 @@ impl SditApp {
         };
 
         let metrics = *self.font_ctx.metrics();
+        let detach_surface_size =
+            [gpu.surface_config.width as f32, gpu.surface_config.height as f32];
         let atlas = Atlas::new(&gpu.device, 512);
         let cell_pipeline =
             CellPipeline::new(&gpu.device, gpu.surface_config.format, &atlas, 80 * 24);
         let sidebar_pipeline =
             CellPipeline::new(&gpu.device, gpu.surface_config.format, &atlas, 100);
+
+        // 背景画像パイプライン（設定されている場合のみ）
+        let detach_bg_pipeline = self.config.window.background_image.as_deref().and_then(|path| {
+            load_background_image(path).map(|(data, w, h)| {
+                let fit_mode = match self.config.window.background_image_fit {
+                    BackgroundImageFit::Contain => 0,
+                    BackgroundImageFit::Cover => 1,
+                    BackgroundImageFit::Fill => 2,
+                };
+                let opacity = self.config.window.clamped_background_image_opacity();
+                BackgroundPipeline::new(
+                    &gpu.device,
+                    &gpu.queue,
+                    gpu.surface_config.format,
+                    &data,
+                    w,
+                    h,
+                    fit_mode,
+                    opacity,
+                    detach_surface_size,
+                )
+            })
+        });
 
         let new_window_id = new_window.id();
 
@@ -419,6 +582,7 @@ impl SditApp {
                 gpu,
                 cell_pipeline,
                 sidebar_pipeline,
+                bg_pipeline: detach_bg_pipeline,
                 atlas,
                 sessions: vec![detach_sid],
                 active_index: 0,
@@ -454,5 +618,23 @@ impl SditApp {
         let source_active = self.windows.get(&source_window_id).unwrap().active_session_id();
         self.redraw_session(source_active);
         self.redraw_session(detach_sid);
+    }
+
+    /// 現在のアプリケーション全体状態をスナップショットとして保存する。
+    ///
+    /// `config.window.restore_session` が `false` の場合は何もしない。
+    pub(crate) fn save_session_snapshot(&self) {
+        if !self.config.window.restore_session {
+            return;
+        }
+        let snapshot = AppSnapshot {
+            sessions: Vec::new(),
+            windows: self.collect_window_geometries(),
+            window_sessions: self.collect_window_sessions(),
+        };
+        if let Err(e) = snapshot.save(&AppSnapshot::default_path()) {
+            log::warn!("Failed to save session snapshot: {e}");
+        }
+        log::info!("Session snapshot saved ({} window(s))", snapshot.windows.len());
     }
 }

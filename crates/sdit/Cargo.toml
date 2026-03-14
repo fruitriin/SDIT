@@ -21,6 +21,8 @@ log          = { workspace = true }
 env_logger   = { workspace = true }
 anyhow       = { workspace = true }
 arboard      = "3"
+dirs         = { workspace = true }
+image        = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 notify       = { workspace = true }
 notify-rust  = "4"
 regex        = { workspace = true }

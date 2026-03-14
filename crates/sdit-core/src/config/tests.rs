@@ -729,3 +729,144 @@ fn right_click_action_deserialize_context_menu() {
     let config: Config = toml::from_str(toml_str).unwrap();
     assert_eq!(config.mouse.right_click_action, RightClickAction::ContextMenu);
 }
+
+// -----------------------------------------------------------------------
+// restore_session のテスト
+// -----------------------------------------------------------------------
+
+#[test]
+fn restore_session_default_is_true() {
+    let window = WindowConfig::default();
+    assert!(window.restore_session, "restore_session should default to true");
+}
+
+#[test]
+fn restore_session_deserialize_false() {
+    let toml_str = "[window]\nrestore_session = false\n";
+    let config: Config = toml::from_str(toml_str).unwrap();
+    assert!(!config.window.restore_session);
+}
+
+#[test]
+fn restore_session_deserialize_true_explicit() {
+    let toml_str = "[window]\nrestore_session = true\n";
+    let config: Config = toml::from_str(toml_str).unwrap();
+    assert!(config.window.restore_session);
+}
+
+#[test]
+fn restore_session_missing_field_defaults_to_true() {
+    // restore_session フィールドなしの TOML を読んだらデフォルト true になる
+    let toml_str = "[window]\nopacity = 1.0\n";
+    let config: Config = toml::from_str(toml_str).unwrap();
+    assert!(config.window.restore_session, "missing field should default to true");
+}
+
+// -----------------------------------------------------------------------
+// Phase 18.1: 背景画像設定テスト
+// -----------------------------------------------------------------------
+
+#[test]
+fn background_image_default_is_none() {
+    let window = WindowConfig::default();
+    assert!(window.background_image.is_none());
+    assert!((window.background_image_opacity - 0.3).abs() < f32::EPSILON);
+    assert_eq!(window.background_image_fit, crate::config::BackgroundImageFit::Cover);
+}
+
+#[test]
+fn background_image_deserialize() {
+    let toml_str = r#"
+[window]
+background_image = "~/Pictures/bg.png"
+background_image_opacity = 0.5
+background_image_fit = "contain"
+"#;
+    let config: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(config.window.background_image.as_deref(), Some("~/Pictures/bg.png"));
+    assert!((config.window.background_image_opacity - 0.5).abs() < f32::EPSILON);
+    assert_eq!(config.window.background_image_fit, crate::config::BackgroundImageFit::Contain);
+}
+
+#[test]
+fn background_image_opacity_clamped() {
+    let window = WindowConfig { background_image_opacity: 2.0, ..WindowConfig::default() };
+    assert!((window.clamped_background_image_opacity() - 1.0).abs() < f32::EPSILON);
+    let window = WindowConfig { background_image_opacity: -1.0, ..WindowConfig::default() };
+    assert!((window.clamped_background_image_opacity() - 0.0).abs() < f32::EPSILON);
+    let window = WindowConfig { background_image_opacity: f32::NAN, ..WindowConfig::default() };
+    assert!((window.clamped_background_image_opacity() - 0.3).abs() < f32::EPSILON);
+}
+
+#[test]
+fn background_image_fit_variants() {
+    let toml_str = "[window]\nbackground_image_fit = \"fill\"";
+    let config: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(config.window.background_image_fit, crate::config::BackgroundImageFit::Fill);
+
+    let toml_str = "[window]\nbackground_image_fit = \"cover\"";
+    let config: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(config.window.background_image_fit, crate::config::BackgroundImageFit::Cover);
+}
+
+// -----------------------------------------------------------------------
+// Phase 18.4: clipboard_codepoint_map テスト
+// -----------------------------------------------------------------------
+
+#[test]
+fn clipboard_codepoint_map_default_is_empty() {
+    let sel = SelectionConfig::default();
+    assert!(sel.clipboard_codepoint_map.is_empty());
+}
+
+#[test]
+fn clipboard_codepoint_map_deserialize() {
+    let toml_str = r#"
+[selection.clipboard_codepoint_map]
+"U+2500-U+257F" = " "
+"U+0041" = "A"
+"#;
+    let config: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(config.selection.clipboard_codepoint_map.len(), 2);
+}
+
+#[test]
+fn apply_codepoint_map_empty_map() {
+    let sel = SelectionConfig::default();
+    let text = "hello\u{2500}world";
+    assert_eq!(sel.apply_codepoint_map(text), text);
+}
+
+#[test]
+fn apply_codepoint_map_replaces_characters() {
+    let mut sel = SelectionConfig::default();
+    sel.clipboard_codepoint_map.insert("U+2500-U+257F".to_owned(), "-".to_owned());
+    let text = "a\u{2500}b\u{2510}c";
+    let result = sel.apply_codepoint_map(text);
+    assert_eq!(result, "a-b-c");
+}
+
+#[test]
+fn apply_codepoint_map_single_codepoint() {
+    let mut sel = SelectionConfig::default();
+    sel.clipboard_codepoint_map.insert("U+0041".to_owned(), "a".to_owned()); // 'A' → "a"
+    let result = sel.apply_codepoint_map("ABC");
+    assert_eq!(result, "aBC"); // A→a, B unchanged (0x42 not in range), C unchanged (0x43 not in range)
+}
+
+#[test]
+fn apply_codepoint_map_passthrough_non_matching() {
+    let mut sel = SelectionConfig::default();
+    sel.clipboard_codepoint_map.insert("U+2500-U+257F".to_owned(), " ".to_owned());
+    let text = "hello world";
+    assert_eq!(sel.apply_codepoint_map(text), text);
+}
+
+#[test]
+fn apply_codepoint_map_empty_replacement() {
+    let mut sel = SelectionConfig::default();
+    sel.clipboard_codepoint_map.insert("U+2500-U+257F".to_owned(), String::new());
+    let text = "a\u{2500}b";
+    let result = sel.apply_codepoint_map(text);
+    assert_eq!(result, "ab");
+}

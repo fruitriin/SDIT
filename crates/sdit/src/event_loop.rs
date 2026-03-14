@@ -17,7 +17,7 @@ use crate::app::{
     is_unsafe_paste, wrap_bracketed_paste,
 };
 use sdit_core::config::keybinds::Action;
-use sdit_core::session::AppSnapshot;
+use sdit_core::session::{AppSnapshot, WindowGeometry};
 
 use crate::cwd_utils::{parse_osc7_cwd, trim_trailing_whitespace};
 use crate::input::{
@@ -36,11 +36,65 @@ impl ApplicationHandler<SditEvent> for SditApp {
             return;
         }
         self.initialized = true;
-        // 前回保存したジオメトリを復元して最初のウィンドウを作成する
+
         let snapshot = AppSnapshot::load(&AppSnapshot::default_path());
-        let geometry =
-            snapshot.windows.first().cloned().map(sdit_core::session::WindowGeometry::validated);
-        self.create_window(event_loop, geometry.as_ref());
+
+        // restore_session が有効かつ window_sessions に保存データがある場合は復元する。
+        if self.config.window.restore_session && !snapshot.window_sessions.is_empty() {
+            log::info!(
+                "Restoring {} window(s) from session snapshot",
+                snapshot.window_sessions.len()
+            );
+            for win_snap in snapshot.window_sessions {
+                // active_session_index のバウンダリを検証する（geometry ムーブ前に実施）
+                let active_idx = win_snap.validated_active_index();
+                let geometry = win_snap.geometry.validated();
+                // 最初のセッション（または CWD なし）でウィンドウを作成する
+                let first_cwd = win_snap
+                    .sessions
+                    .first()
+                    .map(|s| s.clone().validated())
+                    .and_then(|s| s.working_directory)
+                    .map(std::path::PathBuf::from);
+                self.create_window_with_cwd(event_loop, Some(&geometry), first_cwd);
+
+                // 2番目以降のセッションを同じウィンドウに追加する
+                let window_id = self.windows.keys().last().copied();
+                if let Some(wid) = window_id {
+                    for session_info in win_snap.sessions.iter().skip(1) {
+                        let cwd = session_info
+                            .clone()
+                            .validated()
+                            .working_directory
+                            .map(std::path::PathBuf::from);
+                        self.add_session_to_window_with_cwd(wid, cwd);
+                    }
+
+                    // カスタム名を設定する
+                    if let Some(ws) = self.windows.get(&wid) {
+                        let session_ids: Vec<_> = ws.sessions.clone();
+                        for (idx, session_info) in win_snap.sessions.iter().enumerate() {
+                            let validated = session_info.clone().validated();
+                            if let Some(name) = validated.custom_name {
+                                if let Some(&sid) = session_ids.get(idx) {
+                                    if let Some(session) = self.session_mgr.get_mut(sid) {
+                                        session.custom_name = Some(name);
+                                    }
+                                }
+                            }
+                        }
+                        // アクティブセッションを復元する（validated_active_index で境界保証済み）
+                        if let Some(ws) = self.windows.get_mut(&wid) {
+                            ws.active_index = active_idx;
+                        }
+                    }
+                }
+            }
+        } else {
+            // 後方互換: window_sessions がない場合は旧 windows フィールドからジオメトリのみ復元
+            let geometry = snapshot.windows.first().cloned().map(WindowGeometry::validated);
+            self.create_window(event_loop, geometry.as_ref());
+        }
     }
 
     #[allow(clippy::too_many_lines)]
@@ -127,6 +181,80 @@ impl ApplicationHandler<SditEvent> for SditApp {
                     // --- vi モード中のキー入力処理 ---
                     if self.vi_mode.is_some() && self.handle_vi_mode_key(&key_event.logical_key, id)
                     {
+                        return;
+                    }
+
+                    // --- コマンドパレットモード中のキー入力処理 ---
+                    if self.command_palette.is_some() {
+                        use winit::keyboard::Key;
+                        match &key_event.logical_key {
+                            // Escape でパレットを閉じる
+                            Key::Named(NamedKey::Escape) => {
+                                self.command_palette = None;
+                                if let Some(ws) = self.windows.get(&id) {
+                                    let sid = ws.active_session_id();
+                                    self.redraw_session(sid);
+                                }
+                            }
+                            // Enter で選択中のアクションを実行
+                            Key::Named(NamedKey::Enter) => {
+                                let action = self
+                                    .command_palette
+                                    .as_ref()
+                                    .and_then(|cp| cp.selected_action());
+                                self.command_palette = None;
+                                if let Some(action) = action {
+                                    self.handle_action(action, id, event_loop);
+                                } else if let Some(ws) = self.windows.get(&id) {
+                                    let sid = ws.active_session_id();
+                                    self.redraw_session(sid);
+                                }
+                            }
+                            // ↓ で選択を下に移動
+                            Key::Named(NamedKey::ArrowDown) => {
+                                if let Some(ref mut cp) = self.command_palette {
+                                    cp.move_down();
+                                }
+                                if let Some(ws) = self.windows.get(&id) {
+                                    let sid = ws.active_session_id();
+                                    self.redraw_session(sid);
+                                }
+                            }
+                            // ↑ で選択を上に移動
+                            Key::Named(NamedKey::ArrowUp) => {
+                                if let Some(ref mut cp) = self.command_palette {
+                                    cp.move_up();
+                                }
+                                if let Some(ws) = self.windows.get(&id) {
+                                    let sid = ws.active_session_id();
+                                    self.redraw_session(sid);
+                                }
+                            }
+                            // Backspace で1文字削除
+                            Key::Named(NamedKey::Backspace) => {
+                                if let Some(ref mut cp) = self.command_palette {
+                                    cp.pop_char();
+                                }
+                                if let Some(ws) = self.windows.get(&id) {
+                                    let sid = ws.active_session_id();
+                                    self.redraw_session(sid);
+                                }
+                            }
+                            // 通常文字入力
+                            Key::Character(s) => {
+                                // Cmd/Ctrl 修飾がある場合はスキップ
+                                if !self.modifiers.super_key() && !self.modifiers.control_key() {
+                                    if let Some(ref mut cp) = self.command_palette {
+                                        cp.push_str(s.as_str());
+                                    }
+                                    if let Some(ws) = self.windows.get(&id) {
+                                        let sid = ws.active_session_id();
+                                        self.redraw_session(sid);
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
                         return;
                     }
 
@@ -849,6 +977,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                     } else {
                                         raw_text
                                     };
+                                    let text = self.config.selection.apply_codepoint_map(&text);
                                     if let Some(cb) = &mut self.clipboard {
                                         if let Err(e) = cb.set_text(text) {
                                             log::warn!("Auto-clipboard set_text failed: {e}");
@@ -986,7 +1115,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 } else {
                     vec![&ws.cell_pipeline]
                 };
-                match ws.gpu.render_frame(&pipelines, clear_color) {
+                match ws.gpu.render_frame(&pipelines, clear_color, ws.bg_pipeline.as_ref()) {
                     Ok(()) => {}
                     Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
                         let (w, h) = (ws.gpu.surface_config.width, ws.gpu.surface_config.height);

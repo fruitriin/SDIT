@@ -12,7 +12,7 @@ use sdit_core::index::Point;
 use sdit_core::pty::{Pty, PtyConfig, PtySize};
 use sdit_core::render::atlas::Atlas;
 use sdit_core::render::font::FontContext;
-use sdit_core::render::pipeline::{CellPipeline, GpuContext};
+use sdit_core::render::pipeline::{BackgroundPipeline, CellPipeline, GpuContext};
 use sdit_core::selection::Selection;
 use sdit_core::session::{
     Session, SessionId, SessionManager, SidebarState, SpawnParams, TerminalState,
@@ -261,6 +261,8 @@ pub(crate) struct WindowState {
     pub(crate) cell_pipeline: CellPipeline,
     /// サイドバー描画用パイプライン（表示中のみ使用）。
     pub(crate) sidebar_pipeline: CellPipeline,
+    /// 背景画像パイプライン（設定された場合のみ Some）。
+    pub(crate) bg_pipeline: Option<BackgroundPipeline>,
     pub(crate) atlas: Atlas,
     /// このウィンドウに属するセッション群（タブ順序）。
     pub(crate) sessions: Vec<SessionId>,
@@ -348,6 +350,8 @@ pub(crate) struct SditApp {
     pub(crate) search: Option<SearchState>,
     /// QuickSelect モードの状態。None = 非アクティブ。
     pub(crate) quick_select: Option<QuickSelectState>,
+    /// コマンドパレットの状態。None = 非表示。
+    pub(crate) command_palette: Option<crate::command_palette::CommandPaletteState>,
     /// vi モード（コピーモード）の状態。None = 非アクティブ。
     pub(crate) vi_mode: Option<ViModeState>,
     /// 設定全体（キーバインド等）。
@@ -419,6 +423,7 @@ impl SditApp {
             hovered_url: None,
             search: None,
             quick_select: None,
+            command_palette: None,
             vi_mode: None,
             config: config.clone(),
             compiled_quick_select_patterns: compile_quick_select_patterns(config),

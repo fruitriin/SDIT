@@ -635,6 +635,142 @@ impl SditApp {
             }
         }
 
+        // コマンドパレット オーバーレイ描画
+        if let Some(ref cp) = self.command_palette {
+            if grid_rows >= 3 && grid_cols >= 4 {
+                let atlas_size = ws.atlas.size() as f32;
+
+                // パレット寸法
+                let palette_width = grid_cols.min(60).max(20);
+                let start_col = (grid_cols.saturating_sub(palette_width)) / 2;
+                let start_row = {
+                    let palette_height = 1 + cp
+                        .filtered_actions
+                        .len()
+                        .min(crate::command_palette::MAX_VISIBLE_ITEMS);
+                    (grid_rows / 3).min(grid_rows.saturating_sub(palette_height + 1))
+                };
+
+                // 色定義
+                let input_bg = [0.15_f32, 0.15, 0.18, 1.0];
+                let item_bg = [0.08_f32, 0.08, 0.10, 1.0];
+                let selected_bg = [0.25_f32, 0.35, 0.55, 1.0];
+                let fg = self.colors.foreground;
+                let dim_fg = [fg[0] * 0.6, fg[1] * 0.6, fg[2] * 0.6, 1.0];
+
+                // ── 入力行（先頭行）──
+                let input_row = start_row;
+                let input_text = format!("> {}", cp.input);
+                let input_chars: Vec<char> = input_text.chars().collect();
+
+                for col_offset in 0..palette_width {
+                    let col = start_col + col_offset;
+                    if col >= grid_cols {
+                        break;
+                    }
+                    let ch = input_chars.get(col_offset).copied();
+                    let (uv, glyph_offset, glyph_size) = if let Some(c) = ch {
+                        if let Some(entry) = self.font_ctx.rasterize_glyph(c, &mut ws.atlas) {
+                            let r = entry.region;
+                            (
+                                [
+                                    r.x as f32 / atlas_size,
+                                    r.y as f32 / atlas_size,
+                                    (r.x + r.width) as f32 / atlas_size,
+                                    (r.y + r.height) as f32 / atlas_size,
+                                ],
+                                [entry.placement_left as f32, entry.placement_top as f32],
+                                [r.width as f32, r.height as f32],
+                            )
+                        } else {
+                            ([0.0_f32; 4], [0.0_f32; 2], [0.0_f32; 2])
+                        }
+                    } else {
+                        ([0.0_f32; 4], [0.0_f32; 2], [0.0_f32; 2])
+                    };
+                    let vertex = CellVertex {
+                        bg: input_bg,
+                        fg,
+                        grid_pos: [col as f32, input_row as f32],
+                        uv,
+                        glyph_offset,
+                        glyph_size,
+                        cell_width_scale: 1.0,
+                        is_color_glyph: 0.0,
+                    };
+                    ws.cell_pipeline.overwrite_cell(
+                        &ws.gpu.queue,
+                        input_row * grid_cols + col,
+                        &vertex,
+                    );
+                }
+
+                // ── 候補リスト ──
+                let cp_selected = cp.selected_index;
+                let cp_items: Vec<String> = cp
+                    .filtered_actions
+                    .iter()
+                    .take(crate::command_palette::MAX_VISIBLE_ITEMS)
+                    .map(|(name, _)| format!("  {name}"))
+                    .collect();
+
+                for (item_idx, label) in cp_items.iter().enumerate() {
+                    let item_row = start_row + 1 + item_idx;
+                    if item_row >= grid_rows {
+                        break;
+                    }
+                    let is_selected = item_idx == cp_selected;
+                    let row_bg = if is_selected { selected_bg } else { item_bg };
+                    let row_fg = if is_selected { [1.0_f32, 1.0, 1.0, 1.0] } else { dim_fg };
+                    let label_chars: Vec<char> = label.chars().collect();
+
+                    for col_offset in 0..palette_width {
+                        let col = start_col + col_offset;
+                        if col >= grid_cols {
+                            break;
+                        }
+                        let ch = label_chars.get(col_offset).copied();
+                        let (uv, glyph_offset, glyph_size) = if let Some(c) = ch {
+                            if let Some(entry) = self.font_ctx.rasterize_glyph(c, &mut ws.atlas) {
+                                let r = entry.region;
+                                (
+                                    [
+                                        r.x as f32 / atlas_size,
+                                        r.y as f32 / atlas_size,
+                                        (r.x + r.width) as f32 / atlas_size,
+                                        (r.y + r.height) as f32 / atlas_size,
+                                    ],
+                                    [entry.placement_left as f32, entry.placement_top as f32],
+                                    [r.width as f32, r.height as f32],
+                                )
+                            } else {
+                                ([0.0_f32; 4], [0.0_f32; 2], [0.0_f32; 2])
+                            }
+                        } else {
+                            ([0.0_f32; 4], [0.0_f32; 2], [0.0_f32; 2])
+                        };
+                        let vertex = CellVertex {
+                            bg: row_bg,
+                            fg: row_fg,
+                            grid_pos: [col as f32, item_row as f32],
+                            uv,
+                            glyph_offset,
+                            glyph_size,
+                            cell_width_scale: 1.0,
+                            is_color_glyph: 0.0,
+                        };
+                        ws.cell_pipeline.overwrite_cell(
+                            &ws.gpu.queue,
+                            item_row * grid_cols + col,
+                            &vertex,
+                        );
+                    }
+                }
+
+                ws.atlas.upload_if_dirty(&ws.gpu.queue);
+            }
+        }
+
         ws.window.request_redraw();
     }
 
@@ -646,6 +782,18 @@ impl SditApp {
     pub(crate) fn handle_resize(&mut self, window_id: WindowId, width: u32, height: u32) {
         let Some(ws) = self.windows.get_mut(&window_id) else { return };
         ws.gpu.resize(width, height);
+
+        // 背景画像のユニフォームをリサイズに合わせて更新
+        if let Some(bg) = &ws.bg_pipeline {
+            use sdit_core::config::BackgroundImageFit;
+            let fit_mode = match self.config.window.background_image_fit {
+                BackgroundImageFit::Contain => 0,
+                BackgroundImageFit::Cover => 1,
+                BackgroundImageFit::Fill => 2,
+            };
+            let opacity = self.config.window.clamped_background_image_opacity();
+            bg.update_surface_size(&ws.gpu.queue, [width as f32, height as f32], fit_mode, opacity);
+        }
 
         // グリッドリサイズで vi カーソル座標が無効になるためリセット
         if self.vi_mode.is_some() {

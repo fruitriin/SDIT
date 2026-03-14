@@ -86,6 +86,8 @@ pub struct FontContext {
     adjust_cell_height: f32,
     /// ベースライン加算値（ピクセル）。set_font_size 時に再適用するために保持。
     adjust_baseline: f32,
+    /// グリフの alpha を増幅してフォントを太く見せる（thicken 設定）。
+    thicken: bool,
 }
 
 impl FontContext {
@@ -135,6 +137,7 @@ impl FontContext {
             adjust_cell_width: adj.clamped_cell_width(),
             adjust_cell_height: adj.clamped_cell_height(),
             adjust_baseline: adj.clamped_baseline(),
+            thicken: config.thicken,
         }
     }
 
@@ -221,6 +224,7 @@ impl FontContext {
             &mut self.font_system,
             physical.cache_key,
             atlas,
+            self.thicken,
         )?;
         self.glyph_cache.insert(cache_key_raw.clone(), entry);
         self.glyph_cache.get(&cache_key_raw)
@@ -321,6 +325,7 @@ impl FontContext {
                             &mut self.font_system,
                             physical.cache_key,
                             atlas,
+                            self.thicken,
                         );
                         if let Some(ref e) = new_entry {
                             self.glyph_cache.insert(cache_key, e.clone());
@@ -368,11 +373,13 @@ fn build_rich_text_spans<'a>(
 /// `PhysicalGlyph` のキャッシュキーからグリフをラスタライズしてアトラスに書き込む。
 ///
 /// 成功すれば `GlyphEntry` を返す。ラスタライズ失敗・サイズゼロ・アトラス満杯の場合は `None`。
+/// `thicken` が `true` の場合、グリフの alpha 値を増幅して太く見せる処理を適用する。
 fn rasterize_physical_glyph(
     swash_cache: &mut SwashCache,
     font_system: &mut FontSystem,
     cache_key: cosmic_text::CacheKey,
     atlas: &mut Atlas,
+    thicken: bool,
 ) -> Option<GlyphEntry> {
     let image = swash_cache.get_image_uncached(font_system, cache_key)?;
 
@@ -385,7 +392,7 @@ fn rasterize_physical_glyph(
 
     // Atlas は RGBA 4bytes/pixel を期待するため、コンテンツ種別に応じて変換する。
     let is_color = matches!(image.content, SwashContent::Color);
-    let rgba_data: Vec<u8> = match image.content {
+    let mut rgba_data: Vec<u8> = match image.content {
         SwashContent::Mask => {
             // グレースケール Alpha マスク → RGBA: R=G=B=255, A=alpha
             image.data.iter().flat_map(|&a| [255u8, 255, 255, a]).collect()
@@ -411,6 +418,19 @@ fn rasterize_physical_glyph(
                 .collect()
         }
     };
+
+    // thicken: カラーグリフ以外の alpha を増幅して太く見せる（簡易膨張処理）。
+    // alpha を min(a * 1.6, 255) に増幅することで線が太く見える。
+    if thicken && !is_color {
+        for pixel in rgba_data.chunks_exact_mut(4) {
+            let a = pixel[3];
+            if a > 0 {
+                // alpha を 1.6 倍に増幅（整数演算で overflow を防ぐ）
+                let amplified = ((u16::from(a) * 205) >> 7).min(255) as u8;
+                pixel[3] = amplified;
+            }
+        }
+    }
 
     let region = atlas.reserve(w, h)?;
     atlas.write(region, &rgba_data);

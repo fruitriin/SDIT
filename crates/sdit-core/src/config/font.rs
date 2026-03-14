@@ -128,6 +128,12 @@ pub struct FontConfig {
     /// セルサイズ・ベースライン調整値。
     #[serde(default)]
     pub adjust: FontAdjust,
+    /// フォントのレンダリング時に線を太くする（デフォルト: false）。
+    ///
+    /// テキストが細すぎると感じる場合に有効にしてください。
+    /// グリフの alpha 値を増幅する簡易膨張処理を適用します。
+    #[serde(default)]
+    pub thicken: bool,
 }
 
 impl Default for FontConfig {
@@ -141,6 +147,7 @@ impl Default for FontConfig {
             variation: HashMap::new(),
             feature: HashMap::new(),
             adjust: FontAdjust::default(),
+            thicken: false,
         }
     }
 }
@@ -583,5 +590,42 @@ family = "Menlo"
         config.variation.insert("wdth".to_owned(), 100.0);
         let result: Vec<_> = config.clamped_variation().collect();
         assert_eq!(result.len(), 2);
+    }
+
+    // -----------------------------------------------------------------------
+    // Phase 18.3: thicken テスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn thicken_default_is_false() {
+        let config = FontConfig::default();
+        assert!(!config.thicken);
+    }
+
+    #[test]
+    fn deserialize_thicken_true() {
+        let toml_str = r#"
+[font]
+thicken = true
+"#;
+        let config: crate::config::Config = toml::from_str(toml_str).unwrap();
+        assert!(config.font.thicken);
+    }
+
+    #[test]
+    fn deserialize_thicken_false() {
+        let toml_str = r#"
+[font]
+thicken = false
+"#;
+        let config: crate::config::Config = toml::from_str(toml_str).unwrap();
+        assert!(!config.font.thicken);
+    }
+
+    #[test]
+    fn thicken_absent_defaults_false() {
+        let toml_str = "[font]\nsize = 14.0";
+        let config: crate::config::Config = toml::from_str(toml_str).unwrap();
+        assert!(!config.font.thicken);
     }
 }

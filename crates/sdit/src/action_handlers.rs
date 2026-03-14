@@ -133,6 +133,7 @@ impl SditApp {
                         } else {
                             raw_text
                         };
+                        let text = self.config.selection.apply_codepoint_map(&text);
                         if let Some(cb) = &mut self.clipboard {
                             if let Err(e) = cb.set_text(text) {
                                 log::warn!("Clipboard set_text failed: {e}");
@@ -186,7 +187,8 @@ impl SditApp {
                     }
                     return;
                 }
-                // 全ウィンドウを閉じてイベントループを終了する。
+                // 全ウィンドウを閉じる前にスナップショットを保存する。
+                self.save_session_snapshot();
                 let window_ids: Vec<WindowId> = self.windows.keys().copied().collect();
                 for wid in window_ids {
                     self.close_window(wid);
@@ -322,6 +324,17 @@ impl SditApp {
                 let path = sdit_core::config::Config::default_path();
                 if let Err(e) = self.config.save(&path) {
                     log::warn!("Failed to save config after ToggleAlwaysOnTop: {e}");
+                }
+            }
+            Action::ToggleCommandPalette => {
+                if self.command_palette.is_some() {
+                    self.command_palette = None;
+                } else {
+                    self.command_palette = Some(crate::command_palette::CommandPaletteState::new());
+                }
+                if let Some(ws) = self.windows.get(&window_id) {
+                    let sid = ws.active_session_id();
+                    self.redraw_session(sid);
                 }
             }
         }

@@ -120,6 +120,19 @@ impl Default for Decorations {
     }
 }
 
+/// 背景画像のフィット方法。
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BackgroundImageFit {
+    /// アスペクト比を保持して画像全体が見えるようにする。
+    Contain,
+    /// アスペクト比を保持してウィンドウ全体を覆う。
+    #[default]
+    Cover,
+    /// アスペクト比を無視してウィンドウ全体に引き伸ばす。
+    Fill,
+}
+
 /// ウィンドウ外観の設定。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
@@ -150,6 +163,17 @@ pub struct WindowConfig {
     pub decorations: Decorations,
     /// ウィンドウを常に最前面に表示する（デフォルト: false）。
     pub always_on_top: bool,
+    /// 次回起動時にセッション（ウィンドウ・タブ構成）を復帰する（デフォルト: true）。
+    pub restore_session: bool,
+    /// 背景画像のパス（省略時: なし）。PNG/JPEG/WebP をサポート。
+    ///
+    /// `~` で始まる場合はホームディレクトリに展開する。
+    /// ファイルが見つからない場合は warn ログを出してスキップする。
+    pub background_image: Option<String>,
+    /// 背景画像の不透明度（0.0-1.0、デフォルト: 0.3）。
+    pub background_image_opacity: f32,
+    /// 背景画像のフィット方法（デフォルト: cover）。
+    pub background_image_fit: BackgroundImageFit,
 }
 
 impl Default for WindowConfig {
@@ -166,6 +190,10 @@ impl Default for WindowConfig {
             confirm_close: ConfirmClose::ProcessRunning,
             decorations: Decorations::Full,
             always_on_top: false,
+            restore_session: true,
+            background_image: None,
+            background_image_opacity: 0.3,
+            background_image_fit: BackgroundImageFit::Cover,
         }
     }
 }
@@ -196,6 +224,17 @@ impl WindowConfig {
     /// `rows` を安全な範囲（2〜200）にクランプする。
     pub fn clamped_rows(&self) -> u16 {
         self.rows.clamp(2, 200)
+    }
+
+    /// `background_image_opacity` を安全な範囲にクランプする。
+    ///
+    /// NaN や Inf が渡された場合はデフォルト値 0.3 を返す。
+    pub fn clamped_background_image_opacity(&self) -> f32 {
+        if self.background_image_opacity.is_finite() {
+            self.background_image_opacity.clamp(0.0, 1.0)
+        } else {
+            0.3
+        }
     }
 }
 
@@ -318,11 +357,28 @@ pub struct SelectionConfig {
     pub save_to_clipboard: bool,
     /// クリップボードにコピーするとき、各行末の空白を削除する（デフォルト: true）。
     pub trim_trailing_spaces: bool,
+    /// クリップボードにコピーする際の文字変換マップ（デフォルト: 空）。
+    ///
+    /// キー: Unicode コードポイント範囲（例: `"U+2500-U+257F"`）、値: 置換文字列。
+    /// 各マッチした文字は値の文字列に置換される。最大 64 エントリ。
+    ///
+    /// 例: ボックス描画文字を ASCII に変換
+    /// ```toml
+    /// [selection.clipboard_codepoint_map]
+    /// "U+2500-U+257F" = " "
+    /// ```
+    #[serde(default)]
+    pub clipboard_codepoint_map: std::collections::HashMap<String, String>,
 }
 
 impl Default for SelectionConfig {
     fn default() -> Self {
-        Self { word_chars: String::new(), save_to_clipboard: false, trim_trailing_spaces: true }
+        Self {
+            word_chars: String::new(),
+            save_to_clipboard: false,
+            trim_trailing_spaces: true,
+            clipboard_codepoint_map: std::collections::HashMap::new(),
+        }
     }
 }
 
@@ -334,6 +390,78 @@ impl SelectionConfig {
         let end = s.char_indices().nth(256).map(|(i, _)| i).unwrap_or(s.len());
         &s[..end]
     }
+
+    /// `clipboard_codepoint_map` を使って文字変換を適用したテキストを返す。
+    ///
+    /// マップのエントリ数は最大 64 に制限する。
+    /// キーは "U+XXXX-U+YYYY" または "U+XXXX" 形式。
+    pub fn apply_codepoint_map(&self, text: &str) -> String {
+        if self.clipboard_codepoint_map.is_empty() {
+            return text.to_owned();
+        }
+
+        // キーをパースしてレンジリストを構築（最大 64 エントリ）
+        let ranges: Vec<(u32, u32, &str)> = self
+            .clipboard_codepoint_map
+            .iter()
+            .take(64)
+            .filter_map(|(range_str, replacement)| {
+                parse_clipboard_range(range_str)
+                    .map(|(start, end)| (start, end, replacement.as_str()))
+            })
+            .collect();
+
+        if ranges.is_empty() {
+            return text.to_owned();
+        }
+
+        let mut result = String::with_capacity(text.len());
+        for c in text.chars() {
+            let cp = c as u32;
+            let mut replaced = false;
+            for &(start, end, replacement) in &ranges {
+                if cp >= start && cp <= end {
+                    result.push_str(replacement);
+                    replaced = true;
+                    break;
+                }
+            }
+            if !replaced {
+                result.push(c);
+            }
+        }
+        result
+    }
+}
+
+/// "U+XXXX-U+YYYY" または "U+XXXX" 形式のレンジ文字列をパースして (start, end) を返す。
+fn parse_clipboard_range(range_str: &str) -> Option<(u32, u32)> {
+    let range_str = range_str.trim();
+    // "U+XXXX-U+YYYY" 形式を試みる（"-U+" をセパレータとして分割）
+    if let Some(idx) = range_str.find("-U+").or_else(|| range_str.find("-u+")) {
+        let start_str = &range_str[..idx];
+        let end_str = &range_str[idx + 1..];
+        let start = parse_clipboard_codepoint(start_str)?;
+        let end = parse_clipboard_codepoint(end_str)?;
+        if start <= end {
+            return Some((start, end));
+        }
+        return None;
+    }
+    // 単一コードポイント: "U+XXXX"
+    let cp = parse_clipboard_codepoint(range_str)?;
+    Some((cp, cp))
+}
+
+/// "U+XXXX" または "XXXX" 形式のコードポイント文字列を u32 にパースする。
+fn parse_clipboard_codepoint(s: &str) -> Option<u32> {
+    let s = s.trim();
+    let hex = if let Some(stripped) = s.strip_prefix("U+").or_else(|| s.strip_prefix("u+")) {
+        stripped
+    } else {
+        s
+    };
+    u32::from_str_radix(hex, 16).ok().filter(|&cp| cp <= 0x10FFFF)
 }
 
 /// 右クリック時の動作設定。
@@ -699,6 +827,13 @@ impl Config {
                 content.push_str(
                     "# always_on_top: keep window above all other windows (default: false)\n",
                 );
+                content.push_str(
+                    "# restore_session: restore windows and tabs from previous session on startup (default: true)\n",
+                );
+                content.push_str("# background_image: path to a background image file (PNG/JPEG/WebP); omit for no image\n");
+                content.push_str("#   e.g. background_image = \"~/Pictures/bg.png\"\n");
+                content.push_str("# background_image_opacity: opacity of the background image (0.0-1.0, default: 0.3)\n");
+                content.push_str("# background_image_fit: how to fit the image: \"cover\" (default), \"contain\", \"fill\"\n");
             } else if line == "[paste]" {
                 content.push('\n');
                 content.push_str("# ── Paste ─────────────────────────────────────────────\n");
