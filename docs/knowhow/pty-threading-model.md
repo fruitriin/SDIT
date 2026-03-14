@@ -56,6 +56,29 @@ Processor は `&mut Terminal` を必要とするため分離不可。
 `try_send` が `Full` を返した場合は `log::warn!` でログ出力。
 Writer スレッドは `recv()` でブロッキング待機するため CPU を消費しない。
 
+### Mutex ロック外での write_tx.send()（Phase 21.4）
+
+`drain_pending_writes()` の結果を Mutex ロック内で回収し、ロック解放後に `write_tx.send()` する。
+Mutex 保持中に `SyncSender.send()` がブロックすると、メインスレッドが同 Mutex を取得できず停滞する。
+
+```rust
+// ✅ 正しいパターン: ロック内で回収、ロック外で送信
+let pending_write = {
+    let mut state = term_state.lock().unwrap_or_else(PoisonError::into_inner);
+    let TerminalState { processor, terminal } = &mut *state;
+    processor.advance(terminal, &buf[..n]);
+    terminal.drain_pending_writes()
+    // ← ここで Mutex 解放
+};
+if let Some(response) = pending_write {
+    let _ = write_tx.send(response);  // チャンネル満杯でもメインスレッドは停滞しない
+}
+```
+
+再現条件: Claude Code / ink 等が接続時に DA, DA2, XTVERSION, Kitty keyboard query を連続発行
+→ `pending_writes` 応答が SyncSender(64) を埋め尽くす → Reader が Mutex 保持のままブロック
+→ メインスレッドの `redraw_session()` が Mutex 取得できず UI フリーズ。
+
 ## ブロッキング read の扱い
 
 - `WouldBlock` → 1ms sleep（busy-wait 回避）

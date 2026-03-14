@@ -25,7 +25,7 @@
 
 | ファイル | 要約 | キーワード |
 |---|---|---|
-| [pty-threading-model.md](pty-threading-model.md) | 3スレッドモデル（Main/Reader/Writer）、fd クローン分離、シャットダウンシーケンスの設計 | `try_clone_writer`, `try_clone_to_owned`, `dup(2)`, `AsFd`, `OwnedFd`, `sync_channel(64)`, `try_send`, `WouldBlock`, `EIO`, `PoisonError::into_inner`, `SIGHUP`, `SIGKILL`, `child_exited: AtomicBool`, `to_rustix_pid`, `tcsetwinsize`, `APP_CURSOR` |
+| [pty-threading-model.md](pty-threading-model.md) | 3スレッドモデル（Main/Reader/Writer）、fd クローン分離、シャットダウンシーケンス、Mutex ロック外 write_tx.send パターン | `try_clone_writer`, `try_clone_to_owned`, `dup(2)`, `AsFd`, `OwnedFd`, `sync_channel(64)`, `try_send`, `WouldBlock`, `EIO`, `PoisonError::into_inner`, `SIGHUP`, `SIGKILL`, `child_exited: AtomicBool`, `to_rustix_pid`, `tcsetwinsize`, `APP_CURSOR`, `drain_pending_writes`, `Mutex ロック外送信` |
 
 ## アーキテクチャ・設計
 
