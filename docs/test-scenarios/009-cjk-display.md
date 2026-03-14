@@ -2,6 +2,18 @@
 
 ## 目的
 日本語文字が豆腐（□）にならず正しく描画され、全角文字が 2 セル幅で表示されることを確認する。
+図形記号（口 □ ■ ● ▲）も含めて検証することで、フォント未搭載時の豆腐化を見分けやすくする。
+
+### テスト文字列の選定理由
+
+| 文字 | 種別 | 選定理由 |
+|---|---|---|
+| こんにちわ世界 | 日本語ひらがな・漢字 | 基本的な CJK 描画 |
+| 口 | CJK 漢字（U+53E3） | □ との形状比較。正常描画なら縦画がある |
+| □ | 白四角（U+25A1） | 豆腐グリフと同形状。正常描画なら細い枠線のみ |
+| ■ | 黒四角（U+25A0） | 塗りつぶし。輝度が高く存在確認しやすい |
+| ● | 黒丸（U+25CF） | 丸形。■ との比較で形状描画を確認 |
+| ▲ | 黒三角（U+25B2） | 三角。幾何学図形のグリフ描画を確認 |
 
 ## 前提条件
 - `cargo build --package sdit`
@@ -27,22 +39,38 @@
 
 ## 自動検証（verify-text + render-text）
 
-```bash
-# 1. 対照群画像 + セル境界 JSON を生成
-./tools/test-utils/render-text --mono --cell-info "こんにちは世界" tmp/009-ref.png \
-    | tail -n +2 > tmp/009-cells.json
+### 検証 A: ひらがな・漢字
 
-# 2. 3層一括検証
-./tools/test-utils/verify-text tmp/009-cjk.png "こんにちは世界" \
-    --cells tmp/009-cells.json \
-    --reference tmp/009-ref.png
-# exit 0 = 全チェック PASS
+```bash
+./tools/test-utils/render-text --mono --cell-info "こんにちわ世界" tmp/009-ref.png \
+    | tail -n +2 > tmp/009-cells.json
+./tools/test-utils/verify-text tmp/009-cjk.png "こんにちわ世界" \
+    --cells tmp/009-cells.json --reference tmp/009-ref.png
 ```
 
-**検証内容:**
-- **OCR 照合**: 「こんにちは世界」が豆腐（□）にならず実際の文字として認識される
-- **輝度分析**: 各文字セルにインクが存在し、右端クリッピングがない
-- **SSIM 比較**: CoreText の正解レンダリングと構造が類似している
+### 検証 B: 図形記号（annotate-grid で拡大して目視確認）
+
+```bash
+# 図形記号を echo した後のスクリーンショット
+./tools/test-utils/capture-window sdit tmp/009-shapes.png
+
+# グリッドで拡大確認
+./tools/test-utils/annotate-grid tmp/009-shapes.png tmp/009-shapes-grid.png --divide 8
+
+# 対象セルを clip-image で切り出し
+./tools/test-utils/clip-image tmp/009-shapes.png tmp/009-shapes-clip.png --grid-cell 0 1 8
+```
+
+**期待する見え方:**
+- `口` → 縦画・横画がある四角（□ より線が多い）
+- `□` → 細い枠線のみの白四角（これが豆腐と同形なので区別のポイント）
+- `■` → 全面塗りつぶしの黒四角（輝度が高い）
+- `●` → 全面塗りつぶしの黒丸
+- `▲` → 三角形
+
+**判定基準:**
+- `口` と `□` の形状が異なって見える → CJK フォントが正しく読み込まれている
+- `■ ● ▲` に十分な輝度がある → 記号グリフが描画されている
 
 ## 期待結果
 - ウィンドウが表示されている（window-info が exit 0）
