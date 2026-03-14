@@ -104,3 +104,35 @@
 **未調査領域（次回の候補）:**
 - WezTerm: `wezterm-client/src/`（クライアント/サーバー分離の詳細）
 - Zellij: `zellij-server/src/`（セッション永続化の詳細）
+
+### 2026-03-14: Phase 16 策定（品質・UX・セキュリティ向上）
+
+**調査対象リファレンス:**
+- Ghostty: `src/config/Config.zig`（全体 — scrollbar, maximize, fullscreen, confirm-close, kitty graphics, selection colors, quick-terminal, command-palette, custom-shader, font-thicken, key-remap, secure-input, minimum-contrast, window-inherit-working-directory, scroll-to-bottom, clipboard-trim-trailing-spaces）
+- Alacritty: `alacritty/src/config/window.rs`（startup_mode）
+- WezTerm: `wezterm-gui/src/scrollbar.rs`、`wezterm-gui/src/overlay/confirm_close_pane.rs`、`wezterm-gui/src/termwindow/palette.rs`
+
+**発見した機能ギャップ（Phase 16 Plan に反映予定）:**
+- スクロールバー → Phase 16.1
+- 起動モード設定（Maximized/Fullscreen） → Phase 16.2
+- 閉じる前の確認ダイアログ → Phase 16.3
+- 選択色設定 → Phase 16.4
+- クリップボードコピー時末尾空白削除 → Phase 16.5
+- Working Directory 継承 → Phase 16.6
+- スクロールトゥボトム設定 → Phase 16.7
+- 最小コントラスト比 → Phase 16.8
+- Secure Keyboard Entry（macOS） → Phase 16.9
+
+**将来検討（Phase 17+ で検討）:**
+- Kitty グラフィクスプロトコル — 実装規模大、独立フェーズで計画
+- Quick Terminal — macOS 固有UI、独立フェーズで計画
+- コマンドパレット — 独立フェーズで計画
+- カスタムシェーダー — wgpu post-process パス、独立フェーズで計画
+- フォントレンダリング調整（font-thicken） — 独立フェーズで計画
+- キーリマップ — 独立フェーズで計画
+
+**未調査領域（次回の候補）:**
+- Ghostty: `src/terminal/kitty/`（Kitty グラフィクスプロトコル詳細）
+- Ghostty: `src/renderer/`（GPU 描画最適化、シェーダー実装）
+- WezTerm: `wezterm-client/src/`（クライアント/サーバー分離の詳細）
+- Zellij: `zellij-server/src/`（セッション永続化の詳細）
