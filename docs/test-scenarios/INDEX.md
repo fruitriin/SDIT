@@ -29,5 +29,5 @@
 | [025-shell-integration-osc133](025-shell-integration-osc133.md) | OSC 133 A/B/C/D セマンティックゾーンマーカー記録・Cmd+Up/Down プロンプトジャンプ・ShellIntegration 有効/無効の確認 | 2026-03-14 | UNIT_ONLY |
 | [026-quick-select](026-quick-select.md) | Cmd+Shift+Space Quick Select モード・URL/パス/ハッシュ/数値パターン検出・ヒントキーコピー・Escape キャンセル・カスタムパターン設定の確認 | 2026-03-14 | UNIT_ONLY |
 | [027-vi-mode](027-vi-mode.md) | vi モード起動/終了（Cmd+Shift+V/Escape）・hjkl 基本移動・v 文字選択・V 行選択・y ヤンク・/ 検索連携・ブロックカーソル描画の確認 | 2026-03-14 | UNIT_ONLY |
-| [028-macos-menubar](028-macos-menubar.md) | macOS ネイティブメニューバー（sdit/File/Edit/View/Session）の構造確認・メニュー操作の動作確認 | 2026-03-14 | PARTIAL |
+| [028-macos-menubar](028-macos-menubar.md) | macOS ネイティブメニューバー（sdit/File/Edit/View/Session）の構造確認・メニュー操作の動作確認・Phase 21.6 クラッシュ修正確認 | 2026-03-15 | PASS |
 | [029-image-tools](029-image-tools.md) | annotate-grid（--divide/--every/スタイルオプション）と clip-image（--grid-cell/--rect）の動作確認・エッジケースバリデーション | 2026-03-14 | PARTIAL |

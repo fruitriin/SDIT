@@ -13,7 +13,8 @@
 - ビルド破壊の未コミット残留
 前セッションのエージェントが `session/persistence.rs`（SessionRestoreInfo, WindowSnapshot, window_sessions）と `config/keybinds.rs`（ToggleCommandPalette, all_with_names）および `command_palette.rs` を作成・変更したが、これらをコミットせずにセッションを終了した。一方でこれらを参照する `event_loop.rs` や `window_ops.rs` の変更はコミットされており、main ブランチが壊れた状態になっていた。
 
-- アプリケーションのアイコンがないとクラッシュするようなので、ダミーpngを作成する
+- アプリケーションのアイコンがないとクラッシュする件は Phase 21.6 で根本修正済み（dangling ポインタ起因）。
+  app アイコンなしでもメニュークリックでクラッシュしないことを確認。ただし macOS Dock 表示の見栄えのためダミー PNG を作成することは引き続き推奨。
 
 ## 改善アクション
 

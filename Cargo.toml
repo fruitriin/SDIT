@@ -28,6 +28,11 @@ cast_possible_truncation = "allow"
 cast_sign_loss = "allow"
 cast_precision_loss = "allow"
 
+[patch.crates-io]
+# muda 0.17.1: ゼロ幅アイコンで PlatformIcon::to_png() がパニックするバグを修正
+# https://github.com/tauri-apps/muda (修正未公開のため vendor に保持)
+muda = { path = "vendor/muda-0.17.1" }
+
 [workspace.dependencies]
 # PTY・ターミナルコア
 vte         = "0.13"

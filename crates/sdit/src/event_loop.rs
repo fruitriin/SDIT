@@ -39,9 +39,9 @@ impl ApplicationHandler<SditEvent> for SditApp {
         self.initialized = true;
 
         // winit が NSApp を初期化した後でメニューバーを登録する。
-        // init_for_nsapp() を event_loop.run_app() より前に呼ぶと NSApp 初期化で上書きされる。
+        // as_ref() を使い Menu を保持し続ける（take()→drop すると ivars が dangling になりクラッシュ）。
         #[cfg(target_os = "macos")]
-        if let Some(menu_bar) = self.menu_bar.take() {
+        if let Some(menu_bar) = self.menu_bar.as_ref() {
             menu_bar.init_for_nsapp();
         }
 
