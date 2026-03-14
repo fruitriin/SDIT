@@ -3,12 +3,16 @@
 `docs/plans/` の完了状態・優先度をトラックする。
 `docs/plans/` と TODO が一致しなければ TODO を編集する。
 
-## 現在のフェーズ: Phase 21.5（次に着手）
+## 現在のフェーズ: Phase 25（次に着手）
 
 ## バックログ
 
 | 優先度 | Phase | 計画ファイル | 状態 |
 |---|---|---|---|
+| 中 | 25.1 | `docs/plans/phase25.1-resize-increments.md` | 未着手 |
+| 高 | 25.2 | `docs/plans/phase25.2-east-asian-ambiguous-width.md` | 未着手 |
+| 低 | 25.3 | `docs/plans/phase25.3-window-colorspace.md` | 未着手 |
+| 低 | 25.4 | `docs/plans/phase25.4-swallow-mouse-click-on-focus.md` | 未着手 |
 | done | 20.1 | `docs/plans/phase20.1-bold-faint.md` | **完了** |
 | done | 20.2 | `docs/plans/phase20.2-window-position.md` | **完了** |
 | done | 20.3 | `docs/plans/phase20.3-focus-follows-mouse.md` | **完了** |

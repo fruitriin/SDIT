@@ -241,3 +241,22 @@
 - Ghostty: `src/terminal/kitty/graphics_exec.zig`（Kitty グラフィクス実行詳細）
 - Ghostty: `src/renderer/shadertoy.zig`（カスタムシェーダー実装詳細）
 - WezTerm: `wezterm-mux/src/`（Mux 層の詳細セッション管理）
+
+### 2026-03-15: Phase 25 策定（当たり前品質・オプション機能）
+
+**調査対象リファレンス:**
+- WezTerm: `refs/wezterm/config/src/config.rs`（全量スキャン — resize_increments, treat_east_asian_ambiguous_width_as_wide, swallow_mouse_click_on_window_focus 等）
+- Ghostty: `refs/ghostty/src/config/Config.zig`（全体概観 — window-colorspace, macos-dock-drop-behavior, macos-window-buttons 等）
+
+**発見した機能ギャップ（Phase 25 Plan に反映済み）:**
+- ウィンドウリサイズのセル整数倍スナップ → Phase 25.1
+- 東アジア曖昧幅文字の広幅扱い設定 → Phase 25.2
+- ウィンドウ色空間選択（macOS Display P3） → Phase 25.3
+- ウィンドウフォーカス時マウスクリック抑制 → Phase 25.4
+
+**将来検討（Plan 未作成）:**
+- Kitty グラフィクスプロトコル — 実装規模大、独立フェーズで計画
+- カスタムシェーダー（Shadertoy）— wgpu post-process パス
+- Bidi テキストサポート — アラビア語・ヘブライ語
+- macOS Dock ドロップ挙動設定 (`macos-dock-drop-behavior`)
+- macOS ウィンドウボタン表示制御 (`macos-window-buttons`)
