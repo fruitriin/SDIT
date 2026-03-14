@@ -278,6 +278,34 @@ pub fn csi_dispatch(term: &mut Terminal, params: &Params, intermediates: &[u8], 
             log::debug!("Kitty keyboard: query → {}", current);
         }
 
+        // ---- XTWINOPS — Window operations (CSI Ps t) ----
+        't' if !is_private => {
+            let p = first_param(params, 0);
+            // CSI 21 t — Report window title (XTWINOPS)
+            if p == 21 && term.title_report {
+                let title = term.title.clone().unwrap_or_default();
+                // 応答形式: OSC l <title> ST
+                // OSC オーバーヘッド: \x1b] (2バイト) + \x1b\\ (2バイト) = 4バイト
+                const OSC_OVERHEAD: usize = 4;
+                let available = MAX_PENDING_WRITES
+                    .saturating_sub(OSC_OVERHEAD)
+                    .saturating_sub(term.pending_writes.len());
+                let truncated = if title.len() > available {
+                    // UTF-8 境界に合わせてトランケート
+                    match std::str::from_utf8(&title.as_bytes()[..available]) {
+                        Ok(s) => s.to_string(),
+                        Err(e) => std::str::from_utf8(&title.as_bytes()[..e.valid_up_to()])
+                            .unwrap_or("")
+                            .to_string(),
+                    }
+                } else {
+                    title
+                };
+                let response = format!("\x1b]{truncated}\x1b\\");
+                write_response(term, response.as_bytes());
+            }
+        }
+
         _ => {}
     }
 }
@@ -455,6 +483,13 @@ fn first_param(params: &Params, default: usize) -> usize {
 fn write_response(term: &mut Terminal, data: &[u8]) {
     if term.pending_writes.len().saturating_add(data.len()) <= MAX_PENDING_WRITES {
         term.pending_writes.extend_from_slice(data);
+    } else {
+        log::warn!(
+            "VTE response discarded: buffer full ({} + {} > {})",
+            term.pending_writes.len(),
+            data.len(),
+            MAX_PENDING_WRITES
+        );
     }
 }
 
@@ -502,5 +537,37 @@ mod tests {
         let term = Terminal::new_with_cursor(24, 80, 100, CursorStyle::Underline, true);
         assert_eq!(term.cursor_style(), CursorStyle::Underline);
         assert!(term.cursor_blinking());
+    }
+
+    /// CSI 21 t で 4096 文字のタイトルを応答するとき、バッファに収まるようにトランケートされる (H-1)。
+    #[test]
+    fn csi_21t_long_title() {
+        use super::super::Processor;
+        let mut term = Terminal::new(24, 80, 100);
+        let mut proc = Processor::new();
+
+        // title_report を有効にする
+        term.title_report = true;
+
+        // 4096 文字のタイトルを設定（OSC 0 ; <title> ST 形式で送信）
+        let long_title: String = "A".repeat(4096);
+        let osc_seq = format!("\x1b]0;{long_title}\x07");
+        proc.advance(&mut term, osc_seq.as_bytes());
+
+        // CSI 21 t を送信して応答を確認
+        proc.advance(&mut term, b"\x1b[21t");
+        let writes = term.drain_pending_writes().unwrap_or_default();
+
+        // 応答は MAX_PENDING_WRITES (4096) 以下であること
+        assert!(
+            writes.len() <= super::MAX_PENDING_WRITES,
+            "応答サイズ {} が MAX_PENDING_WRITES {} を超えている",
+            writes.len(),
+            super::MAX_PENDING_WRITES
+        );
+        // 応答が OSC 形式であること
+        let response = std::str::from_utf8(&writes).expect("応答が UTF-8 でない");
+        assert!(response.starts_with("\x1b]"), "応答が OSC で始まっていない");
+        assert!(response.ends_with("\x1b\\"), "応答が ST で終わっていない");
     }
 }

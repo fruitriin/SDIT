@@ -1251,3 +1251,42 @@ fn window_position_clamp() {
     cfg.position_y = Some(32000);
     assert_eq!(cfg.clamped_position(), Some((-16000, 32000)), "境界値はそのまま");
 }
+
+// ---------------------------------------------------------------------------
+// TerminalConfig::clamped_enquiry_response のテスト (M-3)
+// ---------------------------------------------------------------------------
+
+/// enquiry_response が None のとき clamped_enquiry_response も None を返す。
+#[test]
+fn enquiry_response_clamp_in_core_none() {
+    let cfg = TerminalConfig::default();
+    assert!(cfg.clamped_enquiry_response().is_none());
+}
+
+/// 256文字以下のとき変更されない。
+#[test]
+fn enquiry_response_clamp_in_core_short() {
+    let cfg = TerminalConfig { enquiry_response: Some("hello".to_string()), ..Default::default() };
+    assert_eq!(cfg.clamped_enquiry_response(), Some("hello".to_string()));
+}
+
+/// 257文字の文字列が256文字にクランプされる。
+#[test]
+fn enquiry_response_clamp_in_core_long() {
+    let s: String = "a".repeat(257);
+    let cfg = TerminalConfig { enquiry_response: Some(s), ..Default::default() };
+    let result = cfg.clamped_enquiry_response().unwrap();
+    assert_eq!(result.chars().count(), 256);
+}
+
+/// マルチバイト文字（日本語）が UTF-8 境界で正しくクランプされる。
+#[test]
+fn enquiry_response_clamp_in_core_multibyte() {
+    // 260文字の日本語文字列 → 256文字にクランプ
+    let s: String = "あ".repeat(260);
+    let cfg = TerminalConfig { enquiry_response: Some(s), ..Default::default() };
+    let result = cfg.clamped_enquiry_response().unwrap();
+    assert_eq!(result.chars().count(), 256);
+    // UTF-8 として有効であることを確認
+    assert!(std::str::from_utf8(result.as_bytes()).is_ok());
+}

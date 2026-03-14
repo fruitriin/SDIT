@@ -844,6 +844,24 @@ const MAX_LINK_ENTRIES: usize = 32;
 const MAX_LINK_REGEX_LEN: usize = 512;
 const MAX_LINK_ACTION_LEN: usize = 1024;
 
+/// OSC 10/11/12 カラー問い合わせの応答形式。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum OscColorReportFormat {
+    /// 8-bit: rgb:RR/GG/BB
+    #[serde(rename = "8-bit")]
+    EightBit,
+    /// 16-bit: rgb:RRRR/GGGG/BBBB（デフォルト）
+    #[serde(rename = "16-bit")]
+    SixteenBit,
+}
+
+impl Default for OscColorReportFormat {
+    fn default() -> Self {
+        Self::SixteenBit
+    }
+}
+
 /// ターミナル設定。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
@@ -853,11 +871,49 @@ pub struct TerminalConfig {
     /// `"unicode"`: Unicode 標準の幅計算を使用する（デフォルト）。
     /// `"legacy"`: 旧来の wcswidth 互換モード（将来対応）。
     pub grapheme_width_method: GraphemeWidthMethod,
+    /// OSC 10/11/12 カラー問い合わせの応答形式。
+    ///
+    /// `"8-bit"`: `rgb:RR/GG/BB` 形式で応答する。
+    /// `"16-bit"`: `rgb:RRRR/GGGG/BBBB` 形式で応答する（デフォルト）。
+    pub osc_color_report_format: OscColorReportFormat,
+    /// ウィンドウタイトルの報告 (CSI 21 t) を許可するか。
+    ///
+    /// セキュリティ上の理由からデフォルトは `false`（拒否）。
+    /// `true` に設定するとアプリケーションがタイトルを問い合わせできる。
+    pub title_report: bool,
+    /// ENQ (0x05) への応答文字列。
+    ///
+    /// `null` または未設定の場合は応答しない（デフォルト）。
+    /// 最大 256 文字。
+    pub enquiry_response: Option<String>,
 }
 
 impl Default for TerminalConfig {
     fn default() -> Self {
-        Self { grapheme_width_method: GraphemeWidthMethod::Unicode }
+        Self {
+            grapheme_width_method: GraphemeWidthMethod::Unicode,
+            osc_color_report_format: OscColorReportFormat::default(),
+            title_report: false,
+            enquiry_response: None,
+        }
+    }
+}
+
+impl TerminalConfig {
+    /// `enquiry_response` を最大 256 文字にクランプして返す。
+    ///
+    /// ライブラリ利用時でも長さ制限が確実に適用されるよう、
+    /// `sdit` バイナリ側の `clamp_enquiry_response` の代わりにこのメソッドを使用する。
+    pub fn clamped_enquiry_response(&self) -> Option<String> {
+        self.enquiry_response.as_ref().map(|s| {
+            const MAX_ENQ_CHARS: usize = 256;
+            if s.chars().count() > MAX_ENQ_CHARS {
+                let idx = s.char_indices().nth(MAX_ENQ_CHARS).map(|(i, _)| i).unwrap_or(s.len());
+                s[..idx].to_string()
+            } else {
+                s.clone()
+            }
+        })
     }
 }
 

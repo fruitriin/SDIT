@@ -826,3 +826,112 @@ fn command_notify_mode_deserialize() {
     let cfg_always: NotificationConfig = toml::from_str("command_notify = \"always\"").unwrap();
     assert_eq!(cfg_always.command_notify, CommandNotifyMode::Always);
 }
+
+// ---------------------------------------------------------------------------
+// Phase 20.4: OSC Color Report Format
+// ---------------------------------------------------------------------------
+
+/// OscColorReportFormat のデフォルト値が SixteenBit であることを確認する。
+#[test]
+fn osc_color_report_format_default() {
+    use crate::config::OscColorReportFormat;
+    let term = Terminal::new(24, 80, 100);
+    assert_eq!(term.osc_color_report_format, OscColorReportFormat::SixteenBit);
+}
+
+/// OSC 10;? に対して 16-bit 形式で応答することを確認する。
+#[test]
+fn osc_10_foreground_query_16bit() {
+    let (mut proc, mut term) = make_proc_term(24, 80);
+    // デフォルトは SixteenBit
+    proc.advance(&mut term, b"\x1b]10;?\x1b\\");
+    let writes = term.drain_pending_writes().unwrap_or_default();
+    let response = std::str::from_utf8(&writes).unwrap();
+    assert!(
+        response.contains("rgb:ffff/ffff/ffff"),
+        "expected 16-bit foreground response, got: {response:?}"
+    );
+}
+
+/// OSC 11;? に対して 8-bit 形式で応答することを確認する。
+#[test]
+fn osc_11_background_query_8bit() {
+    use crate::config::OscColorReportFormat;
+    let (mut proc, mut term) = make_proc_term(24, 80);
+    term.osc_color_report_format = OscColorReportFormat::EightBit;
+    proc.advance(&mut term, b"\x1b]11;?\x1b\\");
+    let writes = term.drain_pending_writes().unwrap_or_default();
+    let response = std::str::from_utf8(&writes).unwrap();
+    assert!(
+        response.contains("rgb:00/00/00"),
+        "expected 8-bit background response, got: {response:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 20.5: Title Report Flag
+// ---------------------------------------------------------------------------
+
+/// title_report のデフォルト値が false であることを確認する。
+#[test]
+fn title_report_config_default() {
+    let term = Terminal::new(24, 80, 100);
+    assert!(!term.title_report);
+}
+
+/// title_report=true かつタイトル設定済みのとき CSI 21 t で応答があることを確認する。
+#[test]
+fn csi_21t_title_report_enabled() {
+    let (mut proc, mut term) = make_proc_term(24, 80);
+    term.title_report = true;
+    // OSC 2 でタイトルを設定
+    proc.advance(&mut term, b"\x1b]2;MyTitle\x1b\\");
+    // CSI 21 t で問い合わせ
+    proc.advance(&mut term, b"\x1b[21t");
+    let writes = term.drain_pending_writes().unwrap_or_default();
+    assert!(!writes.is_empty(), "expected title report response");
+    let response = std::str::from_utf8(&writes).unwrap();
+    assert!(response.contains("MyTitle"), "expected title in response, got: {response:?}");
+}
+
+/// title_report=false のとき CSI 21 t で応答しないことを確認する。
+#[test]
+fn csi_21t_title_report_disabled() {
+    let (mut proc, mut term) = make_proc_term(24, 80);
+    // title_report はデフォルト false
+    proc.advance(&mut term, b"\x1b]2;MyTitle\x1b\\");
+    proc.advance(&mut term, b"\x1b[21t");
+    let writes = term.drain_pending_writes();
+    assert!(writes.is_none(), "expected no response when title_report is disabled");
+}
+
+// ---------------------------------------------------------------------------
+// Phase 20.6: Enquiry Response
+// ---------------------------------------------------------------------------
+
+/// enquiry_response のデフォルト値が None であることを確認する。
+#[test]
+fn enquiry_response_config_default() {
+    let term = Terminal::new(24, 80, 100);
+    assert!(term.enquiry_response.is_none());
+}
+
+/// enquiry_response が設定されているとき ENQ (0x05) で応答することを確認する。
+#[test]
+fn enq_response_set() {
+    let (mut proc, mut term) = make_proc_term(24, 80);
+    term.enquiry_response = Some("test-answerback".to_string());
+    proc.advance(&mut term, b"\x05");
+    let writes = term.drain_pending_writes().unwrap_or_default();
+    assert_eq!(std::str::from_utf8(&writes).unwrap(), "test-answerback");
+}
+
+/// enquiry_response=None のとき ENQ で応答しないことを確認する。
+#[test]
+fn enq_response_none() {
+    let (mut proc, mut term) = make_proc_term(24, 80);
+    // enquiry_response はデフォルト None
+    proc.advance(&mut term, b"\x05");
+    let writes = term.drain_pending_writes();
+    assert!(writes.is_none(), "expected no response when enquiry_response is None");
+}

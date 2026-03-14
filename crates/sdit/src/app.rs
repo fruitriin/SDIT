@@ -553,11 +553,14 @@ impl SditApp {
             }
         };
 
-        // shell_integration_enabled をセッションの Terminal に反映する
+        // shell_integration_enabled / terminal config をセッションの Terminal に反映する
         {
             let mut state =
                 session.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             state.terminal.shell_integration_enabled = self.config.shell_integration.enabled;
+            state.terminal.osc_color_report_format = self.config.terminal.osc_color_report_format;
+            state.terminal.title_report = self.config.terminal.title_report;
+            state.terminal.enquiry_response = self.config.terminal.clamped_enquiry_response();
         }
 
         self.session_mgr.insert(session);
@@ -765,6 +768,24 @@ impl SditApp {
             }
         }
 
+        // 10b. terminal config 変更チェック（osc_color_report_format / title_report / enquiry_response）
+        let terminal_config_changed = self.config.terminal.osc_color_report_format
+            != new_config.terminal.osc_color_report_format
+            || self.config.terminal.title_report != new_config.terminal.title_report
+            || self.config.terminal.enquiry_response != new_config.terminal.enquiry_response;
+        if terminal_config_changed {
+            let fmt = new_config.terminal.osc_color_report_format;
+            let title_report = new_config.terminal.title_report;
+            let enq = new_config.terminal.clamped_enquiry_response();
+            for session in self.session_mgr.all() {
+                let mut state =
+                    session.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                state.terminal.osc_color_report_format = fmt;
+                state.terminal.title_report = title_report;
+                state.terminal.enquiry_response = enq.clone();
+            }
+        }
+
         // 11. 設定を置換
         self.compiled_quick_select_patterns = compile_quick_select_patterns(&new_config);
         // カスタムリンク変更時に UrlDetector を再構築
@@ -950,9 +971,6 @@ pub(crate) fn wrap_bracketed_paste(text: &str) -> Vec<u8> {
     v
 }
 
-/// IME Commit テキストをPTY送信用バイト列に変換する。
-///
-/// `bracketed_paste` が true かつテキストが2バイト以上の場合、
 /// ブラケットペーストシーケンスで包む（Terminal Injection 攻撃防止のためサニタイズ済み）。
 /// 1バイト以下の場合は通常の文字入力として `into_bytes()` を返す。
 pub(crate) fn ime_commit_to_bytes(text: String, bracketed_paste: bool) -> Vec<u8> {

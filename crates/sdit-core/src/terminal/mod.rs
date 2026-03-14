@@ -16,6 +16,7 @@ use std::sync::Arc;
 use bitflags::bitflags;
 use vte::Perform;
 
+use crate::config::OscColorReportFormat;
 use crate::grid::{Cell, CellFlags, Color, Dimensions, Grid, GridCell, NamedColor};
 use crate::index::{Column, Line, Point};
 
@@ -271,6 +272,19 @@ pub struct Terminal {
     /// コマンド終了通知ペンディング（elapsed_secs, exit_code）。
     /// GUI 側で Config を参照して閾値判定・通知送信を行う。
     pub(super) command_finished_pending: Option<(u64, Option<i32>)>,
+    /// OSC 10/11 カラー問い合わせの応答形式。
+    ///
+    /// Config への参照を持たないため、GUI 側（app.rs）で設定して渡す。
+    pub osc_color_report_format: OscColorReportFormat,
+    /// CSI 21 t タイトル報告を許可するか。
+    ///
+    /// Config への参照を持たないため、GUI 側（app.rs）で設定して渡す。
+    /// デフォルト: `false`（セキュリティ上の理由から拒否）。
+    pub title_report: bool,
+    /// ENQ (0x05) への応答文字列。None の場合は応答しない。
+    ///
+    /// Config への参照を持たないため、GUI 側（app.rs）で設定して渡す。
+    pub enquiry_response: Option<String>,
 }
 
 impl Terminal {
@@ -302,6 +316,9 @@ impl Terminal {
             cwd_pending: None,
             command_start_time: None,
             command_finished_pending: None,
+            osc_color_report_format: OscColorReportFormat::default(),
+            title_report: false,
+            enquiry_response: None,
         }
     }
 
@@ -339,6 +356,9 @@ impl Terminal {
             cwd_pending: None,
             command_start_time: None,
             command_finished_pending: None,
+            osc_color_report_format: OscColorReportFormat::default(),
+            title_report: false,
+            enquiry_response: None,
         }
     }
 
@@ -717,6 +737,19 @@ impl Perform for Terminal {
 
     fn execute(&mut self, byte: u8) {
         match byte {
+            // ENQ — Enquiry
+            0x05 => {
+                if let Some(ref response) = self.enquiry_response {
+                    if !response.is_empty() {
+                        let bytes = response.as_bytes();
+                        if self.pending_writes.len().saturating_add(bytes.len())
+                            <= MAX_PENDING_WRITES
+                        {
+                            self.pending_writes.extend_from_slice(bytes);
+                        }
+                    }
+                }
+            }
             // BEL
             0x07 => {
                 self.bell_pending = true;
@@ -842,6 +875,32 @@ impl Perform for Terminal {
                 if url.starts_with("file://") && url.bytes().all(|b| b >= 0x20 && b != 0x7F) {
                     self.cwd_pending = Some(url.to_owned());
                 }
+            }
+            return;
+        }
+
+        // OSC 10: foreground color query.
+        // 形式: \e]10;?\ST → \e]10;rgb:RRRR/GGGG/BBBB\ST
+        if params.len() >= 2 && params[0] == b"10" && params[1] == b"?" {
+            let response: &[u8] = match self.osc_color_report_format {
+                OscColorReportFormat::EightBit => b"\x1b]10;rgb:ff/ff/ff\x1b\\",
+                OscColorReportFormat::SixteenBit => b"\x1b]10;rgb:ffff/ffff/ffff\x1b\\",
+            };
+            if self.pending_writes.len().saturating_add(response.len()) <= MAX_PENDING_WRITES {
+                self.pending_writes.extend_from_slice(response);
+            }
+            return;
+        }
+
+        // OSC 11: background color query.
+        // 形式: \e]11;?\ST → \e]11;rgb:0000/0000/0000\ST
+        if params.len() >= 2 && params[0] == b"11" && params[1] == b"?" {
+            let response: &[u8] = match self.osc_color_report_format {
+                OscColorReportFormat::EightBit => b"\x1b]11;rgb:00/00/00\x1b\\",
+                OscColorReportFormat::SixteenBit => b"\x1b]11;rgb:0000/0000/0000\x1b\\",
+            };
+            if self.pending_writes.len().saturating_add(response.len()) <= MAX_PENDING_WRITES {
+                self.pending_writes.extend_from_slice(response);
             }
             return;
         }
