@@ -1245,6 +1245,17 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 log::debug!("IME state changed for window {id:?}");
             }
 
+            WindowEvent::CursorEntered { .. } => {
+                // focus_follows_mouse: マウスが乗ったウィンドウを自動フォーカス
+                if self.config.mouse.focus_follows_mouse {
+                    if let Some(ws) = self.windows.get(&id) {
+                        if !ws.window.has_focus() {
+                            ws.window.focus_window();
+                        }
+                    }
+                }
+            }
+
             _ => {}
         }
     }

@@ -1183,3 +1183,71 @@ fn window_subtitle_deserialize() {
         assert_eq!(cfg.window.subtitle, expected, "failed for {s}");
     }
 }
+
+#[test]
+fn window_position_config_default() {
+    let cfg = WindowConfig::default();
+    assert!(cfg.position_x.is_none(), "position_x のデフォルトは None");
+    assert!(cfg.position_y.is_none(), "position_y のデフォルトは None");
+}
+
+#[test]
+fn window_position_config_deserialize() {
+    let toml_str = "[window]\nposition_x = 100\nposition_y = 200\n";
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(cfg.window.position_x, Some(100));
+    assert_eq!(cfg.window.position_y, Some(200));
+}
+
+#[test]
+fn focus_follows_mouse_config_default() {
+    let cfg = MouseConfig::default();
+    assert!(!cfg.focus_follows_mouse, "focus_follows_mouse のデフォルトは false");
+}
+
+#[test]
+fn focus_follows_mouse_config_deserialize() {
+    let toml_str = "[mouse]\nfocus_follows_mouse = true\n";
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+    assert!(cfg.mouse.focus_follows_mouse);
+}
+
+#[test]
+fn window_position_clamp() {
+    // 両方 None のとき: None を返す
+    let mut cfg = WindowConfig::default();
+    assert_eq!(cfg.clamped_position(), None, "position_x/y が両方 None なら None");
+
+    // 片方のみ Some のとき: None を返す
+    cfg.position_x = Some(100);
+    cfg.position_y = None;
+    assert_eq!(cfg.clamped_position(), None, "position_x のみ Some でも None");
+
+    cfg.position_x = None;
+    cfg.position_y = Some(200);
+    assert_eq!(cfg.clamped_position(), None, "position_y のみ Some でも None");
+
+    // 通常値はそのまま返す
+    cfg.position_x = Some(100);
+    cfg.position_y = Some(200);
+    assert_eq!(cfg.clamped_position(), Some((100, 200)), "通常値はそのまま");
+
+    // 上限を超える値はクランプされる
+    cfg.position_x = Some(999_999);
+    cfg.position_y = Some(999_999);
+    assert_eq!(cfg.clamped_position(), Some((32000, 32000)), "上限 999999 → 32000 にクランプ");
+
+    // 負方向の極端な値もクランプされる
+    cfg.position_x = Some(-10_000_000);
+    cfg.position_y = Some(-10_000_000);
+    assert_eq!(
+        cfg.clamped_position(),
+        Some((-16000, -16000)),
+        "下限 -10000000 → -16000 にクランプ"
+    );
+
+    // 境界値はそのまま通る
+    cfg.position_x = Some(-16000);
+    cfg.position_y = Some(32000);
+    assert_eq!(cfg.clamped_position(), Some((-16000, 32000)), "境界値はそのまま");
+}

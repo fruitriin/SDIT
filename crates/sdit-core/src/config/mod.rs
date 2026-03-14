@@ -212,6 +212,10 @@ pub struct WindowConfig {
     /// `"session-name"`: セッション名を表示。
     #[serde(default)]
     pub subtitle: WindowSubtitle,
+    /// 初期ウィンドウ位置 X（物理ピクセル）。省略時: OS 任せ。
+    pub position_x: Option<i32>,
+    /// 初期ウィンドウ位置 Y（物理ピクセル）。省略時: OS 任せ。
+    pub position_y: Option<i32>,
 }
 
 impl Default for WindowConfig {
@@ -235,6 +239,8 @@ impl Default for WindowConfig {
             working_directory: None,
             padding_color: PaddingColor::Background,
             subtitle: WindowSubtitle::None,
+            position_x: None,
+            position_y: None,
         }
     }
 }
@@ -275,6 +281,18 @@ impl WindowConfig {
             self.background_image_opacity.clamp(0.0, 1.0)
         } else {
             0.3
+        }
+    }
+
+    /// `position_x/y` を安全な範囲にクランプして返す。
+    ///
+    /// 両方 `Some` のときのみ座標を返す。
+    /// マルチディスプレイ環境を考慮し、合理的な範囲（-16000〜32000）にクランプする。
+    /// 一般的な最大解像度（8K × 4 ディスプレイ程度）を上限とする。
+    pub fn clamped_position(&self) -> Option<(i32, i32)> {
+        match (self.position_x, self.position_y) {
+            (Some(x), Some(y)) => Some((x.clamp(-16000, 32000), y.clamp(-16000, 32000))),
+            _ => None,
         }
     }
 }
@@ -612,6 +630,8 @@ pub struct MouseConfig {
     /// ダブル/トリプルクリック判定の時間間隔（ミリ秒、デフォルト: 300、範囲: 50-2000）。
     #[serde(default = "default_click_repeat_interval")]
     pub click_repeat_interval: u32,
+    /// マウスがウィンドウに乗ったとき自動フォーカスする（デフォルト: false）。
+    pub focus_follows_mouse: bool,
 }
 
 /// スクロールバー設定。
@@ -677,6 +697,7 @@ impl Default for MouseConfig {
             hide_when_typing: false,
             right_click_action: RightClickAction::ContextMenu,
             click_repeat_interval: default_click_repeat_interval(),
+            focus_follows_mouse: false,
         }
     }
 }

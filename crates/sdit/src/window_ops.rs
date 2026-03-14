@@ -362,6 +362,8 @@ impl SditApp {
             None,
             None,
             1.0,
+            false, // bold_is_bright: Quick Terminal ではデフォルト
+            0.5,   // faint_opacity: Quick Terminal ではデフォルト
         );
         drop(state_lock);
         atlas.upload_if_dirty(&gpu.queue);
@@ -436,7 +438,9 @@ impl SditApp {
             let width = f64::from(cols * metrics.cell_width + 2.0 * padding_x);
             let height = f64::from(rows * metrics.cell_height + 2.0 * padding_y);
             attrs = attrs.with_inner_size(winit::dpi::LogicalSize::new(width, height));
-            if let Some(pos) = self.cascade_position() {
+            if let Some((x, y)) = self.config.window.clamped_position() {
+                attrs = attrs.with_position(winit::dpi::PhysicalPosition::new(x, y));
+            } else if let Some(pos) = self.cascade_position() {
                 attrs = attrs.with_position(pos);
             }
         }
@@ -520,9 +524,11 @@ impl SditApp {
             None,
             None,
             None,
-            None, // selection_fg: 初期描画では None
-            None, // selection_bg: 初期描画では None
-            1.0,  // minimum_contrast: 初期描画ではデフォルト（無効）
+            None,  // selection_fg: 初期描画では None
+            None,  // selection_bg: 初期描画では None
+            1.0,   // minimum_contrast: 初期描画ではデフォルト（無効）
+            false, // bold_is_bright: 初期描画ではデフォルト
+            0.5,   // faint_opacity: 初期描画ではデフォルト
         );
         drop(state_lock);
 

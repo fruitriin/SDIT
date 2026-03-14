@@ -137,6 +137,8 @@ impl SditApp {
         });
 
         let minimum_contrast = self.config.colors.clamped_minimum_contrast();
+        let bold_is_bright = self.config.colors.bold_is_bright;
+        let faint_opacity = self.config.colors.clamped_faint_opacity();
         ws.cell_pipeline.update_from_grid(
             &ws.gpu.queue,
             grid,
@@ -154,6 +156,8 @@ impl SditApp {
             selection_fg,
             selection_bg,
             minimum_contrast,
+            bold_is_bright,
+            faint_opacity,
         );
         drop(state_lock);
 

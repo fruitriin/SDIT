@@ -445,6 +445,8 @@ impl CellPipeline {
         selection_fg: Option<[f32; 4]>,
         selection_bg: Option<[f32; 4]>,
         minimum_contrast: f32,
+        bold_is_bright: bool,
+        faint_opacity: f32,
     ) {
         let rows = grid.screen_lines();
         let cols = grid.columns();
@@ -501,16 +503,36 @@ impl CellPipeline {
                 let is_current_match = current_search_match
                     .is_some_and(|(mr, ms, me)| row == mr && col >= ms && col < me);
                 let is_search_match = match_set.contains(&(row, col));
+
+                // bold_is_bright: BOLD フラグ + 通常 Named 色 → Bright 変換
+                let effective_fg = if bold_is_bright && cell.flags.contains(CellFlags::BOLD) {
+                    match cell.fg {
+                        Color::Named(NamedColor::Black) => Color::Named(NamedColor::BrightBlack),
+                        Color::Named(NamedColor::Red) => Color::Named(NamedColor::BrightRed),
+                        Color::Named(NamedColor::Green) => Color::Named(NamedColor::BrightGreen),
+                        Color::Named(NamedColor::Yellow) => Color::Named(NamedColor::BrightYellow),
+                        Color::Named(NamedColor::Blue) => Color::Named(NamedColor::BrightBlue),
+                        Color::Named(NamedColor::Magenta) => {
+                            Color::Named(NamedColor::BrightMagenta)
+                        }
+                        Color::Named(NamedColor::Cyan) => Color::Named(NamedColor::BrightCyan),
+                        Color::Named(NamedColor::White) => Color::Named(NamedColor::BrightWhite),
+                        other => other,
+                    }
+                } else {
+                    cell.fg
+                };
+
                 let (bg, fg) = if is_cursor {
                     // カーソル色が設定されていればそれを使用し、なければ反転
                     if let Some(c) = cursor_color {
                         (c, color_to_rgba(cell.bg))
                     } else {
-                        (color_to_rgba(cell.fg), color_to_rgba(cell.bg))
+                        (color_to_rgba(effective_fg), color_to_rgba(cell.bg))
                     }
                 } else if is_selected {
                     // 選択色: 設定があればそれを使用し、なければ fg/bg 反転
-                    let sel_bg = selection_bg.unwrap_or_else(|| color_to_rgba(cell.fg));
+                    let sel_bg = selection_bg.unwrap_or_else(|| color_to_rgba(effective_fg));
                     let sel_fg = selection_fg.unwrap_or_else(|| color_to_rgba(cell.bg));
                     (sel_bg, sel_fg)
                 } else if is_current_match {
@@ -521,7 +543,11 @@ impl CellPipeline {
                     (color_to_rgba(cell.bg), [0.4, 0.6, 1.0, 1.0])
                 } else {
                     let raw_bg = color_to_rgba(cell.bg);
-                    let raw_fg = color_to_rgba(cell.fg);
+                    let mut raw_fg = color_to_rgba(effective_fg);
+                    // faint_opacity: DIM フラグがあれば fg アルファを乗算
+                    if cell.flags.contains(CellFlags::DIM) {
+                        raw_fg[3] *= faint_opacity;
+                    }
                     // minimum_contrast が有効な場合、fg 色を調整する
                     let adjusted_fg = if minimum_contrast > 1.0 {
                         use crate::config::color::apply_minimum_contrast;

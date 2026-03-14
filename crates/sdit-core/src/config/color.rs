@@ -18,6 +18,16 @@ pub struct ColorConfig {
     pub search_foreground: Option<String>,
     /// 検索ハイライトの背景色（hex 文字列 "#RRGGBB"）。None = デフォルト色を使用。
     pub search_background: Option<String>,
+    /// 太字テキストを明色（Bright variant）に変換する（デフォルト: false）。
+    ///
+    /// `true` の場合、`CellFlags::BOLD` が立っているセルの fg が通常 Named 色
+    /// （Black..White）であれば対応する BrightBlack..BrightWhite に変換して描画する。
+    pub bold_is_bright: bool,
+    /// SGR 2（DIM/FAINT）のアルファ倍率（デフォルト: 0.5）。
+    ///
+    /// `CellFlags::DIM` が立っているセルの fg アルファをこの値で乗算する。
+    /// 有効範囲: 0.0〜1.0。NaN は 0.5 として扱う。
+    pub faint_opacity: f32,
 }
 
 impl Default for ColorConfig {
@@ -29,6 +39,8 @@ impl Default for ColorConfig {
             minimum_contrast: 1.0,
             search_foreground: None,
             search_background: None,
+            bold_is_bright: false,
+            faint_opacity: 0.5,
         }
     }
 }
@@ -39,6 +51,13 @@ impl ColorConfig {
     /// NaN や Inf が渡された場合はデフォルト値 1.0 を返す（無効扱い）。
     pub fn clamped_minimum_contrast(&self) -> f32 {
         if self.minimum_contrast.is_finite() { self.minimum_contrast.clamp(1.0, 21.0) } else { 1.0 }
+    }
+
+    /// faint_opacity を安全な範囲（0.0〜1.0）にクランプして返す。
+    ///
+    /// NaN や非有限値が渡された場合はデフォルト値 0.5 を返す。
+    pub fn clamped_faint_opacity(&self) -> f32 {
+        if self.faint_opacity.is_finite() { self.faint_opacity.clamp(0.0, 1.0) } else { 0.5 }
     }
 }
 
@@ -531,6 +550,28 @@ mod tests {
         assert!(parse_selection_color("invalid").is_none());
         assert!(parse_selection_color("#gg0000").is_none());
         assert!(parse_selection_color("#fff").is_none());
+    }
+
+    #[test]
+    fn bold_is_bright_config_default() {
+        let cc = ColorConfig::default();
+        assert!(!cc.bold_is_bright, "bold_is_bright のデフォルトは false");
+    }
+
+    #[test]
+    fn faint_opacity_config_clamp() {
+        let mut cc = ColorConfig::default();
+        // デフォルト 0.5
+        assert!((cc.clamped_faint_opacity() - 0.5).abs() < f32::EPSILON, "デフォルトは 0.5");
+        // 負数 → 0.0
+        cc.faint_opacity = -0.1;
+        assert!((cc.clamped_faint_opacity() - 0.0).abs() < f32::EPSILON, "負数は 0.0");
+        // 2.0 → 1.0
+        cc.faint_opacity = 2.0;
+        assert!((cc.clamped_faint_opacity() - 1.0).abs() < f32::EPSILON, "2.0 は 1.0");
+        // NaN → 0.5
+        cc.faint_opacity = f32::NAN;
+        assert!((cc.clamped_faint_opacity() - 0.5).abs() < f32::EPSILON, "NaN は 0.5");
     }
 
     #[test]
