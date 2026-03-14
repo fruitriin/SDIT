@@ -14,16 +14,22 @@ Claude Code のトークン消費を抑えるため、実装タスクを Codex C
 
 ## 指示ファイルの互換性
 
-CLAUDE.md → AGENTS.md のシンボリックリンクで3ツール対応:
-```bash
-ln -s CLAUDE.md AGENTS.md
+`AGENTS.md` を実ファイルとして置き、`CLAUDE.md` と `CLAUDE.local.md` を読むよう指示する:
+
+```markdown
+# AGENTS.md
+1. `CLAUDE.md` — プロジェクト全体の設計指針（コミット済み）
+2. `CLAUDE.local.md` — ローカル固有の規約（存在する場合のみ読む）
 ```
 
-- Claude Code: CLAUDE.md をネイティブ読み、AGENTS.md もfallbackで読む
-- Codex CLI: AGENTS.md をネイティブ読み
-- Copilot CLI: AGENTS.md を primary instructions として読む
+- Claude Code: `CLAUDE.md` / `CLAUDE.local.md` をネイティブ読み
+- Codex CLI: `AGENTS.md` をネイティブ読み → `CLAUDE.md` / `CLAUDE.local.md` を読む指示に従う
+- Copilot CLI: `AGENTS.md` を primary instructions として読む → 同上
 
-Codex で CLAUDE.md を直接読む場合は `~/.codex/config.toml`:
+**`CLAUDE.local.md` は Copilot/Codex に直接読まれない**（`.local` バリアントは非対応）。
+`AGENTS.md` に「`CLAUDE.local.md` を読め」と書くことで間接的に対応する。
+
+Codex で `CLAUDE.md` を直接読む場合は `~/.codex/config.toml`:
 ```toml
 project_doc_fallback_filenames = ["CLAUDE.md"]
 ```
