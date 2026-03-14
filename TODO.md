@@ -3,7 +3,7 @@
 `docs/plans/` の完了状態・優先度をトラックする。
 `docs/plans/` と TODO が一致しなければ TODO を編集する。
 
-## 現在のフェーズ: Phase 16.2（次に着手）
+## 現在のフェーズ: Phase 16.8（次に着手）
 
 ## バックログ
 
@@ -52,11 +52,11 @@
 | done | 15.2 | `docs/plans/phase15.2-input-polish.md` | **完了** |
 | done | 15.3 | `docs/plans/phase15.3-font-advanced.md` | **完了** |
 | done | 15.4 | `docs/plans/phase15.4-link-session.md` | **完了** |
-| 高 | 16.2 | `docs/plans/phase16.2-startup-mode.md` | 未着手 |
-| 高 | 16.5 | `docs/plans/phase16.5-clipboard-trim.md` | 未着手 |
-| 高 | 16.4 | `docs/plans/phase16.4-selection-colors.md` | 未着手 |
-| 高 | 16.6 | `docs/plans/phase16.6-cwd-inherit.md` | 未着手 |
-| 高 | 16.7 | `docs/plans/phase16.7-scroll-to-bottom.md` | 未着手 |
+| done | 16.2 | `docs/plans/phase16.2-startup-mode.md` | **完了** |
+| done | 16.5 | `docs/plans/phase16.5-clipboard-trim.md` | **完了** |
+| done | 16.4 | `docs/plans/phase16.4-selection-colors.md` | **完了** |
+| done | 16.6 | `docs/plans/phase16.6-cwd-inherit.md` | **完了** |
+| done | 16.7 | `docs/plans/phase16.7-scroll-to-bottom.md` | **完了** |
 | 中高 | 16.8 | `docs/plans/phase16.8-minimum-contrast.md` | 未着手 |
 | 中高 | 16.9 | `docs/plans/phase16.9-secure-input.md` | 未着手 |
 | 中 | 16.1 | `docs/plans/phase16.1-scrollbar.md` | 未着手 |
