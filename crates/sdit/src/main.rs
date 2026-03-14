@@ -1,3 +1,4 @@
+mod action_handlers;
 mod app;
 mod config_watcher;
 mod confirm_close;

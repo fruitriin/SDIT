@@ -46,6 +46,14 @@ pub enum Action {
     ToggleViMode,
     /// Secure Keyboard Entry（セキュアキーボード入力）をトグルする。macOS のみ有効。
     ToggleSecureInput,
+    /// 次のテーマに切り替える（テーマをサイクル）。
+    NextTheme,
+    /// 前のテーマに切り替える（テーマをサイクル）。
+    PreviousTheme,
+    /// ウィンドウデコレーション（タイトルバー等）の表示をトグルする。
+    ToggleDecorations,
+    /// ウィンドウを常に最前面に表示するかどうかをトグルする。
+    ToggleAlwaysOnTop,
 }
 
 // ---------------------------------------------------------------------------

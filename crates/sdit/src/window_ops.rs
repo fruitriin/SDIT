@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use winit::event_loop::ActiveEventLoop;
-use winit::window::{Fullscreen, Window, WindowId};
+use winit::window::{Fullscreen, Window, WindowId, WindowLevel};
 
 #[cfg(target_os = "macos")]
 use winit::platform::macos::{OptionAsAlt as WinitOptionAsAlt, WindowExtMacOS};
 
-use sdit_core::config::StartupMode;
+use sdit_core::config::{Decorations, StartupMode};
 use sdit_core::pty::PtySize;
 use sdit_core::render::atlas::Atlas;
 use sdit_core::render::pipeline::{CellPipeline, GpuContext};
@@ -68,10 +68,12 @@ impl SditApp {
     ) {
         let needs_transparent =
             self.config.window.clamped_opacity() < 1.0 || self.config.window.blur;
+        let has_decorations = self.config.window.decorations == Decorations::Full;
         let mut attrs = Window::default_attributes()
             .with_title("SDIT")
             .with_transparent(needs_transparent)
-            .with_blur(self.config.window.blur);
+            .with_blur(self.config.window.blur)
+            .with_decorations(has_decorations);
 
         if let Some(geom) = geometry {
             attrs = attrs
@@ -105,6 +107,10 @@ impl SditApp {
                         }
                         StartupMode::Windowed => {}
                     }
+                }
+                // always_on_top を適用する
+                if self.config.window.always_on_top {
+                    w.set_window_level(WindowLevel::AlwaysOnTop);
                 }
                 Arc::new(w)
             }

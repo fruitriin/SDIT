@@ -737,6 +737,28 @@ impl SditApp {
         log::info!("Config reloaded successfully");
     }
 
+    /// テーマをサイクルする。
+    ///
+    /// `forward` が `true` のとき次のテーマ、`false` のとき前のテーマに切り替える。
+    /// テーマを変更後、設定ファイルに保存する。
+    ///
+    /// 再描画の呼び出しは呼び出し側の責任（`event_loop.rs` で `request_redraw` を呼ぶ）。
+    pub(crate) fn cycle_theme(&mut self, forward: bool) {
+        let new_theme = if forward {
+            self.config.colors.theme.next().clone()
+        } else {
+            self.config.colors.theme.prev().clone()
+        };
+        log::info!("Theme changed to: {new_theme:?}");
+        self.colors = sdit_core::config::color::ResolvedColors::from_theme(&new_theme);
+        self.config.colors.theme = new_theme;
+        // 設定ファイルに保存する
+        let path = sdit_core::config::Config::default_path();
+        if let Err(e) = self.config.save(&path) {
+            log::warn!("Failed to save config after theme change: {e}");
+        }
+    }
+
     /// フォントサイズを変更する。
     ///
     /// `delta` が `Some(d)` のとき現在サイズに `d` を加算、`None` のときデフォルトサイズに復帰する。

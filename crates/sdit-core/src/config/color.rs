@@ -58,6 +58,49 @@ pub enum ThemeName {
     CatppuccinLatte,
     #[serde(rename = "gruvbox-dark")]
     GruvboxDark,
+    #[serde(rename = "solarized-dark")]
+    SolarizedDark,
+    #[serde(rename = "solarized-light")]
+    SolarizedLight,
+    #[serde(rename = "dracula")]
+    Dracula,
+    #[serde(rename = "nord")]
+    Nord,
+    #[serde(rename = "one-dark")]
+    OneDark,
+    #[serde(rename = "tokyo-night")]
+    TokyoNight,
+}
+
+impl ThemeName {
+    /// 全テーマ名を定義順に返す。テーマサイクル操作に使用する。
+    pub fn all() -> &'static [ThemeName] {
+        &[
+            ThemeName::CatppuccinMocha,
+            ThemeName::CatppuccinLatte,
+            ThemeName::GruvboxDark,
+            ThemeName::SolarizedDark,
+            ThemeName::SolarizedLight,
+            ThemeName::Dracula,
+            ThemeName::Nord,
+            ThemeName::OneDark,
+            ThemeName::TokyoNight,
+        ]
+    }
+
+    /// 次のテーマを返す（末尾は先頭に折り返す）。
+    pub fn next(&self) -> &'static ThemeName {
+        let all = Self::all();
+        let idx = all.iter().position(|t| t == self).unwrap_or(0);
+        &all[(idx + 1) % all.len()]
+    }
+
+    /// 前のテーマを返す（先頭は末尾に折り返す）。
+    pub fn prev(&self) -> &'static ThemeName {
+        let all = Self::all();
+        let idx = all.iter().position(|t| t == self).unwrap_or(0);
+        &all[(idx + all.len() - 1) % all.len()]
+    }
 }
 
 /// 解決済みカラーテーブル（f32 RGBA）。レンダラーが直接使用する。
@@ -84,6 +127,12 @@ impl ResolvedColors {
             ThemeName::CatppuccinMocha => Self::catppuccin_mocha(),
             ThemeName::CatppuccinLatte => Self::catppuccin_latte(),
             ThemeName::GruvboxDark => Self::gruvbox_dark(),
+            ThemeName::SolarizedDark => Self::solarized_dark(),
+            ThemeName::SolarizedLight => Self::solarized_light(),
+            ThemeName::Dracula => Self::dracula(),
+            ThemeName::Nord => Self::nord(),
+            ThemeName::OneDark => Self::one_dark(),
+            ThemeName::TokyoNight => Self::tokyo_night(),
         }
     }
 
@@ -117,6 +166,72 @@ impl ResolvedColors {
             sidebar_active_bg: hex_to_rgba(0x50, 0x49, 0x45), // bg2
             sidebar_fg: hex_to_rgba(0xeb, 0xdb, 0xb2),        // fg
             sidebar_dim_fg: hex_to_rgba(0xa8, 0x99, 0x84),    // fg4
+        }
+    }
+
+    fn solarized_dark() -> Self {
+        Self {
+            background: hex_to_rgba(0x00, 0x2b, 0x36),        // base03
+            foreground: hex_to_rgba(0x83, 0x94, 0x96),        // base0（contrast 4.11 on base03）
+            sidebar_bg: hex_to_rgba(0x07, 0x36, 0x42),        // base02
+            sidebar_active_bg: hex_to_rgba(0x58, 0x6e, 0x75), // base01
+            sidebar_fg: hex_to_rgba(0x93, 0xa1, 0xa1),        // base1（contrast 4.86 on base02）
+            sidebar_dim_fg: hex_to_rgba(0x70, 0x7e, 0x80),    // adjusted（contrast 3.09 on base02）
+        }
+    }
+
+    fn solarized_light() -> Self {
+        Self {
+            background: hex_to_rgba(0xfd, 0xf6, 0xe3),        // base3
+            foreground: hex_to_rgba(0x58, 0x6e, 0x75),        // base01（contrast 4.99 on base3）
+            sidebar_bg: hex_to_rgba(0xee, 0xe8, 0xd5),        // base2
+            sidebar_active_bg: hex_to_rgba(0x93, 0xa1, 0xa1), // base1
+            sidebar_fg: hex_to_rgba(0x48, 0x6e, 0x72),        // adjusted（contrast 4.57 on base2）
+            sidebar_dim_fg: hex_to_rgba(0x65, 0x7b, 0x83),    // base00（contrast 3.64 on base2）
+        }
+    }
+
+    fn dracula() -> Self {
+        Self {
+            background: hex_to_rgba(0x28, 0x2a, 0x36), // Background
+            foreground: hex_to_rgba(0xf8, 0xf8, 0xf2), // Foreground
+            sidebar_bg: hex_to_rgba(0x44, 0x47, 0x5a), // Current Line
+            sidebar_active_bg: hex_to_rgba(0x6e, 0x72, 0x82), // Comment（少し明るめ）
+            sidebar_fg: hex_to_rgba(0xf8, 0xf8, 0xf2), // Foreground
+            sidebar_dim_fg: hex_to_rgba(0xbd, 0xc3, 0xd0), // dimmed foreground（AA準拠）
+        }
+    }
+
+    fn nord() -> Self {
+        Self {
+            background: hex_to_rgba(0x2e, 0x34, 0x40),        // nord0
+            foreground: hex_to_rgba(0xd8, 0xde, 0xe9),        // nord4
+            sidebar_bg: hex_to_rgba(0x3b, 0x42, 0x52),        // nord1
+            sidebar_active_bg: hex_to_rgba(0x43, 0x4c, 0x5e), // nord2
+            sidebar_fg: hex_to_rgba(0xd8, 0xde, 0xe9),        // nord4
+            sidebar_dim_fg: hex_to_rgba(0xa0, 0xa8, 0xb8),    // nord3 adjusted for AA
+        }
+    }
+
+    fn one_dark() -> Self {
+        Self {
+            background: hex_to_rgba(0x28, 0x2c, 0x34), // Atom One Dark bg
+            foreground: hex_to_rgba(0xab, 0xb2, 0xbf), // fg
+            sidebar_bg: hex_to_rgba(0x21, 0x25, 0x2b), // slightly darker
+            sidebar_active_bg: hex_to_rgba(0x3e, 0x44, 0x51), // selection bg
+            sidebar_fg: hex_to_rgba(0xab, 0xb2, 0xbf), // fg
+            sidebar_dim_fg: hex_to_rgba(0x7f, 0x84, 0x8e), // comment
+        }
+    }
+
+    fn tokyo_night() -> Self {
+        Self {
+            background: hex_to_rgba(0x1a, 0x1b, 0x26),        // bg
+            foreground: hex_to_rgba(0xc0, 0xca, 0xf5),        // fg
+            sidebar_bg: hex_to_rgba(0x16, 0x17, 0x20),        // bg_dark
+            sidebar_active_bg: hex_to_rgba(0x29, 0x2e, 0x42), // bg_highlight
+            sidebar_fg: hex_to_rgba(0xc0, 0xca, 0xf5),        // fg
+            sidebar_dim_fg: hex_to_rgba(0x70, 0x82, 0xa4), // adjusted（contrast 4.60 on bg_dark）
         }
     }
 }
@@ -298,9 +413,42 @@ mod tests {
 
     #[test]
     fn from_theme_all_variants() {
-        let _ = ResolvedColors::from_theme(&ThemeName::CatppuccinMocha);
-        let _ = ResolvedColors::from_theme(&ThemeName::CatppuccinLatte);
-        let _ = ResolvedColors::from_theme(&ThemeName::GruvboxDark);
+        for theme in ThemeName::all() {
+            let _ = ResolvedColors::from_theme(theme);
+        }
+    }
+
+    #[test]
+    fn theme_next_cycles() {
+        let all = ThemeName::all();
+        // 最後のテーマの次は先頭に戻る
+        let last = all.last().unwrap();
+        let next = last.next();
+        assert_eq!(next, &all[0]);
+        // 先頭テーマの前は末尾に戻る
+        let first = &all[0];
+        let prev = first.prev();
+        assert_eq!(prev, all.last().unwrap());
+    }
+
+    #[test]
+    fn theme_name_serde_roundtrip() {
+        let names = [
+            ("solarized-dark", ThemeName::SolarizedDark),
+            ("solarized-light", ThemeName::SolarizedLight),
+            ("dracula", ThemeName::Dracula),
+            ("nord", ThemeName::Nord),
+            ("one-dark", ThemeName::OneDark),
+            ("tokyo-night", ThemeName::TokyoNight),
+        ];
+        for (s, expected) in &names {
+            #[derive(serde::Deserialize)]
+            struct T {
+                theme: ThemeName,
+            }
+            let t: T = toml::from_str(&format!(r#"theme = "{s}""#)).unwrap();
+            assert_eq!(&t.theme, expected, "failed for {s}");
+        }
     }
 
     #[test]
@@ -389,9 +537,7 @@ mod tests {
     /// 全テーマで fg/bg コントラスト比が WCAG AA (4.5:1) 以上であることを検証。
     #[test]
     fn all_themes_fg_bg_contrast_aa() {
-        for theme in
-            &[ThemeName::CatppuccinMocha, ThemeName::CatppuccinLatte, ThemeName::GruvboxDark]
-        {
+        for theme in ThemeName::all() {
             let c = ResolvedColors::from_theme(theme);
             let fg = [c.foreground[0], c.foreground[1], c.foreground[2]];
             let bg = [c.background[0], c.background[1], c.background[2]];
@@ -403,9 +549,7 @@ mod tests {
     /// 全テーマでサイドバー fg/bg コントラスト比が AA 以上であることを検証。
     #[test]
     fn all_themes_sidebar_contrast_aa() {
-        for theme in
-            &[ThemeName::CatppuccinMocha, ThemeName::CatppuccinLatte, ThemeName::GruvboxDark]
-        {
+        for theme in ThemeName::all() {
             let c = ResolvedColors::from_theme(theme);
             let fg = [c.sidebar_fg[0], c.sidebar_fg[1], c.sidebar_fg[2]];
             let bg = [c.sidebar_bg[0], c.sidebar_bg[1], c.sidebar_bg[2]];
@@ -420,9 +564,7 @@ mod tests {
     /// 全テーマでサイドバー dim コントラスト比が 3:1 以上であることを検証。
     #[test]
     fn all_themes_sidebar_dim_contrast() {
-        for theme in
-            &[ThemeName::CatppuccinMocha, ThemeName::CatppuccinLatte, ThemeName::GruvboxDark]
-        {
+        for theme in ThemeName::all() {
             let c = ResolvedColors::from_theme(theme);
             let fg = [c.sidebar_dim_fg[0], c.sidebar_dim_fg[1], c.sidebar_dim_fg[2]];
             let bg = [c.sidebar_bg[0], c.sidebar_bg[1], c.sidebar_bg[2]];

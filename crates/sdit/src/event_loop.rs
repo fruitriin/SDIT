@@ -13,16 +13,18 @@ use sdit_core::selection::{Selection, SelectionType};
 use sdit_core::terminal::TermMode;
 
 use crate::app::{
-    PendingClose, PreeditState, SditApp, SditEvent, SearchState, confirm_unsafe_paste,
-    ime_commit_to_bytes, is_unsafe_paste, wrap_bracketed_paste,
+    PendingClose, PreeditState, SditApp, SditEvent, confirm_unsafe_paste, ime_commit_to_bytes,
+    is_unsafe_paste, wrap_bracketed_paste,
 };
 use sdit_core::config::keybinds::Action;
 use sdit_core::session::AppSnapshot;
 
+use crate::cwd_utils::{parse_osc7_cwd, trim_trailing_whitespace};
 use crate::input::{
     is_url_modifier, key_to_bytes, mouse_report_sgr, mouse_report_x11, pixel_to_grid,
     resolve_action,
 };
+use crate::selection_utils::expand_word;
 
 // ---------------------------------------------------------------------------
 // ApplicationHandler
@@ -706,7 +708,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         let sidebar_w = ws.sidebar.width_px(metrics.cell_width);
 
                         if ws.sidebar.visible && (x as f32) < sidebar_w {
-                            // サイドバー領域: セッションコンテキストメニュー
+                            // サイドバー領域: セッションコンテキストメニュー（設定に関わらず固定）
                             if let Some(row) = ws.sidebar.hit_test(
                                 y as f32,
                                 metrics.cell_height,
@@ -723,12 +725,57 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                 );
                             }
                         } else {
-                            // ターミナル領域: 標準コンテキストメニュー
-                            let window = self.windows[&id].window.clone();
-                            crate::menu::show_context_menu_for_window(
-                                &window,
-                                &self.terminal_ctx_menu,
-                            );
+                            // ターミナル領域: right_click_action 設定に応じて動作を切り替える
+                            use sdit_core::config::RightClickAction;
+                            match self.config.mouse.right_click_action {
+                                RightClickAction::ContextMenu => {
+                                    let window = self.windows[&id].window.clone();
+                                    crate::menu::show_context_menu_for_window(
+                                        &window,
+                                        &self.terminal_ctx_menu,
+                                    );
+                                }
+                                RightClickAction::Paste => {
+                                    let sid = ws.active_session_id();
+                                    if let Some(session) = self.session_mgr.get(sid) {
+                                        let mode = session
+                                            .term_state
+                                            .lock()
+                                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                                            .terminal
+                                            .mode();
+                                        let text = self
+                                            .clipboard
+                                            .as_mut()
+                                            .and_then(|cb| cb.get_text().ok())
+                                            .unwrap_or_default();
+                                        if !text.is_empty() {
+                                            let bracketed =
+                                                mode.contains(TermMode::BRACKETED_PASTE);
+                                            if self.config.paste.confirm_multiline
+                                                && is_unsafe_paste(&text, bracketed)
+                                                && !confirm_unsafe_paste(&text)
+                                            {
+                                                // ユーザーがキャンセル
+                                            } else {
+                                                let bytes: Vec<u8> = if bracketed {
+                                                    wrap_bracketed_paste(&text)
+                                                } else {
+                                                    text.into_bytes()
+                                                };
+                                                if let Err(e) =
+                                                    session.pty_io.write_tx.try_send(bytes)
+                                                {
+                                                    log::warn!("PTY right-click paste failed: {e}");
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                RightClickAction::None => {
+                                    // 何もしない
+                                }
+                            }
                         }
                     }
                 }
@@ -1171,283 +1218,3 @@ impl ApplicationHandler<SditEvent> for SditApp {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// アクションハンドラ
-// ---------------------------------------------------------------------------
-
-impl SditApp {
-    /// アクションを実行する。
-    ///
-    /// キーボードショートカットとメニューバーの両方から呼び出される。
-    #[allow(clippy::too_many_lines)]
-    pub(crate) fn handle_action(
-        &mut self,
-        action: Action,
-        window_id: WindowId,
-        event_loop: &ActiveEventLoop,
-    ) {
-        match action {
-            Action::DetachSession => {
-                self.detach_session_to_new_window(window_id, event_loop);
-            }
-            Action::NewWindow => {
-                // inherit_working_directory: アクティブセッションの CWD を継承する
-                let inherit_cwd = if self.config.window.inherit_working_directory {
-                    if let Some(ws) = self.windows.get(&window_id) {
-                        let active_sid = ws.active_session_id();
-                        self.session_mgr.get(active_sid).and_then(|s| s.cwd.clone())
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
-                self.create_window_with_cwd(event_loop, None, inherit_cwd);
-            }
-            Action::SidebarToggle => {
-                if let Some(ws) = self.windows.get_mut(&window_id) {
-                    ws.sidebar.toggle();
-                    let sid = ws.active_session_id();
-                    self.redraw_session(sid);
-                }
-            }
-            Action::AddSession => {
-                self.add_session_to_window(window_id);
-            }
-            Action::CloseSession => {
-                if let Some(ws) = self.windows.get(&window_id) {
-                    let sid = ws.active_session_id();
-                    if self.should_confirm_close(sid) {
-                        self.pending_close = Some(PendingClose::Session(sid, window_id));
-                        self.redraw_session(sid);
-                        return;
-                    }
-                }
-                let window_closed = self.remove_active_session(window_id);
-                if window_closed && self.windows.is_empty() {
-                    event_loop.exit();
-                }
-            }
-            Action::NextSession => {
-                self.switch_session(window_id, 1);
-            }
-            Action::PrevSession => {
-                self.switch_session(window_id, -1);
-            }
-            Action::ZoomIn => {
-                self.change_font_size(Some(1.0));
-                for ws in self.windows.values() {
-                    ws.window.request_redraw();
-                }
-                if let Some(ws) = self.windows.get(&window_id) {
-                    let sid = ws.active_session_id();
-                    self.redraw_session(sid);
-                }
-            }
-            Action::ZoomOut => {
-                self.change_font_size(Some(-1.0));
-                for ws in self.windows.values() {
-                    ws.window.request_redraw();
-                }
-                if let Some(ws) = self.windows.get(&window_id) {
-                    let sid = ws.active_session_id();
-                    self.redraw_session(sid);
-                }
-            }
-            Action::ZoomReset => {
-                self.change_font_size(None);
-                for ws in self.windows.values() {
-                    ws.window.request_redraw();
-                }
-                if let Some(ws) = self.windows.get(&window_id) {
-                    let sid = ws.active_session_id();
-                    self.redraw_session(sid);
-                }
-            }
-            Action::Search => {
-                if self.search.is_some() {
-                    self.search = None;
-                } else {
-                    self.search = Some(SearchState::new());
-                }
-                if let Some(ws) = self.windows.get(&window_id) {
-                    let sid = ws.active_session_id();
-                    self.redraw_session(sid);
-                }
-            }
-            // 検索モード外では SearchNext/SearchPrev は無視
-            Action::SearchNext | Action::SearchPrev => {}
-            Action::Copy => {
-                let Some(ws) = self.windows.get(&window_id) else { return };
-                let Some(session) = self.session_mgr.get(ws.active_session_id()) else {
-                    return;
-                };
-                if let Some(sel) = &self.selection {
-                    let state = session
-                        .term_state
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    let raw_text = sdit_core::selection::selected_text(state.terminal.grid(), sel);
-                    drop(state);
-                    if !raw_text.is_empty() {
-                        let text = if self.config.selection.trim_trailing_spaces {
-                            trim_trailing_whitespace(&raw_text)
-                        } else {
-                            raw_text
-                        };
-                        if let Some(cb) = &mut self.clipboard {
-                            if let Err(e) = cb.set_text(text) {
-                                log::warn!("Clipboard set_text failed: {e}");
-                            }
-                        }
-                    }
-                }
-                self.selection = None;
-                let sid = ws.active_session_id();
-                self.redraw_session(sid);
-            }
-            Action::Paste => {
-                let Some(ws) = self.windows.get(&window_id) else { return };
-                let Some(session) = self.session_mgr.get(ws.active_session_id()) else {
-                    return;
-                };
-                let mode = session
-                    .term_state
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .terminal
-                    .mode();
-                let text =
-                    self.clipboard.as_mut().and_then(|cb| cb.get_text().ok()).unwrap_or_default();
-                if !text.is_empty() {
-                    let bracketed = mode.contains(TermMode::BRACKETED_PASTE);
-
-                    // Unsafe paste check
-                    if self.config.paste.confirm_multiline
-                        && is_unsafe_paste(&text, bracketed)
-                        && !confirm_unsafe_paste(&text)
-                    {
-                        return; // ユーザーがキャンセル
-                    }
-
-                    let bytes: Vec<u8> =
-                        if bracketed { wrap_bracketed_paste(&text) } else { text.into_bytes() };
-                    if let Err(e) = session.pty_io.write_tx.try_send(bytes) {
-                        log::warn!("PTY paste write failed: {e}");
-                    }
-                }
-            }
-            Action::Quit => {
-                // 実行中プロセスがあれば確認ダイアログを表示する。
-                if self.should_confirm_quit() {
-                    self.pending_close = Some(PendingClose::Quit);
-                    // アクティブウィンドウを再描画して確認オーバーレイを表示する
-                    if let Some(ws) = self.windows.get(&window_id) {
-                        let sid = ws.active_session_id();
-                        self.redraw_session(sid);
-                    }
-                    return;
-                }
-                // 全ウィンドウを閉じてイベントループを終了する。
-                let window_ids: Vec<WindowId> = self.windows.keys().copied().collect();
-                for wid in window_ids {
-                    self.close_window(wid);
-                }
-                event_loop.exit();
-            }
-            Action::About => {
-                // バージョン情報をログに出力（将来はダイアログ表示に置き換える）。
-                log::info!("SDIT v{}", env!("CARGO_PKG_VERSION"));
-            }
-            Action::Preferences => {
-                // 設定ファイルが存在しない場合はコメント付きテンプレートを生成する。
-                // save_with_comments は create_new(true) で排他的に作成するため TOCTOU 安全。
-                let path = sdit_core::config::Config::default_path();
-                let config = sdit_core::config::Config::default();
-                if let Err(e) = config.save_with_comments(&path) {
-                    log::warn!("Failed to create default config: {e}");
-                }
-                if let Err(e) = open::that(&path) {
-                    log::warn!("Failed to open preferences file {}: {e}", path.display());
-                }
-            }
-            Action::SelectAll => {
-                // 全テキスト選択は将来実装。現時点ではログのみ。
-                log::info!("SelectAll action triggered (not yet implemented)");
-            }
-            Action::PrevPrompt => {
-                let Some(ws) = self.windows.get(&window_id) else { return };
-                let Some(session) = self.session_mgr.get(ws.active_session_id()) else {
-                    return;
-                };
-                let sid = ws.active_session_id();
-                {
-                    let mut state = session
-                        .term_state
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    if let Some(target_line) = state.terminal.prev_prompt() {
-                        // target_line はビューポート内の行番号（0-based）。
-                        // ビューポートの上端を target_line に合わせる:
-                        //   新しい display_offset = history - target_line
-                        let history = state.terminal.grid().history_size() as isize;
-                        let current_offset = state.terminal.grid().display_offset() as isize;
-                        let new_offset =
-                            (history - target_line as isize).max(0).min(history) as usize;
-                        let delta = new_offset as isize - current_offset;
-                        state
-                            .terminal
-                            .grid_mut()
-                            .scroll_display(sdit_core::grid::Scroll::Delta(delta));
-                    }
-                }
-                self.redraw_session(sid);
-            }
-            Action::NextPrompt => {
-                let Some(ws) = self.windows.get(&window_id) else { return };
-                let Some(session) = self.session_mgr.get(ws.active_session_id()) else {
-                    return;
-                };
-                let sid = ws.active_session_id();
-                {
-                    let mut state = session
-                        .term_state
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    if let Some(target_line) = state.terminal.next_prompt() {
-                        let history = state.terminal.grid().history_size() as isize;
-                        let current_offset = state.terminal.grid().display_offset() as isize;
-                        let new_offset =
-                            (history - target_line as isize).max(0).min(history) as usize;
-                        let delta = new_offset as isize - current_offset;
-                        state
-                            .terminal
-                            .grid_mut()
-                            .scroll_display(sdit_core::grid::Scroll::Delta(delta));
-                    }
-                }
-                self.redraw_session(sid);
-            }
-            Action::QuickSelect => {
-                self.handle_quick_select_action(window_id);
-            }
-            Action::ToggleViMode => {
-                self.toggle_vi_mode(window_id);
-            }
-            Action::ToggleSecureInput => {
-                #[cfg(target_os = "macos")]
-                self.toggle_secure_input();
-                #[cfg(not(target_os = "macos"))]
-                log::info!("ToggleSecureInput は macOS 以外では無視されます");
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// 検索ヘルパー
-// ---------------------------------------------------------------------------
-
-use crate::cwd_utils::{parse_osc7_cwd, trim_trailing_whitespace};
-use crate::selection_utils::expand_word;
