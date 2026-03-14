@@ -187,6 +187,8 @@ pub(crate) enum SditEvent {
     DesktopNotification { title: String, body: String },
     /// OSC 7 で CWD が変更された → Session の cwd フィールドを更新する。
     CwdChanged { session_id: SessionId, cwd: String },
+    /// OSC 133 コマンド終了通知。閾値以上かかったコマンドが終了したことを通知する。
+    CommandFinished { session_id: SessionId, elapsed_secs: u64, exit_code: Option<i32> },
     /// Quick Terminal グローバルホットキーが押された（macOS のみ）。
     QuickTerminalToggle,
 }

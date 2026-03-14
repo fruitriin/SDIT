@@ -16,6 +16,7 @@ use crate::app::{
     PendingClose, PreeditState, SditApp, SditEvent, confirm_unsafe_paste, ime_commit_to_bytes,
     is_unsafe_paste, wrap_bracketed_paste,
 };
+use sdit_core::config::CommandNotifyMode;
 use sdit_core::config::keybinds::Action;
 use sdit_core::session::{AppSnapshot, WindowGeometry};
 
@@ -1401,6 +1402,34 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                 in_flight.store(false, std::sync::atomic::Ordering::Release);
                             })
                             .ok();
+                    }
+                }
+            }
+            SditEvent::CommandFinished { session_id, elapsed_secs, exit_code } => {
+                let threshold =
+                    u64::from(self.config.notification.clamped_command_notify_threshold());
+                if elapsed_secs >= threshold {
+                    let should_notify = match self.config.notification.command_notify {
+                        CommandNotifyMode::Never => false,
+                        CommandNotifyMode::Always => true,
+                        CommandNotifyMode::Unfocused => {
+                            // session_id に対応するウィンドウがフォーカスされていない場合のみ通知
+                            !self.windows.values().any(|ws| {
+                                ws.sessions.contains(&session_id) && ws.window.has_focus()
+                            })
+                        }
+                    };
+                    if should_notify {
+                        let exit_str = match exit_code {
+                            Some(0) => "\u{2713}".to_string(),
+                            Some(c) => format!("\u{2717} (exit {c})"),
+                            None => "完了".to_string(),
+                        };
+                        let title = "コマンド終了".to_string();
+                        let body = format!("{exit_str}  \u{2014} {elapsed_secs}秒");
+                        let _ = self
+                            .event_proxy
+                            .send_event(SditEvent::DesktopNotification { title, body });
                     }
                 }
             }

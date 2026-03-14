@@ -266,6 +266,11 @@ pub struct Terminal {
     pub shell_integration_enabled: bool,
     /// OSC 7 で設定されたカレントディレクトリ URL（file://hostname/path 形式）。
     pub(super) cwd_pending: Option<String>,
+    /// コマンド開始時刻（OSC 133;B で記録）。通知閾値判定に使用。
+    pub(super) command_start_time: Option<std::time::Instant>,
+    /// コマンド終了通知ペンディング（elapsed_secs, exit_code）。
+    /// GUI 側で Config を参照して閾値判定・通知送信を行う。
+    pub(super) command_finished_pending: Option<(u64, Option<i32>)>,
 }
 
 impl Terminal {
@@ -295,6 +300,8 @@ impl Terminal {
             semantic_markers: VecDeque::new(),
             shell_integration_enabled: true,
             cwd_pending: None,
+            command_start_time: None,
+            command_finished_pending: None,
         }
     }
 
@@ -330,6 +337,8 @@ impl Terminal {
             semantic_markers: VecDeque::new(),
             shell_integration_enabled: true,
             cwd_pending: None,
+            command_start_time: None,
+            command_finished_pending: None,
         }
     }
 
@@ -409,6 +418,14 @@ impl Terminal {
     /// 呼び出し後はフィールドが `None` になる（take セマンティクス）。
     pub fn take_notification(&mut self) -> Option<(String, String)> {
         self.notification_pending.take()
+    }
+
+    /// OSC 133 コマンド終了通知ペンディングを取り出す。
+    ///
+    /// `(elapsed_secs, exit_code)` を返す。呼び出し後はフィールドが `None` になる（take セマンティクス）。
+    /// 閾値判定は GUI 側で Config を参照して行う。
+    pub fn take_command_finished(&mut self) -> Option<(u64, Option<i32>)> {
+        self.command_finished_pending.take()
     }
 
     /// OSC 7 で設定されたカレントディレクトリを取り出す。
@@ -758,6 +775,8 @@ impl Perform for Terminal {
             let zone = if sub == b"A" {
                 Some(SemanticZone::PromptStart)
             } else if sub == b"B" {
+                // コマンド入力開始: 時間計測を開始する
+                self.command_start_time = Some(std::time::Instant::now());
                 Some(SemanticZone::CommandStart)
             } else if sub == b"C" {
                 Some(SemanticZone::OutputStart)
@@ -771,6 +790,11 @@ impl Perform for Terminal {
                 } else {
                     None
                 };
+                // コマンド終了: 経過時間を記録する（閾値判定は GUI 側で行う）
+                if let Some(start) = self.command_start_time.take() {
+                    let elapsed = start.elapsed().as_secs();
+                    self.command_finished_pending = Some((elapsed, exit_code));
+                }
                 Some(SemanticZone::CommandEnd(exit_code))
             } else {
                 None

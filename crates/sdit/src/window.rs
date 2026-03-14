@@ -73,6 +73,16 @@ pub(crate) fn spawn_pty_reader(
                                 let _ = event_proxy
                                     .send_event(SditEvent::CwdChanged { session_id, cwd });
                             }
+                            // OSC 133 コマンド終了通知処理
+                            if let Some((elapsed_secs, exit_code)) =
+                                terminal.take_command_finished()
+                            {
+                                let _ = event_proxy.send_event(SditEvent::CommandFinished {
+                                    session_id,
+                                    elapsed_secs,
+                                    exit_code,
+                                });
+                            }
                             // 新しい出力があったら display_offset を 0 にリセット（ライブビュー追従）
                             if terminal.grid().display_offset() > 0 {
                                 terminal.grid_mut().scroll_display(Scroll::Bottom);

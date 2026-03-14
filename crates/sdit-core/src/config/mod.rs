@@ -304,17 +304,50 @@ impl BellConfig {
     }
 }
 
+/// コマンド終了通知モード。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CommandNotifyMode {
+    /// コマンド終了通知を送らない。
+    Never,
+    /// ウィンドウがフォーカスされていない場合のみ通知する（デフォルト）。
+    Unfocused,
+    /// 常に通知する。
+    Always,
+}
+
+impl Default for CommandNotifyMode {
+    fn default() -> Self {
+        Self::Unfocused
+    }
+}
+
 /// デスクトップ通知設定。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct NotificationConfig {
     /// デスクトップ通知を有効にする。
     pub enabled: bool,
+    /// コマンド終了通知モード: "never" / "unfocused" / "always"（デフォルト: "unfocused"）。
+    pub command_notify: CommandNotifyMode,
+    /// コマンド終了通知の閾値（秒）。この時間以上かかったコマンドのみ通知する（デフォルト: 10）。
+    pub command_notify_threshold: u32,
 }
 
 impl Default for NotificationConfig {
     fn default() -> Self {
-        Self { enabled: true }
+        Self {
+            enabled: true,
+            command_notify: CommandNotifyMode::default(),
+            command_notify_threshold: 10,
+        }
+    }
+}
+
+impl NotificationConfig {
+    /// `command_notify_threshold` を安全な範囲にクランプする（1〜3600秒）。
+    pub fn clamped_command_notify_threshold(&self) -> u32 {
+        self.command_notify_threshold.clamp(1, 3600)
     }
 }
 

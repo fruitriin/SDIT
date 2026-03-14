@@ -758,3 +758,71 @@ fn osc_133_disabled_when_shell_integration_off() {
     proc.advance(&mut term, b"\x1b]133;A\x07");
     assert_eq!(term.semantic_markers.len(), 0);
 }
+
+// CommandStart → CommandEnd で command_finished_pending がセットされる
+#[test]
+fn osc_133_command_finished_tracking() {
+    let mut term = Terminal::new(24, 80, 100);
+    // CommandStart で時間計測開始
+    term.osc_dispatch(&[b"133", b"B"], false);
+    assert!(term.command_start_time.is_some());
+    assert!(term.command_finished_pending.is_none());
+    // CommandEnd で command_finished_pending がセットされる
+    term.osc_dispatch(&[b"133", b"D", b"0"], false);
+    assert!(term.command_start_time.is_none());
+    let pending = term.command_finished_pending.take();
+    assert!(pending.is_some());
+    let (elapsed_secs, exit_code) = pending.unwrap();
+    assert_eq!(exit_code, Some(0));
+    // 即座に終了したコマンドは 0 秒（elapsed < 1）
+    assert_eq!(elapsed_secs, 0);
+}
+
+// CommandStart なしの CommandEnd は command_finished_pending が None のまま
+#[test]
+fn osc_133_command_finished_no_start() {
+    let mut term = Terminal::new(24, 80, 100);
+    // CommandStart なしで CommandEnd
+    term.osc_dispatch(&[b"133", b"D", b"1"], false);
+    assert!(term.command_finished_pending.is_none());
+    assert!(term.command_start_time.is_none());
+}
+
+// NotificationConfig のデフォルト値の検証
+#[test]
+fn command_notify_config_defaults() {
+    use crate::config::{CommandNotifyMode, NotificationConfig};
+    let cfg = NotificationConfig::default();
+    assert!(cfg.enabled);
+    assert_eq!(cfg.command_notify, CommandNotifyMode::Unfocused);
+    assert_eq!(cfg.command_notify_threshold, 10);
+}
+
+// command_notify_threshold のクランプ検証
+#[test]
+fn command_notify_config_threshold_clamp() {
+    use crate::config::NotificationConfig;
+    let cfg_zero =
+        NotificationConfig { command_notify_threshold: 0, ..NotificationConfig::default() };
+    assert_eq!(cfg_zero.clamped_command_notify_threshold(), 1);
+    let cfg_over =
+        NotificationConfig { command_notify_threshold: 9999, ..NotificationConfig::default() };
+    assert_eq!(cfg_over.clamped_command_notify_threshold(), 3600);
+    let cfg_normal =
+        NotificationConfig { command_notify_threshold: 30, ..NotificationConfig::default() };
+    assert_eq!(cfg_normal.clamped_command_notify_threshold(), 30);
+}
+
+// CommandNotifyMode のデシリアライズ検証
+#[test]
+fn command_notify_mode_deserialize() {
+    use crate::config::{CommandNotifyMode, NotificationConfig};
+    // TOML で command_notify フィールドをデシリアライズして検証
+    let cfg_never: NotificationConfig = toml::from_str("command_notify = \"never\"").unwrap();
+    assert_eq!(cfg_never.command_notify, CommandNotifyMode::Never);
+    let cfg_unfocused: NotificationConfig =
+        toml::from_str("command_notify = \"unfocused\"").unwrap();
+    assert_eq!(cfg_unfocused.command_notify, CommandNotifyMode::Unfocused);
+    let cfg_always: NotificationConfig = toml::from_str("command_notify = \"always\"").unwrap();
+    assert_eq!(cfg_always.command_notify, CommandNotifyMode::Always);
+}
