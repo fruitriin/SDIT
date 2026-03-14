@@ -88,18 +88,20 @@ pub(crate) struct QuickSelectState {
 }
 
 impl QuickSelectState {
+    /// ヒントラベル生成に使う文字セット。
+    pub(crate) const CHARS: &'static [u8] = b"asdfghjklqwertyuiopzxcvbnm";
+
     /// ヒントラベルを生成する（a-z、次いで aa-az、ba-bz...）。
     pub(crate) fn generate_label(index: usize) -> String {
-        const CHARS: &[u8] = b"asdfghjklqwertyuiopzxcvbnm";
-        let n = CHARS.len();
+        let n = Self::CHARS.len();
         if index < n {
-            String::from(CHARS[index] as char)
+            String::from(Self::CHARS[index] as char)
         } else {
             let idx = index - n;
             let hi = idx / n;
             let lo = idx % n;
             if hi < n {
-                format!("{}{}", CHARS[hi] as char, CHARS[lo] as char)
+                format!("{}{}", Self::CHARS[hi] as char, Self::CHARS[lo] as char)
             } else {
                 // 26*26 + 26 = 702個を超える場合（実用上まず起きない）
                 format!("{index}")
@@ -215,21 +217,26 @@ impl VisualBell {
 
     /// ベルを鳴らす。アニメーション中の再呼び出しは無視する（BEL ボム対策）。
     pub(crate) fn ring(&mut self) {
-        // アニメーション中なら無視（レート制限）
-        if self.start_time.is_some() && self.intensity_inner() > 0.0 {
+        self.ring_at(std::time::Instant::now());
+    }
+
+    /// `now` を時刻として使うテスト用 ring。
+    pub(crate) fn ring_at(&mut self, now: std::time::Instant) {
+        if self.start_time.is_some() && self.intensity_at(now) > 0.0 {
             return;
         }
-        self.start_time = Some(std::time::Instant::now());
+        self.start_time = Some(now);
     }
 
     /// 現在の intensity (0.0〜1.0) を返す。0.0 = 完全にフェードアウト。
     pub(crate) fn intensity(&self) -> f32 {
-        self.intensity_inner()
+        self.intensity_at(std::time::Instant::now())
     }
 
-    fn intensity_inner(&self) -> f32 {
+    /// `now` を時刻として使うテスト用 intensity。
+    pub(crate) fn intensity_at(&self, now: std::time::Instant) -> f32 {
         let Some(start) = self.start_time else { return 0.0 };
-        let elapsed = start.elapsed();
+        let elapsed = now.duration_since(start);
         if self.duration.is_zero() || elapsed >= self.duration {
             return 0.0;
         }
@@ -240,7 +247,12 @@ impl VisualBell {
     /// アニメーションが完了しているかを返す。完了済みなら state をクリアする。
     #[allow(dead_code)]
     pub(crate) fn completed(&mut self) -> bool {
-        if self.start_time.is_some() && self.intensity() <= 0.0 {
+        self.completed_at(std::time::Instant::now())
+    }
+
+    /// `now` を時刻として使うテスト用 completed。
+    pub(crate) fn completed_at(&mut self, now: std::time::Instant) -> bool {
+        if self.start_time.is_some() && self.intensity_at(now) <= 0.0 {
             self.start_time = None;
             true
         } else {
@@ -1039,18 +1051,20 @@ mod tests {
     #[test]
     fn visual_bell_fades_to_zero() {
         let mut bell = VisualBell::new(10); // 10ms duration
-        bell.ring();
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        assert!(bell.intensity() < f32::EPSILON);
+        let t0 = std::time::Instant::now();
+        bell.ring_at(t0);
+        let future = t0 + std::time::Duration::from_millis(20);
+        assert!(bell.intensity_at(future) < f32::EPSILON);
     }
 
     #[test]
     fn visual_bell_completed_clears_state() {
         let mut bell = VisualBell::new(10);
-        bell.ring();
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        assert!(bell.completed());
-        assert!(bell.completed()); // 既にクリア済み
+        let t0 = std::time::Instant::now();
+        bell.ring_at(t0);
+        let future = t0 + std::time::Duration::from_millis(20);
+        assert!(bell.completed_at(future));
+        assert!(bell.completed_at(future)); // 既にクリア済み
     }
 
     #[test]
@@ -1181,9 +1195,10 @@ mod tests {
 
     #[test]
     fn hint_labels_are_unique() {
-        // 最初の52ラベルがすべて異なること
-        let labels: Vec<String> = (0..52).map(QuickSelectState::generate_label).collect();
+        // 最初の CHARS.len() * 2 ラベルがすべて異なること
+        let count = QuickSelectState::CHARS.len() * 2;
+        let labels: Vec<String> = (0..count).map(QuickSelectState::generate_label).collect();
         let unique: std::collections::HashSet<&str> = labels.iter().map(|s| s.as_str()).collect();
-        assert_eq!(unique.len(), 52, "ラベルに重複がある: {labels:?}");
+        assert_eq!(unique.len(), count, "ラベルに重複がある: {labels:?}");
     }
 }

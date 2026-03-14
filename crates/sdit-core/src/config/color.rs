@@ -439,7 +439,8 @@ mod tests {
     #[test]
     fn from_theme_all_variants() {
         for theme in ThemeName::all() {
-            let _ = ResolvedColors::from_theme(theme);
+            let colors = ResolvedColors::from_theme(theme);
+            assert_ne!(colors.background, colors.foreground, "theme {theme:?}: bg == fg");
         }
     }
 

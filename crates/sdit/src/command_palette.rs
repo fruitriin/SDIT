@@ -22,6 +22,9 @@ pub(crate) struct CommandPaletteState {
 /// 1ページに表示する候補の最大件数。
 pub(crate) const MAX_VISIBLE_ITEMS: usize = 10;
 
+/// 入力文字列の最大バイト数（DoS 防止）。
+const MAX_INPUT_BYTES: usize = 256;
+
 impl CommandPaletteState {
     /// 新しい空のコマンドパレット状態を作成する。
     pub(crate) fn new() -> Self {
@@ -31,10 +34,10 @@ impl CommandPaletteState {
 
     /// 入力文字列に文字を追加する。
     ///
-    /// 制御文字はフィルタリングされ、入力合計が 256 バイトを超える場合は無視する。
+    /// 制御文字はフィルタリングされ、入力合計が MAX_INPUT_BYTES を超える場合は無視する。
     pub(crate) fn push_str(&mut self, s: &str) {
         let filtered: String = s.chars().filter(|c| !c.is_control()).collect();
-        if self.input.len() + filtered.len() <= 256 {
+        if self.input.len() + filtered.len() <= MAX_INPUT_BYTES {
             self.input.push_str(&filtered);
             self.cursor_pos = self.input.len();
             self.filtered_actions = filter_actions(&self.input);
@@ -214,23 +217,23 @@ mod tests {
         assert_eq!(state.input, "zoominout", "newline and tab should be filtered");
     }
 
-    /// #4: 256 バイト超のフィルタ後文字列は受け入れない
+    /// #4: MAX_INPUT_BYTES 超のフィルタ後文字列は受け入れない
     #[test]
     fn push_str_ignores_input_exceeding_limit() {
         let mut state = CommandPaletteState::new();
-        // 257 文字の通常テキスト — 1回のpush_strで超過するため全体が無視される
-        let long_str = "a".repeat(257);
+        // MAX_INPUT_BYTES + 1 文字の通常テキスト — 1回のpush_strで超過するため全体が無視される
+        let long_str = "a".repeat(MAX_INPUT_BYTES + 1);
         state.push_str(&long_str);
-        assert!(state.input.is_empty(), "input exceeding 256 bytes should be ignored");
+        assert!(state.input.is_empty(), "input exceeding MAX_INPUT_BYTES should be ignored");
     }
 
-    /// #4: 分割送信で合計 256 バイトには達するが超えない場合は受け入れる
+    /// #4: 分割送信で合計 MAX_INPUT_BYTES には達するが超えない場合は受け入れる
     #[test]
     fn push_str_accepts_exactly_256_bytes() {
         let mut state = CommandPaletteState::new();
-        // 最初に 250 文字送り、次に 6 文字送る（合計 256）
-        state.push_str(&"a".repeat(250));
+        // 最初に MAX_INPUT_BYTES - 6 文字送り、次に 6 文字送る（合計 MAX_INPUT_BYTES）
+        state.push_str(&"a".repeat(MAX_INPUT_BYTES - 6));
         state.push_str(&"b".repeat(6));
-        assert_eq!(state.input.len(), 256);
+        assert_eq!(state.input.len(), MAX_INPUT_BYTES);
     }
 }

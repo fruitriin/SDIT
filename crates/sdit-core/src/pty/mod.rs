@@ -217,7 +217,6 @@ mod tests {
     #[test]
     fn test_pty_spawn_and_echo() {
         if !is_tty() {
-            eprintln!("skipping PTY test: not a TTY environment");
             return;
         }
 
@@ -259,7 +258,6 @@ mod tests {
     #[test]
     fn test_pty_spawn_shell() {
         if !is_tty() {
-            eprintln!("skipping PTY test: not a TTY environment");
             return;
         }
 
@@ -277,7 +275,6 @@ mod tests {
     #[test]
     fn test_pty_resize() {
         if !is_tty() {
-            eprintln!("skipping PTY test: not a TTY environment");
             return;
         }
 
@@ -298,7 +295,6 @@ mod tests {
     #[test]
     fn test_pty_write_and_read() {
         if !is_tty() {
-            eprintln!("skipping PTY test: not a TTY environment");
             return;
         }
 

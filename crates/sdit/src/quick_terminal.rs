@@ -4,6 +4,11 @@
 
 use std::time::Instant;
 
+/// screen_size が (0, 0) のときに使うフォールバック幅（物理ピクセル）。
+const FALLBACK_SCREEN_WIDTH: u32 = 800;
+/// screen_size が (0, 0) のときに使うフォールバック高さ（物理ピクセル）。
+const FALLBACK_SCREEN_HEIGHT: u32 = 600;
+
 // ---------------------------------------------------------------------------
 // アニメーション方向
 // ---------------------------------------------------------------------------
@@ -320,8 +325,10 @@ pub(crate) fn calc_quick_terminal_geometry(
 
     // screen_size が (0, 0) の場合はフォールバック値を使用する
     let screen_size = if screen_size.0 == 0 || screen_size.1 == 0 {
-        log::warn!("calc_quick_terminal_geometry: screen_size is zero, using fallback (800, 600)");
-        (800u32, 600u32)
+        log::warn!(
+            "calc_quick_terminal_geometry: screen_size is zero, using fallback ({FALLBACK_SCREEN_WIDTH}, {FALLBACK_SCREEN_HEIGHT})"
+        );
+        (FALLBACK_SCREEN_WIDTH, FALLBACK_SCREEN_HEIGHT)
     } else {
         screen_size
     };
@@ -382,6 +389,11 @@ pub(crate) fn calc_quick_terminal_geometry(
 mod tests {
     use super::*;
 
+    /// FHD 解像度 (1920×1080)。テスト用ローカル定数。
+    const SCREEN_FHD: (u32, u32) = (1920, 1080);
+    /// QHD 解像度 (2560×1440)。テスト用ローカル定数。
+    const SCREEN_QHD: (u32, u32) = (2560, 1440);
+
     #[test]
     fn animation_ease_in_out_boundaries() {
         assert!((QuickTerminalAnimation::ease_in_out(0.0) - 0.0).abs() < f32::EPSILON);
@@ -441,13 +453,12 @@ mod tests {
     fn quick_terminal_state_finish_slide_out() {
         let mut state = QuickTerminalState::new();
         state.visible = true;
+        // start_time を過去に設定してアニメーション完了済み状態を作る（sleep 不要）
         state.animation = Some(QuickTerminalAnimation {
-            start_time: Instant::now(),
+            start_time: Instant::now() - std::time::Duration::from_millis(100),
             duration_secs: 0.001,
             direction: AnimationDirection::SlideOut,
         });
-        // アニメーション完了を待つ
-        std::thread::sleep(std::time::Duration::from_millis(5));
         state.finish_animation();
         assert!(!state.visible);
     }
@@ -458,12 +469,12 @@ mod tests {
         let (x, y, w, h) = calc_quick_terminal_geometry(
             sdit_core::config::QuickTerminalPosition::Top,
             0.4,
-            (1920, 1080),
+            SCREEN_FHD,
             1.0,
         );
         assert_eq!(x, 0);
         assert_eq!(y, 0);
-        assert_eq!(w, 1920);
+        assert_eq!(w, SCREEN_FHD.0);
         assert_eq!(h, 432); // 1080 * 0.4 = 432
     }
 
@@ -473,7 +484,7 @@ mod tests {
         let (x, y, _w, h) = calc_quick_terminal_geometry(
             sdit_core::config::QuickTerminalPosition::Top,
             0.4,
-            (1920, 1080),
+            SCREEN_FHD,
             0.0,
         );
         assert_eq!(x, 0);
@@ -485,12 +496,12 @@ mod tests {
         let (x, y, w, h) = calc_quick_terminal_geometry(
             sdit_core::config::QuickTerminalPosition::Bottom,
             0.4,
-            (1920, 1080),
+            SCREEN_FHD,
             1.0,
         );
         assert_eq!(x, 0);
-        assert_eq!(y, 1080 - h as i32);
-        assert_eq!(w, 1920);
+        assert_eq!(y, SCREEN_FHD.1 as i32 - h as i32);
+        assert_eq!(w, SCREEN_FHD.0);
     }
 
     #[test]
@@ -498,12 +509,12 @@ mod tests {
         let (x, y, w, h) = calc_quick_terminal_geometry(
             sdit_core::config::QuickTerminalPosition::Left,
             0.4,
-            (1920, 1080),
+            SCREEN_FHD,
             1.0,
         );
         assert_eq!(x, 0);
         assert_eq!(y, 0);
-        assert_eq!(h, 1080);
+        assert_eq!(h, SCREEN_FHD.1);
         let _ = w; // w は 1920 * 0.4 = 768
     }
 
@@ -512,12 +523,12 @@ mod tests {
         let (x, y, w, h) = calc_quick_terminal_geometry(
             sdit_core::config::QuickTerminalPosition::Right,
             0.4,
-            (1920, 1080),
+            SCREEN_FHD,
             1.0,
         );
         assert_eq!(y, 0);
-        assert_eq!(h, 1080);
-        assert_eq!(x, 1920 - w as i32);
+        assert_eq!(h, SCREEN_FHD.1);
+        assert_eq!(x, SCREEN_FHD.0 as i32 - w as i32);
     }
 
     #[cfg(target_os = "macos")]
@@ -575,24 +586,24 @@ mod tests {
 
     #[test]
     fn calc_geometry_zero_screen_size() {
-        // screen_size が (0, 0) の場合はフォールバック (800, 600) を使用する
+        // screen_size が (0, 0) の場合はフォールバック (FALLBACK_SCREEN_WIDTH, FALLBACK_SCREEN_HEIGHT) を使用する
         let (x, y, w, h) = calc_quick_terminal_geometry(
             sdit_core::config::QuickTerminalPosition::Top,
             0.4,
             (0, 0),
             1.0,
         );
-        // フォールバック値 (800, 600) で計算される
+        // フォールバック値で計算される
         assert_eq!(x, 0);
         assert_eq!(y, 0); // t=1.0 なので y=0
-        assert_eq!(w, 800);
-        assert_eq!(h, 240); // 600 * 0.4 = 240
+        assert_eq!(w, FALLBACK_SCREEN_WIDTH);
+        assert_eq!(h, 240); // FALLBACK_SCREEN_HEIGHT * 0.4 = 240
     }
 
     #[test]
     fn calc_geometry_four_directions_normal() {
         // 4方向すべてで通常のディスプレイサイズが正しく計算される
-        let screen = (2560u32, 1440u32);
+        let screen = SCREEN_QHD;
         let ratio = 0.5f32;
 
         // Top: t=1.0
@@ -603,7 +614,7 @@ mod tests {
             1.0,
         );
         assert_eq!(x, 0);
-        assert_eq!(w, 2560);
+        assert_eq!(w, SCREEN_QHD.0);
         assert_eq!(h, 720); // 1440 * 0.5
 
         // Bottom: t=1.0
@@ -613,8 +624,8 @@ mod tests {
             screen,
             1.0,
         );
-        assert_eq!(w, 2560);
-        assert_eq!(y, 1440 - h as i32);
+        assert_eq!(w, SCREEN_QHD.0);
+        assert_eq!(y, SCREEN_QHD.1 as i32 - h as i32);
 
         // Left: t=1.0
         let (x, y, w, h) = calc_quick_terminal_geometry(
@@ -626,7 +637,7 @@ mod tests {
         assert_eq!(x, 0);
         assert_eq!(y, 0);
         assert_eq!(w, 1280); // 2560 * 0.5
-        assert_eq!(h, 1440);
+        assert_eq!(h, SCREEN_QHD.1);
 
         // Right: t=1.0
         let (x, _y, w, h) = calc_quick_terminal_geometry(
@@ -635,6 +646,6 @@ mod tests {
             screen,
             1.0,
         );
-        assert_eq!(x, 2560 - w as i32);
+        assert_eq!(x, SCREEN_QHD.0 as i32 - w as i32);
     }
 }

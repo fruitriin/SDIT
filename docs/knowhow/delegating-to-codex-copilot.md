@@ -151,6 +151,22 @@ copilot
 - Codex の sandbox は `/tmp/` への書き込みもブロックする → プロジェクトの `tmp/` 方針と自然に整合
 - Copilot の `--allow-all-tools` はホスト直接実行で危険 → 個別 `--allow-tool` を使う
 
+### `cargo test` はGUIテストでハングする
+
+`cargo test --workspace` は `smoke_gui` / `gui_interaction` を含むため、
+Copilot の非TTY環境では SDIT バイナリ起動待ちでハング（120秒以上）する。
+
+プロンプトには必ず以下を指示すること:
+
+```bash
+# ✅ 正しい検証コマンド
+cargo test -p sdit-core && cargo test -p sdit --lib
+
+# ❌ ハングする
+cargo test
+cargo test --workspace
+```
+
 ## 参考リンク
 
 - [Codex Prompting Guide](https://developers.openai.com/cookbook/examples/gpt-5/codex_prompting_guide/)

@@ -62,7 +62,6 @@ fn row_text(terminal: &Terminal, line: i32) -> String {
 #[test]
 fn echo_appears_in_grid() {
     if !is_tty() {
-        eprintln!("skipping: not a TTY environment");
         return;
     }
 
@@ -95,7 +94,6 @@ fn echo_appears_in_grid() {
 #[test]
 fn shell_command_pipeline() {
     if !is_tty() {
-        eprintln!("skipping: not a TTY environment");
         return;
     }
 
@@ -140,7 +138,6 @@ fn shell_command_pipeline() {
 #[test]
 fn pty_spawn_then_resize() {
     if !is_tty() {
-        eprintln!("skipping: not a TTY environment");
         return;
     }
 
@@ -170,7 +167,6 @@ fn pty_spawn_then_resize() {
 #[test]
 fn cursor_position_after_escape_sequence() {
     if !is_tty() {
-        eprintln!("skipping: not a TTY environment");
         return;
     }
 
