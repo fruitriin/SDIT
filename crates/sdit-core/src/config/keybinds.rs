@@ -54,6 +54,47 @@ pub enum Action {
     ToggleDecorations,
     /// ウィンドウを常に最前面に表示するかどうかをトグルする。
     ToggleAlwaysOnTop,
+    /// コマンドパレットの表示をトグルする。
+    ToggleCommandPalette,
+}
+
+impl Action {
+    /// 全アクションバリアントの名前とアクションのペアを返す。
+    ///
+    /// `ToggleCommandPalette` は除外する（コマンドパレット内から自身をトグルするのを防止）。
+    pub fn all_with_names() -> Vec<(&'static str, Action)> {
+        vec![
+            ("NewWindow", Action::NewWindow),
+            ("AddSession", Action::AddSession),
+            ("CloseSession", Action::CloseSession),
+            ("DetachSession", Action::DetachSession),
+            ("SidebarToggle", Action::SidebarToggle),
+            ("Copy", Action::Copy),
+            ("Paste", Action::Paste),
+            ("ZoomIn", Action::ZoomIn),
+            ("ZoomOut", Action::ZoomOut),
+            ("ZoomReset", Action::ZoomReset),
+            ("Search", Action::Search),
+            ("SearchNext", Action::SearchNext),
+            ("SearchPrev", Action::SearchPrev),
+            ("NextSession", Action::NextSession),
+            ("PrevSession", Action::PrevSession),
+            ("Quit", Action::Quit),
+            ("About", Action::About),
+            ("Preferences", Action::Preferences),
+            ("SelectAll", Action::SelectAll),
+            ("PrevPrompt", Action::PrevPrompt),
+            ("NextPrompt", Action::NextPrompt),
+            ("QuickSelect", Action::QuickSelect),
+            ("ToggleViMode", Action::ToggleViMode),
+            ("ToggleSecureInput", Action::ToggleSecureInput),
+            ("NextTheme", Action::NextTheme),
+            ("PreviousTheme", Action::PreviousTheme),
+            ("ToggleDecorations", Action::ToggleDecorations),
+            ("ToggleAlwaysOnTop", Action::ToggleAlwaysOnTop),
+            // ToggleCommandPalette は除外
+        ]
+    }
 }
 
 // ---------------------------------------------------------------------------

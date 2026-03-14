@@ -3,7 +3,7 @@
 `docs/plans/` の完了状態・優先度をトラックする。
 `docs/plans/` と TODO が一致しなければ TODO を編集する。
 
-## 現在のフェーズ: Phase 21.1（次に着手）
+## 現在のフェーズ: Phase 21.5（次に着手）
 
 ## バックログ
 
@@ -79,9 +79,10 @@
 | done | 20.1 | `docs/plans/phase20.1-bold-faint.md` | **完了** |
 | done | 20.2 | `docs/plans/phase20.2-window-position.md` | **完了** |
 | done | 20.3 | `docs/plans/phase20.3-focus-follows-mouse.md` | **完了** |
-| **高** | **21.1** | `docs/plans/phase21.1-new-window-blank.md` | 未着手 |
-| **高** | **21.2** | `docs/plans/phase21.2-click-caret-fix.md` | 未着手 |
-| **高** | **21.3** | `docs/plans/phase21.3-inverse-rendering.md` | 未着手 |
+| done | 21.1 | `docs/plans/phase21.1-new-window-blank.md` | **完了** |
+| done | 21.2 | `docs/plans/phase21.2-click-caret-fix.md` | **完了** |
+| done | 21.3 | `docs/plans/phase21.3-inverse-rendering.md` | **完了** |
+| **高** | **21.5** | `docs/plans/phase21.5-menubar-fix.md` | 未着手 |
 | 低 | 21.4 | `docs/plans/phase21.4-pty-deadlock.md` | 未着手 |
 | done | 20.4 | `docs/plans/phase20.4-osc-color-report.md` | **完了** |
 | done | 20.5 | `docs/plans/phase20.5-title-report.md` | **完了** |

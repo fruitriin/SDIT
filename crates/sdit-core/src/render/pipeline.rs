@@ -523,26 +523,33 @@ impl CellPipeline {
                     cell.fg
                 };
 
+                // SGR 7 (INVERSE): fg と bg を入れ替え
+                let (effective_fg, effective_bg) = if cell.flags.contains(CellFlags::INVERSE) {
+                    (cell.bg, effective_fg)
+                } else {
+                    (effective_fg, cell.bg)
+                };
+
                 let (bg, fg) = if is_cursor {
                     // カーソル色が設定されていればそれを使用し、なければ反転
                     if let Some(c) = cursor_color {
-                        (c, color_to_rgba(cell.bg))
+                        (c, color_to_rgba(effective_bg))
                     } else {
-                        (color_to_rgba(effective_fg), color_to_rgba(cell.bg))
+                        (color_to_rgba(effective_fg), color_to_rgba(effective_bg))
                     }
                 } else if is_selected {
                     // 選択色: 設定があればそれを使用し、なければ fg/bg 反転
                     let sel_bg = selection_bg.unwrap_or_else(|| color_to_rgba(effective_fg));
-                    let sel_fg = selection_fg.unwrap_or_else(|| color_to_rgba(cell.bg));
+                    let sel_fg = selection_fg.unwrap_or_else(|| color_to_rgba(effective_bg));
                     (sel_bg, sel_fg)
                 } else if is_current_match {
                     (hex_rgba(0xfa, 0xb3, 0x87), [0.0, 0.0, 0.0, 1.0])
                 } else if is_search_match {
                     (hex_rgba(0xf9, 0xe2, 0xaf), [0.0, 0.0, 0.0, 1.0])
                 } else if is_url_hovered {
-                    (color_to_rgba(cell.bg), [0.4, 0.6, 1.0, 1.0])
+                    (color_to_rgba(effective_bg), [0.4, 0.6, 1.0, 1.0])
                 } else {
-                    let raw_bg = color_to_rgba(cell.bg);
+                    let raw_bg = color_to_rgba(effective_bg);
                     let mut raw_fg = color_to_rgba(effective_fg);
                     // faint_opacity: DIM フラグがあれば fg アルファを乗算
                     if cell.flags.contains(CellFlags::DIM) {

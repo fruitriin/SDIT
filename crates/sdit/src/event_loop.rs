@@ -1015,6 +1015,12 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 }
                 self.drag_source_row = None;
                 self.is_selecting = false;
+                // シングルクリック（ドラッグなし）の場合、選択をクリアする
+                if let Some(ref sel) = self.selection {
+                    if sel.start == sel.end {
+                        self.selection = None;
+                    }
+                }
                 self.scrollbar_dragging = false;
 
                 // selection.save_to_clipboard: 選択完了時に自動クリップボードコピー

@@ -4,7 +4,9 @@ pub mod session;
 pub mod sidebar;
 pub mod window_registry;
 
-pub use persistence::{AppSnapshot, SessionSnapshot, WindowGeometry};
+pub use persistence::{
+    AppSnapshot, SessionRestoreInfo, SessionSnapshot, WindowGeometry, WindowSnapshot,
+};
 pub use session::{Session, SessionId, SpawnParams, TerminalState};
 pub use sidebar::SidebarState;
 pub use window_registry::SessionManager;

@@ -582,6 +582,11 @@ impl SditApp {
 
         log::info!("Created window {window_id:?} with session {}", session_id.0);
 
+        // 新ウィンドウにフォーカスを移す
+        if let Some(ws) = self.windows.get(&window_id) {
+            ws.window.focus_window();
+        }
+
         // 初回描画を明示的にトリガーする（add_session_to_window と同様）
         self.redraw_session(session_id);
     }

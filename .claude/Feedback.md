@@ -10,6 +10,9 @@
 
 ## 問題の記録
 
+ビルド破壊の未コミット残留
+前セッションのエージェントが `session/persistence.rs`（SessionRestoreInfo, WindowSnapshot, window_sessions）と `config/keybinds.rs`（ToggleCommandPalette, all_with_names）および `command_palette.rs` を作成・変更したが、これらをコミットせずにセッションを終了した。一方でこれらを参照する `event_loop.rs` や `window_ops.rs` の変更はコミットされており、main ブランチが壊れた状態になっていた。
+
 ## 改善アクション
 
 依存パッケージ提案ルール

@@ -53,6 +53,57 @@ impl WindowGeometry {
     }
 }
 
+/// セッション復元情報。ウィンドウごとに保存される各セッションのメタデータ。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionRestoreInfo {
+    /// ユーザーが設定したカスタムセッション名。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_name: Option<String>,
+    /// セッションの作業ディレクトリ（文字列形式）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub working_directory: Option<String>,
+}
+
+impl SessionRestoreInfo {
+    /// フィールドの値をバリデーションして安全な値を返す。
+    ///
+    /// - `working_directory` が 4096 バイトを超える場合は `None` にする
+    /// - `custom_name` が 256 バイトを超える場合は `None` にする
+    #[must_use]
+    pub fn validated(self) -> Self {
+        let working_directory = self.working_directory.filter(|p| p.len() <= 4096);
+        let custom_name = self.custom_name.filter(|n| n.len() <= 256);
+        Self { custom_name, working_directory }
+    }
+}
+
+/// ウィンドウのスナップショット（ジオメトリ + セッション一覧）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowSnapshot {
+    /// ウィンドウのジオメトリ。
+    pub geometry: WindowGeometry,
+    /// ウィンドウ内のセッション一覧。
+    #[serde(default)]
+    pub sessions: Vec<SessionRestoreInfo>,
+    /// アクティブなセッションのインデックス（0-indexed）。
+    #[serde(default)]
+    pub active_session_index: usize,
+}
+
+impl WindowSnapshot {
+    /// `active_session_index` が `sessions` の範囲内に収まるよう検証する。
+    ///
+    /// 範囲外の場合は 0 を返す。
+    #[must_use]
+    pub fn validated_active_index(&self) -> usize {
+        if self.sessions.is_empty() || self.active_session_index >= self.sessions.len() {
+            0
+        } else {
+            self.active_session_index
+        }
+    }
+}
+
 /// アプリケーション全体のスナップショット。
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppSnapshot {
@@ -64,6 +115,11 @@ pub struct AppSnapshot {
     /// 後方互換: 古い session.toml に windows フィールドがなくても読める。
     #[serde(default)]
     pub windows: Vec<WindowGeometry>,
+    /// 新形式: ウィンドウごとのセッション情報（ジオメトリ + セッション一覧）。
+    ///
+    /// 後方互換: 古い session.toml に window_sessions フィールドがなくても読める。
+    #[serde(default)]
+    pub window_sessions: Vec<WindowSnapshot>,
 }
 
 /// 1セッション分のスナップショット。
@@ -159,7 +215,7 @@ mod tests {
                 SessionSnapshot { cwd: PathBuf::from("/home/user"), custom_name: None },
                 SessionSnapshot { cwd: PathBuf::from("/tmp"), custom_name: None },
             ],
-            windows: vec![],
+            ..Default::default()
         };
 
         snap.save(&path).expect("save failed");
@@ -211,6 +267,7 @@ mod tests {
                 WindowGeometry { width: 800.0, height: 600.0, x: 100, y: 200 },
                 WindowGeometry { width: 1024.0, height: 768.0, x: 300, y: 400 },
             ],
+            ..Default::default()
         };
 
         snap.save(&path).expect("save failed");
@@ -299,7 +356,7 @@ cwd = "/home/user"
         let path = dir.join("session.toml");
 
         // windows が空の AppSnapshot を save/load
-        let snap = AppSnapshot { sessions: vec![], windows: vec![] };
+        let snap = AppSnapshot { sessions: vec![], ..Default::default() };
 
         snap.save(&path).expect("save failed");
         let loaded = AppSnapshot::load(&path);
@@ -329,7 +386,7 @@ cwd = "/home/user"
                 },
                 SessionSnapshot { cwd: PathBuf::from("/tmp"), custom_name: None },
             ],
-            windows: vec![],
+            ..Default::default()
         };
 
         snap.save(&path).expect("save failed");
