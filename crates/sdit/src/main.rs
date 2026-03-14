@@ -7,6 +7,7 @@ mod input;
 mod menu;
 mod quick_select;
 mod render;
+mod vi_mode;
 mod window;
 mod window_ops;
 

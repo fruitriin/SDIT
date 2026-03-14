@@ -407,15 +407,65 @@ impl SditApp {
             ws.atlas.upload_if_dirty(&ws.gpu.queue);
         }
 
+        // vi モードカーソル描画
+        if let Some(ref vi) = self.vi_mode {
+            // vi カーソルのビューポート相対行を計算
+            // display_offset=0 → Line(0) がビューポート先頭
+            // display_offset>0 → ビューポート先頭は Line(-display_offset)
+            let session_ref = self.session_mgr.get(session_id);
+            let display_offset = if let Some(s) = session_ref {
+                let state = s.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                state.terminal.grid().display_offset()
+            } else {
+                0
+            };
+
+            // vi カーソルの viewport 行 = line.0 + display_offset
+            #[allow(clippy::cast_possible_wrap)]
+            let vi_viewport_row_i32 = vi.cursor.point.line.0 + display_offset as i32;
+            if vi_viewport_row_i32 >= 0 {
+                let vi_viewport_row = vi_viewport_row_i32 as usize;
+                if vi_viewport_row < grid_rows {
+                    let vi_col = vi.cursor.point.column.0.min(grid_cols.saturating_sub(1));
+                    let cell_index = vi_viewport_row * grid_cols + vi_col;
+
+                    // 反転色でブロックカーソルを描画（fg/bg 反転）
+                    let vi_fg = self.colors.background; // 元の bg を fg に
+                    let vi_bg = self.colors.foreground; // 元の fg を bg に
+
+                    let vertex = CellVertex {
+                        bg: vi_bg,
+                        fg: vi_fg,
+                        grid_pos: [vi_col as f32, vi_viewport_row as f32],
+                        uv: [0.0; 4],
+                        glyph_offset: [0.0; 2],
+                        glyph_size: [0.0; 2],
+                        cell_width_scale: 1.0,
+                        is_color_glyph: 0.0,
+                    };
+                    ws.cell_pipeline.overwrite_cell(&ws.gpu.queue, cell_index, &vertex);
+                    ws.atlas.upload_if_dirty(&ws.gpu.queue);
+                }
+            }
+        }
+
         ws.window.request_redraw();
     }
 
     /// ウィンドウリサイズ時に GPU・Terminal を更新する。
     ///
     /// 全セッションの Terminal と PTY をリサイズする。
+    /// グリッドサイズが変わるため vi モードのカーソル座標が無効になる可能性があり、
+    /// リサイズ時に vi_mode と selection をリセットする。
     pub(crate) fn handle_resize(&mut self, window_id: WindowId, width: u32, height: u32) {
         let Some(ws) = self.windows.get_mut(&window_id) else { return };
         ws.gpu.resize(width, height);
+
+        // グリッドリサイズで vi カーソル座標が無効になるためリセット
+        if self.vi_mode.is_some() {
+            self.vi_mode = None;
+            self.selection = None;
+        }
 
         let metrics = *self.font_ctx.metrics();
         let sidebar_w = ws.sidebar.width_px(metrics.cell_width);

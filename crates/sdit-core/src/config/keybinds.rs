@@ -42,6 +42,8 @@ pub enum Action {
     NextPrompt,
     /// `QuickSelect` モードを起動する（画面上のパターンをキーボードでコピー）。
     QuickSelect,
+    /// vi モード（コピーモード）のトグル。
+    ToggleViMode,
 }
 
 // ---------------------------------------------------------------------------
@@ -168,6 +170,8 @@ fn macos_default_bindings() -> Vec<KeyBinding> {
         bind("down", "super", NextPrompt),
         // QuickSelect
         bind("space", "super|shift", QuickSelect),
+        // vi モード（コピーモード）
+        bind("v", "super|shift", ToggleViMode),
         // アプリ
         bind("q", "super", Quit),
         bind(",", "super", Preferences),

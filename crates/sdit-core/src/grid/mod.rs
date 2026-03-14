@@ -307,6 +307,18 @@ impl<T: GridCell> Grid<T> {
         &mut self.raw[hist + line][col]
     }
 
+    /// raw インデックスで行・列を参照する。
+    ///
+    /// `raw_row` は `0..total_lines()` の範囲。`0` = 最古の履歴行、`history_size` = ビューポート先頭。
+    /// `col` が範囲外の場合は `None` を返す。
+    pub fn raw_row_cell(&self, raw_row: usize, col: usize) -> Option<&T> {
+        if raw_row >= self.raw.len() || col >= self.columns {
+            return None;
+        }
+        let row = &self.raw[raw_row];
+        row.cells().get(col)
+    }
+
     /// 全行を raw storage の順で参照するイテレータを返す。
     ///
     /// `0..history_size` が履歴行（最古 = 0）、`history_size..total_lines` がビューポート行。

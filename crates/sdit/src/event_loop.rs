@@ -83,6 +83,12 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         }
                     }
 
+                    // --- vi モード中のキー入力処理 ---
+                    if self.vi_mode.is_some() && self.handle_vi_mode_key(&key_event.logical_key, id)
+                    {
+                        return;
+                    }
+
                     // --- 検索モード中のキー入力処理 ---
                     if self.search.is_some() {
                         use winit::keyboard::Key;
@@ -1157,6 +1163,9 @@ impl SditApp {
             }
             Action::QuickSelect => {
                 self.handle_quick_select_action(window_id);
+            }
+            Action::ToggleViMode => {
+                self.toggle_vi_mode(window_id);
             }
         }
     }

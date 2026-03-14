@@ -28,3 +28,4 @@
 | [024-window-padding](024-window-padding.md) | ウィンドウパディング（padding_x/padding_y）設定・描画オフセット・Hot Reload の確認 | 2026-03-14 | UNIT_ONLY |
 | [025-shell-integration-osc133](025-shell-integration-osc133.md) | OSC 133 A/B/C/D セマンティックゾーンマーカー記録・Cmd+Up/Down プロンプトジャンプ・ShellIntegration 有効/無効の確認 | 2026-03-14 | UNIT_ONLY |
 | [026-quick-select](026-quick-select.md) | Cmd+Shift+Space Quick Select モード・URL/パス/ハッシュ/数値パターン検出・ヒントキーコピー・Escape キャンセル・カスタムパターン設定の確認 | 2026-03-14 | UNIT_ONLY |
+| [027-vi-mode](027-vi-mode.md) | vi モード起動/終了（Cmd+Shift+V/Escape）・hjkl 基本移動・v 文字選択・V 行選択・y ヤンク・/ 検索連携・ブロックカーソル描画の確認 | 2026-03-14 | UNIT_ONLY |

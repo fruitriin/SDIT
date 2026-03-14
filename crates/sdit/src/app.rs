@@ -8,6 +8,7 @@ use regex::Regex;
 use winit::keyboard::ModifiersState;
 use winit::window::{Window, WindowId};
 
+use sdit_core::index::Point;
 use sdit_core::pty::{Pty, PtyConfig, PtySize};
 use sdit_core::render::atlas::Atlas;
 use sdit_core::render::font::FontContext;
@@ -17,6 +18,7 @@ use sdit_core::session::{
     Session, SessionId, SessionManager, SidebarState, SpawnParams, TerminalState,
 };
 use sdit_core::terminal::url_detector::UrlDetector;
+use sdit_core::terminal::vi_mode::ViCursor;
 
 use crate::window::{calc_grid_size, spawn_pty_reader, spawn_pty_writer};
 
@@ -104,6 +106,35 @@ impl QuickSelectState {
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// vi モード状態
+// ---------------------------------------------------------------------------
+
+/// vi モードの選択種類。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ViSelectionKind {
+    /// 文字単位選択 (v)。
+    Char,
+    /// 行単位選択 (V)。
+    Line,
+    /// ブロック選択 (Ctrl+V) — 将来実装。
+    #[allow(dead_code)]
+    Block,
+}
+
+/// vi モードの状態。
+#[derive(Debug, Clone)]
+pub(crate) struct ViModeState {
+    /// vi カーソルの現在位置。
+    pub(crate) cursor: ViCursor,
+    /// 選択種類（None = 選択なし）。
+    pub(crate) selection: Option<ViSelectionKind>,
+    /// 選択の起点（v/V を押した位置）。
+    pub(crate) selection_origin: Option<Point>,
+    /// g キーが入力待ち状態か（gg = Top モーション）。
+    pub(crate) pending_g: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -300,6 +331,8 @@ pub(crate) struct SditApp {
     pub(crate) search: Option<SearchState>,
     /// QuickSelect モードの状態。None = 非アクティブ。
     pub(crate) quick_select: Option<QuickSelectState>,
+    /// vi モード（コピーモード）の状態。None = 非アクティブ。
+    pub(crate) vi_mode: Option<ViModeState>,
     /// 設定全体（キーバインド等）。
     pub(crate) config: sdit_core::config::Config,
     /// コンパイル済みカスタム QuickSelect パターン（config 更新時に再コンパイル）。
@@ -357,6 +390,7 @@ impl SditApp {
             hovered_url: None,
             search: None,
             quick_select: None,
+            vi_mode: None,
             config: config.clone(),
             compiled_quick_select_patterns: compile_quick_select_patterns(config),
             notification_in_flight: Arc::new(AtomicBool::new(false)),
@@ -481,6 +515,11 @@ impl SditApp {
                 > f32::EPSILON;
 
         if font_changed {
+            // グリッドサイズが変わるため vi モードのカーソル座標が無効になる可能性がある
+            if self.vi_mode.is_some() {
+                self.vi_mode = None;
+                self.selection = None;
+            }
             // FontContext を再構築（family/line_height も変わりうる）
             self.font_ctx = FontContext::from_config(&new_config.font);
             self.default_font_size = new_config.font.clamped_size();
@@ -571,6 +610,11 @@ impl SditApp {
         let padding_changed = self.config.window.padding_x != new_config.window.padding_x
             || self.config.window.padding_y != new_config.window.padding_y;
         if padding_changed {
+            // グリッドサイズが変わるため vi モードのカーソル座標が無効になる可能性がある
+            if self.vi_mode.is_some() {
+                self.vi_mode = None;
+                self.selection = None;
+            }
             let metrics = *self.font_ctx.metrics();
             #[allow(clippy::similar_names)]
             let new_px = f32::from(new_config.window.clamped_padding_x());

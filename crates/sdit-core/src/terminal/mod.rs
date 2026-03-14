@@ -7,6 +7,7 @@
 pub mod handler;
 pub mod search;
 pub mod url_detector;
+pub mod vi_mode;
 
 use std::collections::VecDeque;
 use std::ops::Range;
