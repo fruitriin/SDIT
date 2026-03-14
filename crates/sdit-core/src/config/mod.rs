@@ -216,6 +216,12 @@ pub struct WindowConfig {
     pub position_x: Option<i32>,
     /// 初期ウィンドウ位置 Y（物理ピクセル）。省略時: OS 任せ。
     pub position_y: Option<i32>,
+    /// ウィンドウリサイズをセル整数倍にスナップする（デフォルト: false）。
+    ///
+    /// `true`: macOS/X11 がセルサイズの整数倍でのみリサイズするようヒントを設定する。
+    /// ウィンドウ端に半端な余白が生まれず、グリッドが常に画面にぴったり収まる。
+    #[serde(default)]
+    pub resize_increments: bool,
 }
 
 impl Default for WindowConfig {
@@ -241,6 +247,7 @@ impl Default for WindowConfig {
             subtitle: WindowSubtitle::None,
             position_x: None,
             position_y: None,
+            resize_increments: false,
         }
     }
 }
@@ -1302,6 +1309,8 @@ impl Config {
                 content.push_str("#   \"none\": no subtitle\n");
                 content.push_str("#   \"working-directory\": show current working directory (updated via OSC 7)\n");
                 content.push_str("#   \"session-name\": show session name\n");
+                content.push_str("# resize_increments: snap window resize to cell size multiples (default: false)\n");
+                content.push_str("#   true: window resizes in exact cell-width/cell-height steps (no fractional padding)\n");
             } else if line == "[paste]" {
                 content.push('\n');
                 content.push_str("# ── Paste ─────────────────────────────────────────────\n");

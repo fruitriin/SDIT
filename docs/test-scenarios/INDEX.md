@@ -34,3 +34,4 @@
 | [030-pty-deadlock-fix](030-pty-deadlock-fix.md) | PTY デッドロック修正確認（DA/DSR クエリ後の停滞回避・メニュー操作との組み合わせ） | 2026-03-15 | PASS |
 | [031-tab-drag-detach](031-tab-drag-detach.md) | タブドラッグ切り出し（Chrome-like UX）・メニュー操作による DetachSession 代替確認 | 2026-03-15 | UNIT_ONLY |
 | [032-east-asian-ambiguous-width](032-east-asian-ambiguous-width.md) | 東アジア曖昧幅文字（○□★→℃）のセル幅設定（Narrow/Wide）切り替え確認 | 2026-03-15 | UNIT_ONLY |
+| [033-resize-increments](033-resize-increments.md) | ウィンドウリサイズのセル整数倍スナップ（resize_increments = true/false）確認 | 2026-03-15 | NEW |

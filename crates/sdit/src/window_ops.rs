@@ -464,6 +464,20 @@ impl SditApp {
                 if self.config.window.always_on_top {
                     w.set_window_level(WindowLevel::AlwaysOnTop);
                 }
+                // resize_increments: セルサイズの整数倍でリサイズするヒントを設定する
+                if self.config.window.resize_increments {
+                    let m = *self.font_ctx.metrics();
+                    if m.cell_width > 0.0
+                        && m.cell_height > 0.0
+                        && m.cell_width.is_finite()
+                        && m.cell_height.is_finite()
+                    {
+                        w.set_resize_increments(Some(winit::dpi::LogicalSize::new(
+                            f64::from(m.cell_width),
+                            f64::from(m.cell_height),
+                        )));
+                    }
+                }
                 Arc::new(w)
             }
             Err(e) => {
@@ -823,6 +837,19 @@ impl SditApp {
                 w.set_ime_allowed(true);
                 #[cfg(target_os = "macos")]
                 w.set_option_as_alt(config_option_as_alt_to_winit(self.config.option_as_alt));
+                if self.config.window.resize_increments {
+                    let m = *self.font_ctx.metrics();
+                    if m.cell_width > 0.0
+                        && m.cell_height > 0.0
+                        && m.cell_width.is_finite()
+                        && m.cell_height.is_finite()
+                    {
+                        w.set_resize_increments(Some(winit::dpi::LogicalSize::new(
+                            f64::from(m.cell_width),
+                            f64::from(m.cell_height),
+                        )));
+                    }
+                }
                 Arc::new(w)
             }
             Err(e) => {

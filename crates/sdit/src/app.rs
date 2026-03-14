@@ -862,6 +862,23 @@ impl SditApp {
             ws.atlas.clear();
         }
 
+        // resize_increments が有効な場合はセルサイズを更新する
+        if self.config.window.resize_increments {
+            let m = *self.font_ctx.metrics();
+            if m.cell_width > 0.0
+                && m.cell_height > 0.0
+                && m.cell_width.is_finite()
+                && m.cell_height.is_finite()
+            {
+                for ws in self.windows.values() {
+                    ws.window.set_resize_increments(Some(winit::dpi::LogicalSize::new(
+                        f64::from(m.cell_width),
+                        f64::from(m.cell_height),
+                    )));
+                }
+            }
+        }
+
         // 全ウィンドウ・全セッションをリサイズ
         let metrics = *self.font_ctx.metrics();
         let padding_x = f32::from(self.config.window.clamped_padding_x());
