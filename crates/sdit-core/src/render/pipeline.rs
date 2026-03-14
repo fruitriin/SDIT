@@ -433,6 +433,8 @@ impl CellPipeline {
         url_hover: Option<(usize, usize, usize)>,
         search_matches: Option<&[(usize, usize, usize)]>,
         current_search_match: Option<(usize, usize, usize)>,
+        selection_fg: Option<[f32; 4]>,
+        selection_bg: Option<[f32; 4]>,
     ) {
         let rows = grid.screen_lines();
         let cols = grid.columns();
@@ -497,7 +499,10 @@ impl CellPipeline {
                         (color_to_rgba(cell.fg), color_to_rgba(cell.bg))
                     }
                 } else if is_selected {
-                    (color_to_rgba(cell.fg), color_to_rgba(cell.bg))
+                    // 選択色: 設定があればそれを使用し、なければ fg/bg 反転
+                    let sel_bg = selection_bg.unwrap_or_else(|| color_to_rgba(cell.fg));
+                    let sel_fg = selection_fg.unwrap_or_else(|| color_to_rgba(cell.bg));
+                    (sel_bg, sel_fg)
                 } else if is_current_match {
                     (hex_rgba(0xfa, 0xb3, 0x87), [0.0, 0.0, 0.0, 1.0])
                 } else if is_search_match {

@@ -294,11 +294,16 @@ impl SditApp {
             let text = sdit_core::selection::selected_text(state.terminal.grid(), sel);
             drop(state);
             if !text.is_empty() {
+                let copy_text = if self.config.selection.trim_trailing_spaces {
+                    crate::cwd_utils::trim_trailing_whitespace(&text)
+                } else {
+                    text
+                };
                 if let Some(cb) = &mut self.clipboard {
-                    if let Err(e) = cb.set_text(&text) {
+                    if let Err(e) = cb.set_text(&copy_text) {
                         log::warn!("vi yank clipboard set_text failed: {e}");
                     } else {
-                        log::info!("vi yank: copied {} bytes", text.len());
+                        log::info!("vi yank: copied {} bytes", copy_text.len());
                     }
                 }
             }

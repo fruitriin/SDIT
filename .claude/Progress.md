@@ -79,6 +79,24 @@
 
 ---
 
-## タスク
+## タスク: Phase 16.2〜16.7 — 小規模 UX 改善バッチ
 
-（現在タスクなし）
+### Phase 16.2: 起動モード設定
+- [x] WindowConfig に startup_mode 追加 + ウィンドウ生成時に適用 + テスト
+
+### Phase 16.5: クリップボードコピー時末尾空白削除
+- [x] SelectionConfig に trim_trailing_spaces 追加 + コピー処理適用 + テスト
+
+### Phase 16.4: 選択色設定
+- [x] ColorConfig に selection_fg/bg 追加 + レンダリング適用 + テスト
+
+### Phase 16.6: Working Directory 継承
+- [x] WindowConfig に inherit_working_directory 追加 + CWD 伝搬 + テスト
+
+### Phase 16.7: スクロールトゥボトム設定
+- [x] ScrollingConfig に scroll_to_bottom 追加 + キー入力/出力時適用 + テスト
+
+### 品質ゲート
+- [x] Stage 1
+- [ ] Stage 2
+- [ ] 完了処理

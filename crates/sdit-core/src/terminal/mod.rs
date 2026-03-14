@@ -264,6 +264,8 @@ pub struct Terminal {
     /// Config への参照を持たないため、GUI 側（app.rs）で設定して渡す。
     /// デフォルト: `true`。
     pub shell_integration_enabled: bool,
+    /// OSC 7 で設定されたカレントディレクトリ URL（file://hostname/path 形式）。
+    pub(super) cwd_pending: Option<String>,
 }
 
 impl Terminal {
@@ -292,6 +294,7 @@ impl Terminal {
             notification_pending: None,
             semantic_markers: VecDeque::new(),
             shell_integration_enabled: true,
+            cwd_pending: None,
         }
     }
 
@@ -326,6 +329,7 @@ impl Terminal {
             notification_pending: None,
             semantic_markers: VecDeque::new(),
             shell_integration_enabled: true,
+            cwd_pending: None,
         }
     }
 
@@ -405,6 +409,14 @@ impl Terminal {
     /// 呼び出し後はフィールドが `None` になる（take セマンティクス）。
     pub fn take_notification(&mut self) -> Option<(String, String)> {
         self.notification_pending.take()
+    }
+
+    /// OSC 7 で設定されたカレントディレクトリを取り出す。
+    ///
+    /// `file://hostname/path` 形式の URL を返す。
+    /// 呼び出し後はフィールドが `None` になる（take セマンティクス）。
+    pub fn take_cwd(&mut self) -> Option<String> {
+        self.cwd_pending.take()
     }
 
     /// Resize the terminal to `lines` rows and `columns` columns.
@@ -790,6 +802,21 @@ impl Perform for Terminal {
                         self.current_hyperlink = Some(Arc::from(url));
                     }
                     // それ以外のスキーム（file:// 等）は無視（current_hyperlink は変更しない）
+                }
+            }
+            return;
+        }
+
+        // OSC 7: カレントディレクトリ通知（iTerm2/macOS Terminal 互換）。
+        // 形式: \e]7;file://hostname/path\ST
+        if params.len() >= 2 && params[0] == b"7" {
+            const MAX_CWD_BYTES: usize = 4096;
+            let raw = params[1];
+            let capped = if raw.len() > MAX_CWD_BYTES { &raw[..MAX_CWD_BYTES] } else { raw };
+            if let Ok(url) = std::str::from_utf8(capped) {
+                // file:// スキームのみ受け付ける。制御文字は拒否。
+                if url.starts_with("file://") && url.bytes().all(|b| b >= 0x20 && b != 0x7F) {
+                    self.cwd_pending = Some(url.to_owned());
                 }
             }
             return;

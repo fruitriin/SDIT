@@ -6,12 +6,33 @@ use serde::{Deserialize, Serialize};
 pub struct ColorConfig {
     /// 組み込みテーマ名。
     pub theme: ThemeName,
+    /// 選択テキストの前景色（hex 文字列 "#RRGGBB"）。None = 背景色と反転した色を使用。
+    pub selection_foreground: Option<String>,
+    /// 選択テキストの背景色（hex 文字列 "#RRGGBB"）。None = 前景色と反転した色を使用。
+    pub selection_background: Option<String>,
 }
 
 impl Default for ColorConfig {
     fn default() -> Self {
-        Self { theme: ThemeName::CatppuccinMocha }
+        Self {
+            theme: ThemeName::CatppuccinMocha,
+            selection_foreground: None,
+            selection_background: None,
+        }
     }
+}
+
+/// hex 文字列 "#RRGGBB" を `[f32; 4]` RGBA に変換する。
+/// パース失敗時は `None` を返す。
+pub fn parse_selection_color(hex: &str) -> Option<[f32; 4]> {
+    let hex = hex.trim_start_matches('#');
+    if hex.len() != 6 {
+        return None;
+    }
+    let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+    Some([f32::from(r) / 255.0, f32::from(g) / 255.0, f32::from(b) / 255.0, 1.0])
 }
 
 /// 組み込みテーマ名。
@@ -170,6 +191,41 @@ mod tests {
         }
         let t: Test = toml::from_str(r#"theme = "catppuccin-latte""#).unwrap();
         assert_eq!(t.theme, ThemeName::CatppuccinLatte);
+    }
+
+    #[test]
+    fn selection_color_config_default() {
+        let cc = ColorConfig::default();
+        assert!(cc.selection_foreground.is_none());
+        assert!(cc.selection_background.is_none());
+    }
+
+    #[test]
+    fn selection_color_config_deserialize() {
+        let toml_str =
+            "[colors]\nselection_foreground = \"#ffffff\"\nselection_background = \"#005577\"\n";
+        #[derive(serde::Deserialize)]
+        struct TestConfig {
+            colors: ColorConfig,
+        }
+        let cfg: TestConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.colors.selection_foreground.as_deref(), Some("#ffffff"));
+        assert_eq!(cfg.colors.selection_background.as_deref(), Some("#005577"));
+    }
+
+    #[test]
+    fn parse_selection_color_valid() {
+        let c = parse_selection_color("#ff0080").unwrap();
+        assert!((c[0] - 1.0).abs() < 0.01);
+        assert!((c[1] - 0.0).abs() < 0.01);
+        assert!((c[3] - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn parse_selection_color_invalid() {
+        assert!(parse_selection_color("invalid").is_none());
+        assert!(parse_selection_color("#gg0000").is_none());
+        assert!(parse_selection_color("#fff").is_none());
     }
 
     /// 全テーマで fg/bg コントラスト比が WCAG AA (4.5:1) 以上であることを検証。

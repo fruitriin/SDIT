@@ -226,6 +226,43 @@ impl ApplicationHandler<SditEvent> for SditApp {
                     // キー入力時に選択を解除
                     self.selection = None;
 
+                    // scroll_to_bottom_on_keystroke: キー入力時にスクロールをボトムにリセット
+                    // モディファイアのみのキー押下（Cmd, Ctrl, Shift, Alt 単独）では発動しない
+                    if self.config.scrolling.scroll_to_bottom_on_keystroke {
+                        let is_modifier_only = matches!(
+                            key_event.logical_key,
+                            winit::keyboard::Key::Named(
+                                NamedKey::Control
+                                    | NamedKey::Shift
+                                    | NamedKey::Alt
+                                    | NamedKey::Super
+                                    | NamedKey::Hyper
+                                    | NamedKey::Meta
+                                    | NamedKey::CapsLock
+                                    | NamedKey::Fn
+                                    | NamedKey::FnLock
+                                    | NamedKey::NumLock
+                                    | NamedKey::ScrollLock
+                                    | NamedKey::Symbol
+                                    | NamedKey::SymbolLock
+                            )
+                        );
+                        if !is_modifier_only {
+                            if let Some(ws) = self.windows.get(&id) {
+                                let sid = ws.active_session_id();
+                                if let Some(session) = self.session_mgr.get(sid) {
+                                    let mut state = session
+                                        .term_state
+                                        .lock()
+                                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                    if state.terminal.grid().display_offset() > 0 {
+                                        state.terminal.grid_mut().scroll_display(Scroll::Bottom);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // hide_when_typing: タイピング中はマウスカーソルを非表示にする
                     if self.config.mouse.hide_when_typing && !self.cursor_hidden {
                         if let Some(ws) = self.windows.get(&id) {
@@ -653,10 +690,15 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                     .term_state
                                     .lock()
                                     .unwrap_or_else(std::sync::PoisonError::into_inner);
-                                let text =
+                                let raw_text =
                                     sdit_core::selection::selected_text(state.terminal.grid(), sel);
                                 drop(state);
-                                if !text.is_empty() {
+                                if !raw_text.is_empty() {
+                                    let text = if self.config.selection.trim_trailing_spaces {
+                                        trim_trailing_whitespace(&raw_text)
+                                    } else {
+                                        raw_text
+                                    };
                                     if let Some(cb) = &mut self.clipboard {
                                         if let Err(e) = cb.set_text(text) {
                                             log::warn!("Auto-clipboard set_text failed: {e}");
@@ -868,7 +910,31 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 }
             }
             SditEvent::PtyOutput(session_id) => {
+                // scroll_to_bottom_on_output: 出力受信時にスクロールをボトムにリセット
+                if self.config.scrolling.scroll_to_bottom_on_output {
+                    if let Some(session) = self.session_mgr.get(session_id) {
+                        let mut state = session
+                            .term_state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        if state.terminal.grid().display_offset() > 0 {
+                            state
+                                .terminal
+                                .grid_mut()
+                                .scroll_display(sdit_core::grid::Scroll::Bottom);
+                        }
+                    }
+                }
                 self.redraw_session(session_id);
+            }
+            SditEvent::CwdChanged { session_id, cwd } => {
+                // OSC 7 CWD を Session に記録する（file://hostname/path → PathBuf に変換）
+                if let Some(path) = parse_osc7_cwd(&cwd) {
+                    if let Some(session) = self.session_mgr.get_mut(session_id) {
+                        session.cwd = Some(path);
+                        log::debug!("Session {} cwd updated: {cwd}", session_id.0);
+                    }
+                }
             }
             SditEvent::ClipboardWrite(text) => {
                 if let Some(cb) = &mut self.clipboard {
@@ -1012,7 +1078,18 @@ impl SditApp {
                 self.detach_session_to_new_window(window_id, event_loop);
             }
             Action::NewWindow => {
-                self.create_window(event_loop, None);
+                // inherit_working_directory: アクティブセッションの CWD を継承する
+                let inherit_cwd = if self.config.window.inherit_working_directory {
+                    if let Some(ws) = self.windows.get(&window_id) {
+                        let active_sid = ws.active_session_id();
+                        self.session_mgr.get(active_sid).and_then(|s| s.cwd.clone())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                self.create_window_with_cwd(event_loop, None, inherit_cwd);
             }
             Action::SidebarToggle => {
                 if let Some(ws) = self.windows.get_mut(&window_id) {
@@ -1089,9 +1166,14 @@ impl SditApp {
                         .term_state
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    let text = sdit_core::selection::selected_text(state.terminal.grid(), sel);
+                    let raw_text = sdit_core::selection::selected_text(state.terminal.grid(), sel);
                     drop(state);
-                    if !text.is_empty() {
+                    if !raw_text.is_empty() {
+                        let text = if self.config.selection.trim_trailing_spaces {
+                            trim_trailing_whitespace(&raw_text)
+                        } else {
+                            raw_text
+                        };
                         if let Some(cb) = &mut self.clipboard {
                             if let Err(e) = cb.set_text(text) {
                                 log::warn!("Clipboard set_text failed: {e}");
@@ -1413,69 +1495,5 @@ impl SditApp {
     }
 }
 
-// ---------------------------------------------------------------------------
-// 単語境界拡張ヘルパー
-// ---------------------------------------------------------------------------
-
-/// グリッドの `(row, col)` から単語の開始・終了列インデックスを返す。
-///
-/// 空白・記号を区切り文字として扱い、連続する英数字・その他の文字を「単語」とみなす。
-/// `word_chars` が空でない場合は、それらの文字も単語の一部として扱う。
-fn expand_word(
-    grid: &sdit_core::grid::Grid<sdit_core::grid::Cell>,
-    row: usize,
-    col: usize,
-    word_chars: &str,
-) -> (usize, usize) {
-    use sdit_core::grid::Dimensions as _;
-    use sdit_core::index::{Column, Line};
-
-    let cols = grid.columns();
-    if cols == 0 {
-        return (col, col);
-    }
-    let col = col.min(cols - 1);
-
-    // 区切り文字セット（word_chars に含まれる文字は区切り文字から除外）
-    let is_separator = |c: char| {
-        if !word_chars.is_empty() && word_chars.contains(c) {
-            return false;
-        }
-        c.is_ascii_whitespace() || " \t!@#$%^&*()-=+[]{}|;:'\",.<>?/\\`~".contains(c)
-    };
-
-    // 起点セルの文字を取得
-    #[allow(clippy::cast_possible_wrap)]
-    let origin_cell = &grid[Point::new(Line(row as i32), Column(col))];
-    let origin_is_sep = is_separator(origin_cell.c);
-
-    // 左方向に拡張
-    let mut start = col;
-    loop {
-        if start == 0 {
-            break;
-        }
-        #[allow(clippy::cast_possible_wrap)]
-        let c = grid[Point::new(Line(row as i32), Column(start - 1))].c;
-        if is_separator(c) != origin_is_sep {
-            break;
-        }
-        start -= 1;
-    }
-
-    // 右方向に拡張
-    let mut end = col;
-    loop {
-        if end + 1 >= cols {
-            break;
-        }
-        #[allow(clippy::cast_possible_wrap)]
-        let c = grid[Point::new(Line(row as i32), Column(end + 1))].c;
-        if is_separator(c) != origin_is_sep {
-            break;
-        }
-        end += 1;
-    }
-
-    (start, end)
-}
+use crate::cwd_utils::{parse_osc7_cwd, trim_trailing_whitespace};
+use crate::selection_utils::expand_word;

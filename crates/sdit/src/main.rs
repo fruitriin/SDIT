@@ -1,5 +1,6 @@
 mod app;
 mod config_watcher;
+mod cwd_utils;
 mod event_loop;
 mod headless;
 mod input;
@@ -8,6 +9,7 @@ mod menu;
 mod quick_select;
 mod rename;
 mod render;
+mod selection_utils;
 mod vi_mode;
 mod window;
 mod window_ops;

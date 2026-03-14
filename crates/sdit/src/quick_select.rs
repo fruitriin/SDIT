@@ -41,12 +41,17 @@ impl SditApp {
                 let matched = qs.hints.iter().find(|h| h.label == input).cloned();
                 if let Some(hint) = matched {
                     // クリップボードにコピー
+                    let copy_text = if self.config.selection.trim_trailing_spaces {
+                        crate::cwd_utils::trim_trailing_whitespace(&hint.text)
+                    } else {
+                        hint.text.clone()
+                    };
                     if let Some(cb) = &mut self.clipboard {
-                        if let Err(e) = cb.set_text(&hint.text) {
+                        if let Err(e) = cb.set_text(&copy_text) {
                             log::warn!("QuickSelect clipboard set_text failed: {e}");
                         }
                     }
-                    log::info!("QuickSelect: copied {} bytes", hint.text.len());
+                    log::info!("QuickSelect: copied {} bytes", copy_text.len());
                     self.quick_select = None;
                 } else {
                     // 候補が残っているか確認（前方一致で候補があれば継続、なければ終了）

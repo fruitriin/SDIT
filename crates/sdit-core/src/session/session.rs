@@ -1,4 +1,5 @@
 use std::os::fd::OwnedFd;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -40,6 +41,8 @@ pub struct Session {
     pub pty_io: PtyIo,
     /// ユーザーが設定したカスタムセッション名。`None` の場合はデフォルト名を表示する。
     pub custom_name: Option<String>,
+    /// OSC 7 で通知された最新のカレントディレクトリ。
+    pub cwd: Option<PathBuf>,
     /// PTY master fd のクローン（リサイズ ioctl 専用）。
     resize_fd: OwnedFd,
     /// 子プロセスの PID（Drop 時のシグナル送信用）。
@@ -106,6 +109,7 @@ impl Session {
             term_state,
             pty_io: PtyIo { write_tx, reader: Some(reader_handle), writer: Some(writer_handle) },
             custom_name: None,
+            cwd: None,
             resize_fd,
             child_pid,
             child_exited,

@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use winit::event_loop::ActiveEventLoop;
-use winit::window::{Window, WindowId};
+use winit::window::{Fullscreen, Window, WindowId};
 
 #[cfg(target_os = "macos")]
 use winit::platform::macos::{OptionAsAlt as WinitOptionAsAlt, WindowExtMacOS};
 
+use sdit_core::config::StartupMode;
 use sdit_core::pty::PtySize;
 use sdit_core::render::atlas::Atlas;
 use sdit_core::render::pipeline::{CellPipeline, GpuContext};
@@ -55,6 +56,16 @@ impl SditApp {
         event_loop: &ActiveEventLoop,
         geometry: Option<&WindowGeometry>,
     ) {
+        self.create_window_with_cwd(event_loop, geometry, None);
+    }
+
+    /// CWD を指定して新しいウィンドウ + セッションを生成する。
+    pub(crate) fn create_window_with_cwd(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        geometry: Option<&WindowGeometry>,
+        working_dir: Option<std::path::PathBuf>,
+    ) {
         let needs_transparent =
             self.config.window.clamped_opacity() < 1.0 || self.config.window.blur;
         let mut attrs = Window::default_attributes()
@@ -85,6 +96,16 @@ impl SditApp {
                 w.set_ime_allowed(true);
                 #[cfg(target_os = "macos")]
                 w.set_option_as_alt(config_option_as_alt_to_winit(self.config.option_as_alt));
+                // startup_mode を適用する（geometry 復元時はスキップ）
+                if geometry.is_none() {
+                    match self.config.window.startup_mode {
+                        StartupMode::Maximized => w.set_maximized(true),
+                        StartupMode::Fullscreen => {
+                            w.set_fullscreen(Some(Fullscreen::Borderless(None)));
+                        }
+                        StartupMode::Windowed => {}
+                    }
+                }
                 Arc::new(w)
             }
             Err(e) => {
@@ -112,7 +133,7 @@ impl SditApp {
         );
 
         // --- Session 生成 ---
-        let Some(session_id) = self.spawn_session(rows, cols) else {
+        let Some(session_id) = self.spawn_session_with_cwd(rows, cols, working_dir) else {
             return;
         };
         let session = self.session_mgr.get(session_id).unwrap();
@@ -145,6 +166,8 @@ impl SditApp {
             None,
             None,
             None,
+            None, // selection_fg: 初期描画では None
+            None, // selection_bg: 初期描画では None
         );
         drop(state_lock);
 
@@ -191,7 +214,15 @@ impl SditApp {
         let (cols, rows) =
             calc_grid_size(term_width, term_height, metrics.cell_width, metrics.cell_height);
 
-        let Some(session_id) = self.spawn_session(rows, cols) else {
+        // inherit_working_directory: アクティブセッションの CWD を継承する
+        let inherit_cwd = if self.config.window.inherit_working_directory {
+            let active_sid = ws.active_session_id();
+            self.session_mgr.get(active_sid).and_then(|s| s.cwd.clone())
+        } else {
+            None
+        };
+
+        let Some(session_id) = self.spawn_session_with_cwd(rows, cols, inherit_cwd) else {
             return;
         };
 

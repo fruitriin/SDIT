@@ -172,6 +172,8 @@ pub(crate) enum SditEvent {
     BellRing(SessionId),
     /// OSC 9/99 デスクトップ通知要求。
     DesktopNotification { title: String, body: String },
+    /// OSC 7 で CWD が変更された → Session の cwd フィールドを更新する。
+    CwdChanged { session_id: SessionId, cwd: String },
 }
 
 // ---------------------------------------------------------------------------
@@ -422,12 +424,24 @@ impl SditApp {
     /// 新しいセッションを生成して `SessionManager` に登録する。
     ///
     /// GPU パイプラインの初期化は行わない（呼び出し側で描画を更新する）。
+    #[allow(dead_code)]
     pub(crate) fn spawn_session(&mut self, rows: usize, cols: usize) -> Option<SessionId> {
+        self.spawn_session_with_cwd(rows, cols, None)
+    }
+
+    /// CWD を指定してセッションを生成する。
+    pub(crate) fn spawn_session_with_cwd(
+        &mut self,
+        rows: usize,
+        cols: usize,
+        working_dir: Option<std::path::PathBuf>,
+    ) -> Option<SessionId> {
         let session_id = self.session_mgr.next_id();
         let pty_size = PtySize::new(rows.try_into().unwrap_or(24), cols.try_into().unwrap_or(80));
         let mut pty_config = PtyConfig::default();
         pty_config.env.insert("TERM".to_owned(), "xterm-256color".to_owned());
         pty_config.env.insert("TERM_PROGRAM".to_owned(), "sdit".to_owned());
+        pty_config.working_directory = working_dir;
 
         let event_proxy = self.event_proxy.clone();
         let sid = session_id;

@@ -68,6 +68,11 @@ pub(crate) fn spawn_pty_reader(
                                 let _ = event_proxy
                                     .send_event(SditEvent::DesktopNotification { title, body });
                             }
+                            // OSC 7 CWD 変更処理
+                            if let Some(cwd) = terminal.take_cwd() {
+                                let _ = event_proxy
+                                    .send_event(SditEvent::CwdChanged { session_id, cwd });
+                            }
                             // 新しい出力があったら display_offset を 0 にリセット（ライブビュー追従）
                             if terminal.grid().display_offset() > 0 {
                                 terminal.grid_mut().scroll_display(Scroll::Bottom);

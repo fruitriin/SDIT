@@ -11,6 +11,19 @@ use self::font::FontConfig;
 use self::keybinds::KeybindConfig;
 use crate::terminal::CursorStyle;
 
+/// 起動時のウィンドウ表示モード。
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum StartupMode {
+    /// 通常ウィンドウ（デフォルト）。
+    #[default]
+    Windowed,
+    /// 最大化ウィンドウ。
+    Maximized,
+    /// フルスクリーン（ボーダーレス）。
+    Fullscreen,
+}
+
 /// カーソルスタイルの設定値（serde 用）。
 ///
 /// `CursorStyle` とは別に定義し、TOML 文字列との相互変換を担う。
@@ -89,11 +102,24 @@ pub struct WindowConfig {
     pub columns: u16,
     /// 初期ウィンドウ高さ（行数）。デフォルト: 24、範囲: 2-200。
     pub rows: u16,
+    /// 起動時のウィンドウ表示モード: "Windowed" (デフォルト), "Maximized", "Fullscreen"。
+    pub startup_mode: StartupMode,
+    /// 新しいセッション/ウィンドウ生成時に、アクティブセッションの作業ディレクトリを継承する（デフォルト: true）。
+    pub inherit_working_directory: bool,
 }
 
 impl Default for WindowConfig {
     fn default() -> Self {
-        Self { opacity: 1.0, blur: false, padding_x: 0, padding_y: 0, columns: 80, rows: 24 }
+        Self {
+            opacity: 1.0,
+            blur: false,
+            padding_x: 0,
+            padding_y: 0,
+            columns: 80,
+            rows: 24,
+            startup_mode: StartupMode::Windowed,
+            inherit_working_directory: true,
+        }
     }
 }
 
@@ -209,11 +235,19 @@ pub struct QuickSelectConfig {
 pub struct ScrollingConfig {
     /// マウスホイール 1 ノッチあたりのスクロール行数倍率（デフォルト: 3、範囲: 1-100）。
     pub multiplier: u32,
+    /// キー入力時にスクロールバック表示をボトムにリセットする（デフォルト: true）。
+    pub scroll_to_bottom_on_keystroke: bool,
+    /// PTY 出力受信時にスクロールバック表示をボトムにリセットする（デフォルト: false）。
+    pub scroll_to_bottom_on_output: bool,
 }
 
 impl Default for ScrollingConfig {
     fn default() -> Self {
-        Self { multiplier: 3 }
+        Self {
+            multiplier: 3,
+            scroll_to_bottom_on_keystroke: true,
+            scroll_to_bottom_on_output: false,
+        }
     }
 }
 
@@ -235,11 +269,13 @@ pub struct SelectionConfig {
     pub word_chars: String,
     /// テキスト選択完了時に自動的にクリップボードにコピーする（デフォルト: false）。
     pub save_to_clipboard: bool,
+    /// クリップボードにコピーするとき、各行末の空白を削除する（デフォルト: true）。
+    pub trim_trailing_spaces: bool,
 }
 
 impl Default for SelectionConfig {
     fn default() -> Self {
-        Self { word_chars: String::new(), save_to_clipboard: false }
+        Self { word_chars: String::new(), save_to_clipboard: false, trim_trailing_spaces: true }
     }
 }
 
@@ -483,6 +519,8 @@ impl Config {
                 content.push_str(
                     "#   available: \"catppuccin-mocha\", \"catppuccin-latte\", \"gruvbox-dark\"\n",
                 );
+                content.push_str("# selection_foreground: text selection foreground color as hex \"#RRGGBB\"; omit to use inverted color\n");
+                content.push_str("# selection_background: text selection background color as hex \"#RRGGBB\"; omit to use inverted color\n");
             } else if line == "[keybinds]" || line == "[[keybinds]]" {
                 content.push('\n');
                 content.push_str("# ── Keybinds ────────────────────────────────────────────\n");
@@ -527,6 +565,8 @@ impl Config {
                     "# columns: initial terminal width in columns (10-500, default: 80)\n",
                 );
                 content.push_str("# rows: initial terminal height in rows (2-200, default: 24)\n");
+                content.push_str("# startup_mode: initial window state: \"Windowed\" (default), \"Maximized\", \"Fullscreen\"\n");
+                content.push_str("# inherit_working_directory: inherit active session's working directory for new sessions/windows (default: true)\n");
             } else if line == "[paste]" {
                 content.push('\n');
                 content.push_str("# ── Paste ─────────────────────────────────────────────\n");
@@ -569,12 +609,15 @@ impl Config {
                 content.push_str(
                     "# multiplier: scroll lines per mouse wheel notch (1-100, default: 3)\n",
                 );
+                content.push_str("# scroll_to_bottom_on_keystroke: scroll to bottom when a key is pressed (default: true)\n");
+                content.push_str("# scroll_to_bottom_on_output: scroll to bottom when new output is received (default: false)\n");
             } else if line == "[selection]" {
                 content.push('\n');
                 content
                     .push_str("# ── Selection ───────────────────────────────────────────────\n");
                 content.push_str("# word_chars: extra characters treated as part of a word in double-click selection (default: \"\")\n");
                 content.push_str("# save_to_clipboard: auto-copy selected text to clipboard on mouse release (default: false)\n");
+                content.push_str("# trim_trailing_spaces: remove trailing whitespace from each line when copying to clipboard (default: true)\n");
             } else if line == "[mouse]" {
                 content.push('\n');
                 content.push_str("# ── Mouse ──────────────────────────────────────────────────\n");
@@ -994,13 +1037,13 @@ line_height = 1.3
 
     #[test]
     fn scrolling_config_clamp_min() {
-        let sc = ScrollingConfig { multiplier: 0 };
+        let sc = ScrollingConfig { multiplier: 0, ..Default::default() };
         assert_eq!(sc.clamped_multiplier(), 1);
     }
 
     #[test]
     fn scrolling_config_clamp_max() {
-        let sc = ScrollingConfig { multiplier: 999 };
+        let sc = ScrollingConfig { multiplier: 999, ..Default::default() };
         assert_eq!(sc.clamped_multiplier(), 100);
     }
 
@@ -1118,5 +1161,69 @@ action = "open:https://github.com/issues/$0"
         let toml_str = format!("[[links]]\nregex = \"PAT\"\naction = \"{long_action}\"\n");
         let config: Config = toml::from_str(&toml_str).unwrap();
         assert_eq!(config.clamped_links().count(), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // Phase 16 新設定のテスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn startup_mode_default_is_windowed() {
+        let wc = WindowConfig::default();
+        assert_eq!(wc.startup_mode, StartupMode::Windowed);
+    }
+
+    #[test]
+    fn startup_mode_deserialize() {
+        let cases: &[(&str, StartupMode)] = &[
+            ("[window]\nstartup_mode = \"Windowed\"\n", StartupMode::Windowed),
+            ("[window]\nstartup_mode = \"Maximized\"\n", StartupMode::Maximized),
+            ("[window]\nstartup_mode = \"Fullscreen\"\n", StartupMode::Fullscreen),
+        ];
+        for (toml_str, expected) in cases {
+            let config: Config = toml::from_str(toml_str).unwrap();
+            assert_eq!(config.window.startup_mode, *expected, "failed for: {toml_str}");
+        }
+    }
+
+    #[test]
+    fn window_config_inherit_working_directory_default() {
+        let wc = WindowConfig::default();
+        assert!(wc.inherit_working_directory);
+    }
+
+    #[test]
+    fn window_config_inherit_working_directory_deserialize() {
+        let toml_str = "[window]\ninherit_working_directory = false\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert!(!config.window.inherit_working_directory);
+    }
+
+    #[test]
+    fn selection_trim_trailing_spaces_default() {
+        let sc = SelectionConfig::default();
+        assert!(sc.trim_trailing_spaces);
+    }
+
+    #[test]
+    fn selection_trim_trailing_spaces_deserialize() {
+        let toml_str = "[selection]\ntrim_trailing_spaces = false\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert!(!config.selection.trim_trailing_spaces);
+    }
+
+    #[test]
+    fn scrolling_scroll_to_bottom_default() {
+        let sc = ScrollingConfig::default();
+        assert!(sc.scroll_to_bottom_on_keystroke);
+        assert!(!sc.scroll_to_bottom_on_output);
+    }
+
+    #[test]
+    fn scrolling_scroll_to_bottom_deserialize() {
+        let toml_str = "[scrolling]\nscroll_to_bottom_on_keystroke = false\nscroll_to_bottom_on_output = true\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert!(!config.scrolling.scroll_to_bottom_on_keystroke);
+        assert!(config.scrolling.scroll_to_bottom_on_output);
     }
 }

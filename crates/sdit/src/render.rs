@@ -104,6 +104,22 @@ impl SditApp {
             parsed
         });
 
+        // 選択色: 設定された hex 文字列をパース。パース失敗時はログ警告して None 扱い。
+        let selection_fg = self.config.colors.selection_foreground.as_deref().and_then(|hex| {
+            let parsed = sdit_core::config::color::parse_selection_color(hex);
+            if parsed.is_none() {
+                log::warn!("colors.selection_foreground: invalid hex color '{hex}', using default");
+            }
+            parsed
+        });
+        let selection_bg = self.config.colors.selection_background.as_deref().and_then(|hex| {
+            let parsed = sdit_core::config::color::parse_selection_color(hex);
+            if parsed.is_none() {
+                log::warn!("colors.selection_background: invalid hex color '{hex}', using default");
+            }
+            parsed
+        });
+
         ws.cell_pipeline.update_from_grid(
             &ws.gpu.queue,
             grid,
@@ -118,6 +134,8 @@ impl SditApp {
             url_hover,
             search_highlight.as_deref(),
             current_highlight,
+            selection_fg,
+            selection_bg,
         );
         drop(state_lock);
 
