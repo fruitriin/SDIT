@@ -2,15 +2,15 @@
 
 **概要**: テキスト選択時のフォアグラウンド・バックグラウンド色をユーザーが設定できるようにする。
 
-**状態**: 未着手
+**状態**: **完了**
 
 ## タスク
 
 | タスク | 詳細 | 変更先 | 状態 |
 |---|---|---|---|
-| ColorConfig に selection_fg/bg 追加 | Optional、デフォルト None（反転色を使用） | sdit-core (`config/colors.rs`) | 未着手 |
-| レンダリングで適用 | 選択セルの描画時に設定色を使用 | sdit (`render.rs`) | 未着手 |
-| テスト | 設定デシリアライズ + デフォルト値 | sdit-core | 未着手 |
+| ColorConfig に selection_fg/bg 追加 | Optional、デフォルト None（反転色を使用） | sdit-core (`config/colors.rs`) | **完了** |
+| レンダリングで適用 | 選択セルの描画時に設定色を使用 | sdit (`render.rs`) | **完了** |
+| テスト | 設定デシリアライズ + デフォルト値 | sdit-core | **完了** |
 
 ## 設定例
 

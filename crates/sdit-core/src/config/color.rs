@@ -26,7 +26,7 @@ impl Default for ColorConfig {
 /// パース失敗時は `None` を返す。
 pub fn parse_selection_color(hex: &str) -> Option<[f32; 4]> {
     let hex = hex.trim_start_matches('#');
-    if hex.len() != 6 {
+    if hex.len() != 6 || !hex.is_ascii() {
         return None;
     }
     let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
@@ -226,6 +226,13 @@ mod tests {
         assert!(parse_selection_color("invalid").is_none());
         assert!(parse_selection_color("#gg0000").is_none());
         assert!(parse_selection_color("#fff").is_none());
+    }
+
+    #[test]
+    fn parse_selection_color_non_ascii_rejected() {
+        // 非 ASCII 文字を含む入力はバイトインデックスアクセスが安全でないため拒否する
+        assert!(parse_selection_color("#ff00\u{00e9}\u{00e9}").is_none());
+        assert!(parse_selection_color("ａｂｃｄｅｆ").is_none());
     }
 
     /// 全テーマで fg/bg コントラスト比が WCAG AA (4.5:1) 以上であることを検証。
