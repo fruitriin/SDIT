@@ -203,6 +203,70 @@ pub struct QuickSelectConfig {
     pub patterns: Vec<String>,
 }
 
+/// スクロール設定。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ScrollingConfig {
+    /// マウスホイール 1 ノッチあたりのスクロール行数倍率（デフォルト: 3、範囲: 1-100）。
+    pub multiplier: u32,
+}
+
+impl Default for ScrollingConfig {
+    fn default() -> Self {
+        Self { multiplier: 3 }
+    }
+}
+
+impl ScrollingConfig {
+    /// multiplier を安全な範囲（1〜100）にクランプする。
+    pub fn clamped_multiplier(&self) -> u32 {
+        self.multiplier.clamp(1, 100)
+    }
+}
+
+/// テキスト選択設定。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct SelectionConfig {
+    /// ダブルクリックで単語選択するときに、単語の一部として扱う追加文字（デフォルト: 空文字列）。
+    ///
+    /// 例: `"-."` を指定すると `foo-bar.baz` が1単語として選択される。
+    /// 最大 256 文字。
+    pub word_chars: String,
+    /// テキスト選択完了時に自動的にクリップボードにコピーする（デフォルト: false）。
+    pub save_to_clipboard: bool,
+}
+
+impl Default for SelectionConfig {
+    fn default() -> Self {
+        Self { word_chars: String::new(), save_to_clipboard: false }
+    }
+}
+
+impl SelectionConfig {
+    /// word_chars を最大 256 文字にクランプして返す。
+    pub fn clamped_word_chars(&self) -> &str {
+        let s = self.word_chars.as_str();
+        // バイト境界ではなく char 境界でカット
+        let end = s.char_indices().nth(256).map(|(i, _)| i).unwrap_or(s.len());
+        &s[..end]
+    }
+}
+
+/// マウス設定。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct MouseConfig {
+    /// タイピング中にマウスカーソルを非表示にする（デフォルト: false）。
+    pub hide_when_typing: bool,
+}
+
+impl Default for MouseConfig {
+    fn default() -> Self {
+        Self { hide_when_typing: false }
+    }
+}
+
 impl Default for ShellIntegrationConfig {
     fn default() -> Self {
         Self { enabled: true }
@@ -270,6 +334,12 @@ pub struct Config {
     pub shell_integration: ShellIntegrationConfig,
     /// QuickSelect 設定。
     pub quick_select: QuickSelectConfig,
+    /// スクロール設定。
+    pub scrolling: ScrollingConfig,
+    /// テキスト選択設定。
+    pub selection: SelectionConfig,
+    /// マウス設定。
+    pub mouse: MouseConfig,
 }
 
 impl Config {
@@ -431,6 +501,25 @@ impl Config {
                 );
                 content.push_str(
                     "# Example: patterns = [\"[A-Z]+-\\\\d+\"]  # matches JIRA issue IDs\n",
+                );
+            } else if line == "[scrolling]" {
+                content.push('\n');
+                content
+                    .push_str("# ── Scrolling ───────────────────────────────────────────────\n");
+                content.push_str(
+                    "# multiplier: scroll lines per mouse wheel notch (1-100, default: 3)\n",
+                );
+            } else if line == "[selection]" {
+                content.push('\n');
+                content
+                    .push_str("# ── Selection ───────────────────────────────────────────────\n");
+                content.push_str("# word_chars: extra characters treated as part of a word in double-click selection (default: \"\")\n");
+                content.push_str("# save_to_clipboard: auto-copy selected text to clipboard on mouse release (default: false)\n");
+            } else if line == "[mouse]" {
+                content.push('\n');
+                content.push_str("# ── Mouse ──────────────────────────────────────────────────\n");
+                content.push_str(
+                    "# hide_when_typing: hide mouse cursor while typing (default: false)\n",
                 );
             }
             content.push_str(line);
@@ -816,5 +905,84 @@ line_height = 1.3
         assert_eq!(wc.clamped_rows(), 200);
         let wc = WindowConfig { rows: 24, ..Default::default() };
         assert_eq!(wc.clamped_rows(), 24);
+    }
+
+    // -----------------------------------------------------------------------
+    // ScrollingConfig のテスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn scrolling_config_default() {
+        let sc = ScrollingConfig::default();
+        assert_eq!(sc.multiplier, 3);
+        assert_eq!(sc.clamped_multiplier(), 3);
+    }
+
+    #[test]
+    fn scrolling_config_clamp_min() {
+        let sc = ScrollingConfig { multiplier: 0 };
+        assert_eq!(sc.clamped_multiplier(), 1);
+    }
+
+    #[test]
+    fn scrolling_config_clamp_max() {
+        let sc = ScrollingConfig { multiplier: 999 };
+        assert_eq!(sc.clamped_multiplier(), 100);
+    }
+
+    #[test]
+    fn scrolling_config_deserialize() {
+        let toml_str = "[scrolling]\nmultiplier = 5\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.scrolling.multiplier, 5);
+    }
+
+    // -----------------------------------------------------------------------
+    // SelectionConfig のテスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn selection_config_default() {
+        let sc = SelectionConfig::default();
+        assert!(sc.word_chars.is_empty());
+        assert!(!sc.save_to_clipboard);
+    }
+
+    #[test]
+    fn selection_config_word_chars_clamp() {
+        // 256 文字以内はそのまま
+        let s256: String = "a".repeat(256);
+        let sc = SelectionConfig { word_chars: s256.clone(), ..Default::default() };
+        assert_eq!(sc.clamped_word_chars().chars().count(), 256);
+
+        // 257 文字は 256 文字にクランプ
+        let s257: String = "b".repeat(257);
+        let sc2 = SelectionConfig { word_chars: s257, ..Default::default() };
+        assert_eq!(sc2.clamped_word_chars().chars().count(), 256);
+    }
+
+    #[test]
+    fn selection_config_deserialize() {
+        let toml_str = "[selection]\nword_chars = \"-.\"\nsave_to_clipboard = true\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.selection.word_chars, "-.");
+        assert!(config.selection.save_to_clipboard);
+    }
+
+    // -----------------------------------------------------------------------
+    // MouseConfig のテスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn mouse_config_default() {
+        let mc = MouseConfig::default();
+        assert!(!mc.hide_when_typing);
+    }
+
+    #[test]
+    fn mouse_config_deserialize() {
+        let toml_str = "[mouse]\nhide_when_typing = true\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert!(config.mouse.hide_when_typing);
     }
 }

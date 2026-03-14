@@ -219,6 +219,14 @@ impl ApplicationHandler<SditEvent> for SditApp {
                     // キー入力時に選択を解除
                     self.selection = None;
 
+                    // hide_when_typing: タイピング中はマウスカーソルを非表示にする
+                    if self.config.mouse.hide_when_typing && !self.cursor_hidden {
+                        if let Some(ws) = self.windows.get(&id) {
+                            ws.window.set_cursor_visible(false);
+                        }
+                        self.cursor_hidden = true;
+                    }
+
                     if let Some(bytes) =
                         key_to_bytes(&key_event.logical_key, self.modifiers, mode, kitty_flags)
                     {
@@ -231,6 +239,14 @@ impl ApplicationHandler<SditEvent> for SditApp {
 
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor_position = Some((position.x, position.y));
+
+                // hide_when_typing: マウス移動時にカーソルを再表示する
+                if self.cursor_hidden {
+                    if let Some(ws) = self.windows.get(&id) {
+                        ws.window.set_cursor_visible(true);
+                    }
+                    self.cursor_hidden = false;
+                }
 
                 // URL ホバー更新（Cmd/Ctrl が押されている場合）
                 if is_url_modifier(self.modifiers) {
@@ -499,7 +515,9 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                         .lock()
                                         .unwrap_or_else(std::sync::PoisonError::into_inner);
                                     let grid = state.terminal.grid();
-                                    let (start, end) = expand_word(grid, row, col);
+                                    let word_chars =
+                                        self.config.selection.clamped_word_chars().to_owned();
+                                    let (start, end) = expand_word(grid, row, col, &word_chars);
                                     #[allow(clippy::cast_possible_wrap)]
                                     {
                                         sel.start = Point::new(Line(row as i32), Column(start));
@@ -618,26 +636,56 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 }
                 self.drag_source_row = None;
                 self.is_selecting = false;
+
+                // selection.save_to_clipboard: 選択完了時に自動クリップボードコピー
+                if self.config.selection.save_to_clipboard {
+                    if let Some(sel) = &self.selection {
+                        if let Some(ws) = self.windows.get(&id) {
+                            let sid = ws.active_session_id();
+                            if let Some(session) = self.session_mgr.get(sid) {
+                                let state = session
+                                    .term_state
+                                    .lock()
+                                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                let text =
+                                    sdit_core::selection::selected_text(state.terminal.grid(), sel);
+                                drop(state);
+                                if !text.is_empty() {
+                                    if let Some(cb) = &mut self.clipboard {
+                                        if let Err(e) = cb.set_text(text) {
+                                            log::warn!("Auto-clipboard set_text failed: {e}");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             WindowEvent::MouseWheel { delta, .. } => {
                 // スクロール量を行数に変換
+                let multiplier = self.config.scrolling.clamped_multiplier() as isize;
                 let lines: isize = match delta {
                     MouseScrollDelta::LineDelta(_, y) => {
                         if y > 0.0 {
-                            -(y.ceil() as isize)
+                            #[allow(clippy::cast_possible_truncation)]
+                            let base = -(y.ceil() as isize);
+                            base * multiplier
                         } else {
-                            (-y).ceil() as isize
+                            #[allow(clippy::cast_possible_truncation)]
+                            let base = (-y).ceil() as isize;
+                            base * multiplier
                         }
                     }
                     MouseScrollDelta::PixelDelta(pos) => {
                         let y = pos.y;
                         if y > 0.0 {
                             // 上方向スクロール（履歴へ）: 正の delta
-                            1
+                            multiplier
                         } else if y < 0.0 {
                             // 下方向スクロール（最新へ）: 負の delta
-                            -1
+                            -multiplier
                         } else {
                             0
                         }
@@ -1366,10 +1414,12 @@ impl SditApp {
 /// グリッドの `(row, col)` から単語の開始・終了列インデックスを返す。
 ///
 /// 空白・記号を区切り文字として扱い、連続する英数字・その他の文字を「単語」とみなす。
+/// `word_chars` が空でない場合は、それらの文字も単語の一部として扱う。
 fn expand_word(
     grid: &sdit_core::grid::Grid<sdit_core::grid::Cell>,
     row: usize,
     col: usize,
+    word_chars: &str,
 ) -> (usize, usize) {
     use sdit_core::grid::Dimensions as _;
     use sdit_core::index::{Column, Line};
@@ -1380,9 +1430,13 @@ fn expand_word(
     }
     let col = col.min(cols - 1);
 
-    // 区切り文字セット
-    let is_separator =
-        |c: char| c.is_ascii_whitespace() || " \t!@#$%^&*()-=+[]{}|;:'\",.<>?/\\`~".contains(c);
+    // 区切り文字セット（word_chars に含まれる文字は区切り文字から除外）
+    let is_separator = |c: char| {
+        if !word_chars.is_empty() && word_chars.contains(c) {
+            return false;
+        }
+        c.is_ascii_whitespace() || " \t!@#$%^&*()-=+[]{}|;:'\",.<>?/\\`~".contains(c)
+    };
 
     // 起点セルの文字を取得
     #[allow(clippy::cast_possible_wrap)]

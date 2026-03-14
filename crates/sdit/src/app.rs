@@ -315,6 +315,8 @@ pub(crate) struct SditApp {
     pub(crate) click_count: u8,
     /// クリップボード操作コンテキスト。
     pub(crate) clipboard: Option<arboard::Clipboard>,
+    /// マウスカーソルが非表示状態かどうか（hide_when_typing 機能用）。
+    pub(crate) cursor_hidden: bool,
     /// カーソル点滅状態（true = 表示中）。
     pub(crate) cursor_blink_visible: bool,
     /// 最後にカーソル点滅状態を切り替えた時刻。
@@ -382,6 +384,7 @@ impl SditApp {
             clipboard: arboard::Clipboard::new()
                 .map_err(|e| log::warn!("Clipboard init failed: {e}"))
                 .ok(),
+            cursor_hidden: false,
             cursor_blink_visible: true,
             cursor_blink_last_toggle: std::time::Instant::now(),
             preedit: None,
