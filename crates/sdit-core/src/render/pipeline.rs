@@ -31,7 +31,9 @@ pub struct GpuContext<'window> {
 
 impl GpuContext<'_> {
     /// Arc<Window> からGPUコンテキストを初期化する。
-    pub fn new(window: &Arc<Window>) -> Result<GpuContext<'static>> {
+    /// `prefer_wide_color`: Display P3 等の広色域フォーマット（`Bgra8UnormSrgb`）を優先する。
+    /// 利用できない場合は通常のフォーマットにフォールバックする。
+    pub fn new(window: &Arc<Window>, prefer_wide_color: bool) -> Result<GpuContext<'static>> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             ..Default::default()
@@ -59,7 +61,23 @@ impl GpuContext<'_> {
 
         let size = window.inner_size();
         let caps = surface.get_capabilities(&adapter);
-        let format = caps.formats.first().copied().context("対応サーフェスフォーマットなし")?;
+        // prefer_wide_color: Bgra8UnormSrgb を優先（Display P3 の近似）、なければ先頭フォーマットを使用
+        let format = if prefer_wide_color {
+            let wide = caps
+                .formats
+                .iter()
+                .copied()
+                .find(|&f| matches!(f, wgpu::TextureFormat::Bgra8UnormSrgb));
+            if wide.is_none() {
+                log::debug!(
+                    "display-p3: Bgra8UnormSrgb not available, falling back to default surface format"
+                );
+            }
+            wide.or_else(|| caps.formats.first().copied())
+                .context("対応サーフェスフォーマットなし")?
+        } else {
+            caps.formats.first().copied().context("対応サーフェスフォーマットなし")?
+        };
 
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,

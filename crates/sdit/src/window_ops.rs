@@ -305,7 +305,9 @@ impl SditApp {
             }
         };
 
-        let gpu = match sdit_core::render::pipeline::GpuContext::new(&window) {
+        let prefer_wide =
+            self.config.window.colorspace == sdit_core::config::WindowColorspace::DisplayP3;
+        let gpu = match sdit_core::render::pipeline::GpuContext::new(&window, prefer_wide) {
             Ok(g) => g,
             Err(e) => {
                 log::error!("Quick Terminal GPU context creation failed: {e}");
@@ -486,7 +488,9 @@ impl SditApp {
             }
         };
 
-        let gpu = match GpuContext::new(&window) {
+        let prefer_wide =
+            self.config.window.colorspace == sdit_core::config::WindowColorspace::DisplayP3;
+        let gpu = match GpuContext::new(&window, prefer_wide) {
             Ok(g) => g,
             Err(e) => {
                 log::error!("GPU context creation failed: {e}");
@@ -859,7 +863,9 @@ impl SditApp {
             }
         };
 
-        let gpu = match GpuContext::new(&new_window) {
+        let prefer_wide =
+            self.config.window.colorspace == sdit_core::config::WindowColorspace::DisplayP3;
+        let gpu = match GpuContext::new(&new_window, prefer_wide) {
             Ok(g) => g,
             Err(e) => {
                 log::error!("GPU context creation failed for detach: {e}");

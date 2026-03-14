@@ -156,6 +156,20 @@ pub enum BackgroundImageFit {
     Fill,
 }
 
+/// ウィンドウ色空間。macOS の wide color display（Display P3）に対応する。
+///
+/// Display P3 では `Bgra8UnormSrgb` サーフェスフォーマットを優先する。
+/// 完全な P3 対応には Metal API が必要なため、現実装は sRGB より広色域に近づく近似。
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum WindowColorspace {
+    /// sRGB（デフォルト）。
+    #[default]
+    Srgb,
+    /// Display P3 を優先。macOS の wide color display で有効。
+    DisplayP3,
+}
+
 /// ウィンドウ外観の設定。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
@@ -222,6 +236,12 @@ pub struct WindowConfig {
     /// ウィンドウ端に半端な余白が生まれず、グリッドが常に画面にぴったり収まる。
     #[serde(default)]
     pub resize_increments: bool,
+    /// ウィンドウの色空間（デフォルト: "srgb"）。macOS の wide color display で有効。
+    ///
+    /// `"srgb"`: 標準 sRGB（デフォルト）。
+    /// `"display-p3"`: Display P3 を優先。`Bgra8UnormSrgb` フォーマットが利用可能な場合に使用。
+    #[serde(default)]
+    pub colorspace: WindowColorspace,
 }
 
 impl Default for WindowConfig {
@@ -248,6 +268,7 @@ impl Default for WindowConfig {
             position_x: None,
             position_y: None,
             resize_increments: false,
+            colorspace: WindowColorspace::Srgb,
         }
     }
 }
@@ -1311,6 +1332,9 @@ impl Config {
                 content.push_str("#   \"session-name\": show session name\n");
                 content.push_str("# resize_increments: snap window resize to cell size multiples (default: false)\n");
                 content.push_str("#   true: window resizes in exact cell-width/cell-height steps (no fractional padding)\n");
+                content.push_str("# colorspace: window color space (default: \"srgb\"); macOS wide color display support\n");
+                content.push_str("#   \"srgb\": standard sRGB\n");
+                content.push_str("#   \"display-p3\": prefer Display P3 (uses Bgra8UnormSrgb format when available)\n");
             } else if line == "[paste]" {
                 content.push('\n');
                 content.push_str("# ── Paste ─────────────────────────────────────────────\n");

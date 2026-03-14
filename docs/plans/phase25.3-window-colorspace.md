@@ -31,9 +31,18 @@ surface のピクセルフォーマットを `Bgra8Unorm` (sRGB) または
 - `crates/sdit-core/src/config/mod.rs` — `[window] colorspace` 追加（macOS のみ）
 - `crates/sdit-core/src/render/pipeline.rs` — surface フォーマット切り替え
 
+## 実装結果（2026-03-15 完了）
+
+- `WindowColorspace` enum（Srgb/DisplayP3）と `[window] colorspace` 設定を追加
+- `GpuContext::new(prefer_wide_color: bool)` パラメータを追加
+- `display-p3` 時に `Bgra8UnormSrgb` フォーマットを優先（利用不可時はフォールバック＋ログ）
+- Critical 修正: `matches!()` マクロ使用 + フォールバック時のデバッグログ追加
+
+テスト: 444 件 PASS
+
 ## セキュリティ影響
 
-なし（設定値のみ）
+なし（Critical/High 修正済み）
 
 ## 参照
 
