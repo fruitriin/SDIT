@@ -2,48 +2,100 @@
 
 ## 概要
 
-macOS で `send-keys.sh`（AppleScript `keystroke`）を使って SDIT にキー入力を送信する際、日本語 IME が有効だとコマンドが文字化けする。
+macOS で `send-keys.sh`（AppleScript `keystroke`）を使って SDIT にキー入力を送信する際、
+日本語 IME が有効だとコマンドが文字化けする。
 
-## 原因
+## 問題の本質
 
-AppleScript の `keystroke` は OS の入力メソッドを経由するため、日本語入力モードだと ASCII 文字が変換されてしまう。
+**IME が英数（ASCII）モードに切り替わっていないことが根本原因。**
 
-## 回避策（基本方針）
+`keystroke` はOSの入力メソッドを経由する。英数モードに切り替わっていれば、
+CJK 文字を含むコマンド文字列も IME 変換を経ずにそのままターミナルに送れる。
+逆に切り替わっていなければ ASCII 文字まで変換されてしまう。
 
-**毎回 `send-keys.sh` を呼ぶ前に英数キー（key code 102）を送信して IME モードを確定する。**
+## 英数切り替えの方法と注意点
 
-現在の IME モードに依存せず、常に ASCII 入力モードに切り替えることで文字化けを防ぐ。
-「現在すでに英数モードのはず」と思っていても、テスト間の状態が持ち越されることがあるため、
-**必ず毎回リセットする習慣をつけること**。
+### key code 102（英数キー）
 
-```bash
-# 推奨パターン: ASCII コマンドを送る前に必ず英数キーを先打ち
-./tools/test-utils/send-keys.sh sdit $'\x1b[102]'  # 英数キー（key code 102）
+JIS キーボードの英数キー。**ただし IME の設定によってキーコードが異なる場合がある。**
 
-# または send-keys.sh が英数キーを内部で送れるよう実装する場合:
-./tools/test-utils/send-keys.sh --eisu sdit "echo hello"
-```
-
-`send-keys.sh` の内部 AppleScript では:
 ```applescript
-key code 102  -- 英数キーで ASCII モードに切り替え
-delay 0.1
-keystroke "echo hello"
+key code 102  -- JIS 英数キー
+delay 0.2     -- 切り替わりを待つ（0.1s では不十分な場合がある）
 ```
 
-**変換キー（key code 49 on JIS）も同様の効果**があり、IME を確定（コミット）してから次の入力に進むために使える。ただし通常は英数キーで十分。
+**Google 日本語入力など IME ソフトによってはこのキーコードで切り替わらない場合がある。**
+切り替わったかどうかは実際に試して確認すること。
 
-## 代替手段: クリップボード経由
-
-`pbcopy` + `Cmd+V` で送信すれば IME を完全にバイパスできる。
+### 入力ソースを直接切り替える（より確実）
 
 ```bash
-echo -n "command text" | pbcopy
-osascript -e 'keystroke "v" using command down'
+# ABC / 英数入力ソースに直接切り替える
+osascript -e 'tell application "System Events" to set the input source to "com.apple.keylayout.ABC"' 2>/dev/null
+
+# または Google IME の英数入力ソース識別子を使う
+osascript -e 'tell application "System Events"
+    set inputSources to every input source whose selected is true
+    set focused UI element of (first process whose name is "sdit") to missing value
+end tell' 2>/dev/null
 ```
+
+### 確実な確認方法
+
+```bash
+# 現在のアクティブな入力ソースを確認
+defaults read ~/Library/Preferences/com.apple.HIToolbox.plist AppleSelectedInputSources 2>/dev/null \
+  | grep -E '"Bundle ID"|"Input Mode"'
+```
+
+`Bundle ID = com.apple.keylayout.ABC` や `Input Mode = ""` になっていれば英数モード。
+
+## 回避策（確実度の高い順）
+
+### 1. 入力ソース直接切り替え（最も確実）
+
+```bash
+osascript -e 'tell application "System Events" to set the input source to "com.apple.keylayout.ABC"'
+sleep 0.3
+./tools/test-utils/send-keys.sh sdit "echo こんにちわ世界"
+```
+
+### 2. クリップボード経由（IME を完全バイパス）
+
+```bash
+printf "echo こんにちわ世界" | pbcopy
+osascript -e 'tell application "System Events" to keystroke "v" using command down'
+# ⚠️ ブラケテッドペーストが発生するため SDIT のペーストモード対応に依存
+```
+
+### 3. PTY 直接書き込み（最も安定・IME 無関係）
+
+```bash
+TTY=$(ps -p <PID> -o tty= | tr -d ' ')
+printf "echo こんにちわ世界\r" > /dev/$TTY
+# AppleScript・IME・権限を一切経由しない
+```
+
+### 4. key code 102 先打ち（IME 設定依存）
+
+```bash
+osascript -e 'tell application "System Events" to key code 102'
+sleep 0.2
+./tools/test-utils/send-keys.sh sdit "echo こんにちわ世界"
+# Google IME など IME によっては切り替わらない場合がある
+```
+
+## 推奨方針
+
+| 入力内容 | 推奨手段 |
+|---|---|
+| ASCII のみ | key code 102 先打ち + `send-keys.sh` |
+| CJK 文字を含む | PTY 直接書き込み（最も安定）または入力ソース直接切り替え |
+| テスト間の状態リセット | 入力ソース直接切り替えを毎回実行 |
 
 ## 注意点
 
-- SDIT は `set_ime_allowed(true)` を呼んでいるため、ウィンドウ側で IME を無効化することはできない
-- クリップボード経由の場合、ブラケテッドペースト（`\e[200~...\e[201~`）が発生する可能性がある。テスト対象のアプリケーションがペーストモードに対応しているか確認すること
-- `key code 102` は JIS キーボードの英数キー。US キーボードの場合は別のアプローチが必要
+- SDIT は `set_ime_allowed(true)` を呼んでいるため、ウィンドウ側で IME を無効化できない
+- `key code 102` は JIS キーボードの英数キー。**Google IME など IME ソフトの設定次第で動作しない場合がある**
+- クリップボード経由の場合、ブラケテッドペーストが発生しうる
+- PTY 直接書き込みは tty 番号が起動ごとに変わるため `ps` で都度確認が必要
