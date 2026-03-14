@@ -185,5 +185,36 @@
 - フォント太さ調整（macOS） → Phase 18.3
 - クリップボード文字変換 → Phase 18.4
 
-**将来検討（Phase 19+）:**
+**将来検討（Phase 20+）:**
 - Kitty グラフィクスプロトコル / カスタムシェーダー / Lua スクリプティング / デバッグインスペクター / キーリマップ
+
+### 2026-03-14: Phase 19 策定（品質・カスタマイズ向上）
+
+**調査対象リファレンス:**
+- Ghostty: `src/config/Config.zig`（全設定項目再スキャン — env, working-directory, click-repeat-interval, grapheme-width-method, search-foreground/background, window-padding-color, window-subtitle, notify-on-command-finish）
+- Alacritty: `alacritty/src/config/`（ウィンドウ・マウス・スクロール・選択・端末設定）
+- WezTerm: `config/src/config.rs`（フォント・レンダリング・ウィンドウ設定）
+
+**既に実装済みと判明した機能（除外）:**
+- セルメトリクス調整（adjust-cell-width/height/baseline）→ Phase 15.3 で実装済み
+- font-variation / font-feature → Phase 15.3 で実装済み
+- font-codepoint-map → Phase 15.3 で実装済み
+- font-thicken → Phase 18.3 で実装済み
+- copy-on-select → save_to_clipboard として Phase 15.2 で実装済み
+
+**発見した機能ギャップ（Phase 19 Plan に反映済み）:**
+- 環境変数注入 + 初期ワーキングディレクトリ → Phase 19.1
+- 検索ハイライト色 + パディング背景色 → Phase 19.2
+- コマンド終了通知 → Phase 19.3
+- ダブルクリック判定間隔 + Grapheme 幅方式 → Phase 19.4
+- ウィンドウサブタイトル → Phase 19.5
+
+**将来検討（Phase 20+）:**
+- Kitty グラフィクスプロトコル — 実装規模大
+- カスタムシェーダー（Shadertoy 互換）— wgpu post-process パス
+- キーリマップ — キーシムレベル変換
+- デバッグインスペクター — 開発者向けツール
+
+**未調査領域（次回の候補）:**
+- Ghostty: `src/terminal/kitty/graphics_exec.zig`（Kitty グラフィクス実行詳細）
+- WezTerm: `wezterm-mux/src/`（Mux 層の詳細セッション管理）
