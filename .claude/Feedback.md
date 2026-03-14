@@ -15,11 +15,11 @@
 
 ## 改善アクション
 
-依存パッケージ提案ルール
-実装計画時に、追加の依存パッケージで実装が容易になる場合は Plan の段階で依存クレート候補を明記し、Feedback に提出すること。オーナーが判断できるよう、クレート名・用途・代替手段を記載する。
+（なし）
 
 ## 完了済み
 
+- 依存パッケージ提案ルール → CLAUDE.md 依存クレート方針に反映（Plan 段階でクレート名・用途・代替手段を明記）
 - セキュリティ/統合テストのフィードバック修正を実装エージェントに移譲 → Progress テンプレート Stage 2 制御フローに反映
 - 統合テストをリグレッションとして最初に実行 → Progress テンプレート Stage 1 にリグレッション優先ルール追加
 - 統合テストの適応的実行モード（安定→投機的、不安定→ステップ） → Progress テンプレート integration-test に反映
@@ -28,10 +28,8 @@
 - E2E テスト補助ツール提案義務 → Progress テンプレート integration-test に反映
 - 和文テキスト対照群 → `docs/knowhow/gui-test-cjk-validation.md` に検討結果を記録
 - 計画ファイルの関心事別分離 → CLAUDE.md ブートシーケンスの Plan 作成ルールに追記
-
 - integration-test エージェントが `subagent_type: Explore`（読み取り専用）で起動されていたため GUI テスト（SDIT 起動 + スクリーンショット）を実行できていなかった → テンプレート・CLAUDE.md を修正し `general-purpose` を使うよう明記
 - worktree 起動時に `.claude` ディレクトリ（hooks 等の .gitignore 対象ファイル含む）が複製されず、フックエラーでエージェントがブロックされていた → CLAUDE.md に `cp -r .claude <worktree>/.claude` ルールを追記
-
 - ノウハウの読み込み順のブラッシュアップ → CLAUDE.md ブートシーケンスを knowhow サブエージェントフィルタリング方式に変更
 - 統合テストのログチェック → `smoke_headless.rs` と `smoke_gui.rs` に `RUST_LOG=info` + 期待ログメッセージの存在確認を追加
 - Phase 2 セキュリティ Low は各 Plan に記録済み（独立計画不要）
