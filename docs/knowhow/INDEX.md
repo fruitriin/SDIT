@@ -70,6 +70,12 @@
 | [gui-test-process-identification.md](gui-test-process-identification.md) | 同名プロセス複数存在時にテストツールが意図しないプロセスを操作する問題と回避策 | `pgrep -x`, `ps -eo pid,comm`, `window-info`, `send-keys.sh`, `capture-window`, `--pid`, `pkill`, `trap cleanup EXIT` |
 | [gui-test-screen-recording-permission.md](gui-test-screen-recording-permission.md) | capture-window の CGS_REQUIRE_INIT アサーション失敗・ディスプレイスリープ中の黒画像問題と対処法 | `CGS_REQUIRE_INIT`, `ScreenCaptureKit`, `exit code 134`, `SIGABRT`, `screencapture -R`, `画面収録権限`, `VSCode 再起動`, `Display Asleep`, `黒画像`, `window size 0` |
 
+## 開発プロセス・ツール
+
+| ファイル | 要約 | キーワード |
+|---|---|---|
+| [delegating-to-codex-copilot.md](delegating-to-codex-copilot.md) | Codex CLI / Copilot CLI へのタスク移譲: モデル特性、プロンプトのコツ、パーミッション変換、振り分け基準 | `codex exec`, `copilot -p`, `--full-auto`, `--allow-tool`, `AGENTS.md`, `GPT-5 Codex`, `GPT-5 mini`, `permissions-to-flags.sh`, `sandbox`, `workspace-write` |
+
 ## アーカイブ済み
 
 特定の問題のワークアラウンドで、今後同じ問題に遭遇する可能性が低いもの。
