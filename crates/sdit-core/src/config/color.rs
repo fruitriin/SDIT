@@ -10,6 +10,10 @@ pub struct ColorConfig {
     pub selection_foreground: Option<String>,
     /// 選択テキストの背景色（hex 文字列 "#RRGGBB"）。None = 前景色と反転した色を使用。
     pub selection_background: Option<String>,
+    /// セル描画時に保証する最小コントラスト比（WCAG 2.0 基準）。
+    /// 1.0 = 無効（デフォルト）、最大 21.0。
+    /// コントラスト比が不足する場合は fg の明度を自動調整する。
+    pub minimum_contrast: f32,
 }
 
 impl Default for ColorConfig {
@@ -18,7 +22,17 @@ impl Default for ColorConfig {
             theme: ThemeName::CatppuccinMocha,
             selection_foreground: None,
             selection_background: None,
+            minimum_contrast: 1.0,
         }
+    }
+}
+
+impl ColorConfig {
+    /// minimum_contrast を安全な範囲（1.0〜21.0）にクランプして返す。
+    ///
+    /// NaN や Inf が渡された場合はデフォルト値 1.0 を返す（無効扱い）。
+    pub fn clamped_minimum_contrast(&self) -> f32 {
+        if self.minimum_contrast.is_finite() { self.minimum_contrast.clamp(1.0, 21.0) } else { 1.0 }
     }
 }
 
@@ -127,15 +141,152 @@ pub fn wcag_contrast_ratio(fg: [f32; 3], bg: [f32; 3]) -> f32 {
 }
 
 /// sRGB → 相対輝度（ITU-R BT.709）。
-fn relative_luminance(rgb: [f32; 3]) -> f32 {
+pub fn relative_luminance(rgb: [f32; 3]) -> f32 {
     let linearize =
         |c: f32| -> f32 { if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) } };
     0.2126 * linearize(rgb[0]) + 0.7152 * linearize(rgb[1]) + 0.0722 * linearize(rgb[2])
 }
 
+/// 最小コントラスト比を満たすように fg 色を調整して返す。
+///
+/// - `minimum_contrast` が 1.0 以下の場合は fg をそのまま返す（パフォーマンス考慮）。
+/// - bg が暗い場合（輝度 < 0.5）は fg を明るく調整する。
+/// - bg が明るい場合（輝度 >= 0.5）は fg を暗く調整する。
+/// - 100 ステップで収束しなかった場合は最後に計算した値を返す。
+pub fn apply_minimum_contrast(fg: [f32; 3], bg: [f32; 3], minimum_contrast: f32) -> [f32; 3] {
+    // 1.0 以下は無効（デフォルト）
+    if minimum_contrast <= 1.0 {
+        return fg;
+    }
+
+    let current_ratio = wcag_contrast_ratio(fg, bg);
+    if current_ratio >= minimum_contrast {
+        return fg;
+    }
+
+    let bg_lum = relative_luminance(bg);
+    let bg_is_dark = bg_lum < 0.5;
+
+    // HSV の V（明度）を調整して目標コントラスト比に近づける
+    // fg を RGB → [0.0, 1.0] のスカラー明度でスケールする簡易実装
+    let mut adjusted = fg;
+    let step = if bg_is_dark { 0.01_f32 } else { -0.01_f32 };
+
+    for _ in 0..200 {
+        let ratio = wcag_contrast_ratio(adjusted, bg);
+        if ratio >= minimum_contrast {
+            break;
+        }
+        adjusted[0] = (adjusted[0] + step).clamp(0.0, 1.0);
+        adjusted[1] = (adjusted[1] + step).clamp(0.0, 1.0);
+        adjusted[2] = (adjusted[2] + step).clamp(0.0, 1.0);
+    }
+
+    adjusted
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn minimum_contrast_default_is_one() {
+        let cc = ColorConfig::default();
+        assert!((cc.minimum_contrast - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn clamped_minimum_contrast_clamps_range() {
+        let mut cc = ColorConfig::default();
+        cc.minimum_contrast = 0.5;
+        assert!((cc.clamped_minimum_contrast() - 1.0).abs() < f32::EPSILON);
+        cc.minimum_contrast = 25.0;
+        assert!((cc.clamped_minimum_contrast() - 21.0).abs() < f32::EPSILON);
+        cc.minimum_contrast = 4.5;
+        assert!((cc.clamped_minimum_contrast() - 4.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn clamped_minimum_contrast_rejects_nan_inf() {
+        // NaN や無限大は非有限数として 1.0（無効）を返す
+        let mut cc = ColorConfig::default();
+        cc.minimum_contrast = f32::NAN;
+        assert!(
+            (cc.clamped_minimum_contrast() - 1.0).abs() < f32::EPSILON,
+            "NaN は 1.0 を返すべき"
+        );
+        cc.minimum_contrast = f32::INFINITY;
+        // INFINITY は is_finite() が false → デフォルト 1.0 を返す（安全側）
+        assert!(
+            (cc.clamped_minimum_contrast() - 1.0).abs() < f32::EPSILON,
+            "INFINITY は 1.0 を返すべき（安全側）"
+        );
+        cc.minimum_contrast = f32::NEG_INFINITY;
+        assert!(
+            (cc.clamped_minimum_contrast() - 1.0).abs() < f32::EPSILON,
+            "NEG_INFINITY は 1.0 を返すべき"
+        );
+    }
+
+    #[test]
+    fn minimum_contrast_config_deserialize() {
+        let toml_str = "[colors]\nminimum_contrast = 4.5\n";
+        #[derive(serde::Deserialize)]
+        struct TestConfig {
+            colors: ColorConfig,
+        }
+        let cfg: TestConfig = toml::from_str(toml_str).unwrap();
+        assert!((cfg.colors.minimum_contrast - 4.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn apply_minimum_contrast_no_adjustment_when_disabled() {
+        let fg = [0.5_f32, 0.5, 0.5];
+        let bg = [0.1_f32, 0.1, 0.1];
+        let result = apply_minimum_contrast(fg, bg, 1.0);
+        assert_eq!(result, fg, "minimum_contrast=1.0 は何も変更しない");
+    }
+
+    #[test]
+    fn apply_minimum_contrast_brightens_fg_on_dark_bg() {
+        // 暗い背景に暗いグレーの前景 → 明るく調整される
+        let fg = [0.3_f32, 0.3, 0.3];
+        let bg = [0.05_f32, 0.05, 0.05];
+        let adjusted = apply_minimum_contrast(fg, bg, 4.5);
+        let ratio = wcag_contrast_ratio(adjusted, bg);
+        assert!(ratio >= 4.5, "調整後のコントラスト比 {ratio:.2} が目標 4.5 未満");
+    }
+
+    #[test]
+    fn apply_minimum_contrast_darkens_fg_on_light_bg() {
+        // 明るい背景に明るいグレーの前景 → 暗く調整される
+        let fg = [0.8_f32, 0.8, 0.8];
+        let bg = [0.95_f32, 0.95, 0.95];
+        let adjusted = apply_minimum_contrast(fg, bg, 4.5);
+        let ratio = wcag_contrast_ratio(adjusted, bg);
+        assert!(ratio >= 4.5, "調整後のコントラスト比 {ratio:.2} が目標 4.5 未満");
+    }
+
+    #[test]
+    fn apply_minimum_contrast_no_change_when_already_sufficient() {
+        // 白背景に黒テキスト → コントラスト比は最大（調整不要）
+        let fg = [0.0_f32, 0.0, 0.0];
+        let bg = [1.0_f32, 1.0, 1.0];
+        let result = apply_minimum_contrast(fg, bg, 4.5);
+        assert_eq!(result, fg, "十分なコントラスト比がある場合は変更しない");
+    }
+
+    #[test]
+    fn relative_luminance_black_zero() {
+        let lum = relative_luminance([0.0, 0.0, 0.0]);
+        assert!(lum.abs() < f32::EPSILON, "黒の輝度は 0.0");
+    }
+
+    #[test]
+    fn relative_luminance_white_one() {
+        let lum = relative_luminance([1.0, 1.0, 1.0]);
+        assert!((lum - 1.0).abs() < 0.001, "白の輝度は 1.0");
+    }
 
     #[test]
     #[allow(clippy::float_cmp)]

@@ -297,6 +297,18 @@ pub struct MouseConfig {
     pub hide_when_typing: bool,
 }
 
+/// セキュリティ設定。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct SecurityConfig {
+    /// フォーカス取得時に自動的に Secure Keyboard Entry を有効にする。
+    ///
+    /// 有効にすると、他のアプリがキーストロークをキャプチャできなくなる。
+    /// パスワード入力時の保護に有効。macOS 以外のプラットフォームでは無視される。
+    /// デフォルト: false
+    pub auto_secure_input: bool,
+}
+
 /// カスタムリンク設定の1エントリ。
 ///
 /// `regex` に一致したテキストをクリックすると `action` が実行される。
@@ -318,6 +330,12 @@ pub struct LinkConfig {
 impl Default for MouseConfig {
     fn default() -> Self {
         Self { hide_when_typing: false }
+    }
+}
+
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        Self { auto_secure_input: false }
     }
 }
 
@@ -399,6 +417,8 @@ pub struct Config {
     pub selection: SelectionConfig,
     /// マウス設定。
     pub mouse: MouseConfig,
+    /// セキュリティ設定。
+    pub security: SecurityConfig,
     /// カスタムリンク設定。最大 32 エントリ。
     ///
     /// ```toml
@@ -521,6 +541,9 @@ impl Config {
                 );
                 content.push_str("# selection_foreground: text selection foreground color as hex \"#RRGGBB\"; omit to use inverted color\n");
                 content.push_str("# selection_background: text selection background color as hex \"#RRGGBB\"; omit to use inverted color\n");
+                content.push_str("# minimum_contrast: minimum WCAG 2.0 contrast ratio for cell rendering (1.0 = disabled, max 21.0)\n");
+                content.push_str("#   fg color is auto-adjusted when the contrast ratio falls below this value\n");
+                content.push_str("#   e.g. minimum_contrast = 4.5  # WCAG AA level\n");
             } else if line == "[keybinds]" || line == "[[keybinds]]" {
                 content.push('\n');
                 content.push_str("# ── Keybinds ────────────────────────────────────────────\n");
@@ -624,6 +647,13 @@ impl Config {
                 content.push_str(
                     "# hide_when_typing: hide mouse cursor while typing (default: false)\n",
                 );
+            } else if line == "[security]" {
+                content.push('\n');
+                content.push_str("# ── Security ───────────────────────────────────────────────\n");
+                content.push_str("# auto_secure_input: automatically enable Secure Keyboard Entry on focus (macOS only, default: false)\n");
+                content.push_str(
+                    "#   prevents other apps from capturing keystrokes while SDIT is focused\n",
+                );
             } else if line == "[[links]]" {
                 content.push('\n');
                 content.push_str("# ── Custom Links ───────────────────────────────────────────\n");
@@ -657,6 +687,25 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn security_config_default() {
+        let cfg = SecurityConfig::default();
+        assert!(!cfg.auto_secure_input, "auto_secure_input のデフォルトは false");
+    }
+
+    #[test]
+    fn security_config_deserialize() {
+        let toml_str = "[security]\nauto_secure_input = true\n";
+        let cfg: Config = toml::from_str(toml_str).unwrap();
+        assert!(cfg.security.auto_secure_input);
+    }
+
+    #[test]
+    fn security_config_default_in_full_config() {
+        let cfg = Config::default();
+        assert!(!cfg.security.auto_secure_input);
+    }
 
     #[test]
     fn default_config_is_valid() {

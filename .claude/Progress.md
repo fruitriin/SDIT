@@ -79,6 +79,21 @@
 
 ---
 
-## タスク
+## タスク: Phase 16.8〜16.9 + 16.1 + 16.3 — 残りの UX 改善
 
-（現在タスクなし）
+### Phase 16.8: 最小コントラスト比
+- [x] 実装 + テスト
+
+### Phase 16.9: Secure Keyboard Entry（macOS）
+- [x] 実装 + テスト
+
+### Phase 16.1: スクロールバー
+- [ ] 実装 + テスト
+
+### Phase 16.3: 閉じる前の確認ダイアログ
+- [ ] 実装 + テスト
+
+### 品質ゲート
+- [x] Stage 1（cargo fmt --check && cargo clippy --all-targets && cargo test 全通過）
+- [ ] Stage 2
+- [ ] 完了処理

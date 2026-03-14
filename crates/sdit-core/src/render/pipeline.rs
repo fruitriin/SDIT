@@ -435,6 +435,7 @@ impl CellPipeline {
         current_search_match: Option<(usize, usize, usize)>,
         selection_fg: Option<[f32; 4]>,
         selection_bg: Option<[f32; 4]>,
+        minimum_contrast: f32,
     ) {
         let rows = grid.screen_lines();
         let cols = grid.columns();
@@ -510,7 +511,19 @@ impl CellPipeline {
                 } else if is_url_hovered {
                     (color_to_rgba(cell.bg), [0.4, 0.6, 1.0, 1.0])
                 } else {
-                    (color_to_rgba(cell.bg), color_to_rgba(cell.fg))
+                    let raw_bg = color_to_rgba(cell.bg);
+                    let raw_fg = color_to_rgba(cell.fg);
+                    // minimum_contrast が有効な場合、fg 色を調整する
+                    let adjusted_fg = if minimum_contrast > 1.0 {
+                        use crate::config::color::apply_minimum_contrast;
+                        let fg3 = [raw_fg[0], raw_fg[1], raw_fg[2]];
+                        let bg3 = [raw_bg[0], raw_bg[1], raw_bg[2]];
+                        let adj = apply_minimum_contrast(fg3, bg3, minimum_contrast);
+                        [adj[0], adj[1], adj[2], raw_fg[3]]
+                    } else {
+                        raw_fg
+                    };
+                    (raw_bg, adjusted_fg)
                 };
 
                 // カラムマップからグリフ情報を取得。

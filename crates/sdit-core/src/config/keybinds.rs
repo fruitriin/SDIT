@@ -44,6 +44,8 @@ pub enum Action {
     QuickSelect,
     /// vi モード（コピーモード）のトグル。
     ToggleViMode,
+    /// Secure Keyboard Entry（セキュアキーボード入力）をトグルする。macOS のみ有効。
+    ToggleSecureInput,
 }
 
 // ---------------------------------------------------------------------------
@@ -326,6 +328,19 @@ action = "CloseSession"
         let wrapper: KeybindWrapper = toml::from_str(toml_str).unwrap();
         let config = wrapper.keybinds;
         assert_eq!(config.bindings[0].action, Action::CloseSession);
+    }
+
+    #[test]
+    fn toggle_secure_input_action_deserializes() {
+        let toml_str = r#"
+[[keybinds]]
+key = "k"
+mods = "super|shift"
+action = "ToggleSecureInput"
+"#;
+        let wrapper: KeybindWrapper = toml::from_str(toml_str).unwrap();
+        let config = wrapper.keybinds;
+        assert_eq!(config.bindings[0].action, Action::ToggleSecureInput);
     }
 
     #[test]

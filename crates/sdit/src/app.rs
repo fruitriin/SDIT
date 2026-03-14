@@ -345,6 +345,9 @@ pub(crate) struct SditApp {
     pub(crate) notification_in_flight: Arc<AtomicBool>,
     /// セッションリネームモードの状態。`Some((SessionId, 入力中テキスト))` のとき編集中。
     pub(crate) renaming_session: Option<(sdit_core::session::SessionId, String)>,
+    /// Secure Keyboard Entry が現在有効かどうか（macOS のみ有効）。
+    #[cfg(target_os = "macos")]
+    pub(crate) secure_input_enabled: bool,
     /// メニューバー + コンテキストメニューの共有 `MenuId` マップ。
     /// `MenuEvent` ハンドラのクロージャが `Arc` クローンを保持するため、
     /// フィールドとしては直接読まれないが、ドロップ防止のため保持する。
@@ -404,6 +407,8 @@ impl SditApp {
             compiled_quick_select_patterns: compile_quick_select_patterns(config),
             notification_in_flight: Arc::new(AtomicBool::new(false)),
             renaming_session: None,
+            #[cfg(target_os = "macos")]
+            secure_input_enabled: false,
             #[cfg(target_os = "macos")]
             menu_actions: menu_actions.clone(),
             #[cfg(target_os = "macos")]

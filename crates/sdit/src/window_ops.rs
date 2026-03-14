@@ -168,6 +168,7 @@ impl SditApp {
             None,
             None, // selection_fg: 初期描画では None
             None, // selection_bg: 初期描画では None
+            1.0,  // minimum_contrast: 初期描画ではデフォルト（無効）
         );
         drop(state_lock);
 

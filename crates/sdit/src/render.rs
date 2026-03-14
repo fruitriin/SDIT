@@ -120,6 +120,7 @@ impl SditApp {
             parsed
         });
 
+        let minimum_contrast = self.config.colors.clamped_minimum_contrast();
         ws.cell_pipeline.update_from_grid(
             &ws.gpu.queue,
             grid,
@@ -136,6 +137,7 @@ impl SditApp {
             current_highlight,
             selection_fg,
             selection_bg,
+            minimum_contrast,
         );
         drop(state_lock);
 
