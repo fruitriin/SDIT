@@ -356,12 +356,10 @@ guard let ctx = CGContext(
     exit(1)
 }
 
-// 元画像をコピー（PNG は Y 上向き画像なので反転 CTM で正立描画）
-ctx.saveGState()
-ctx.translateBy(x: 0, y: CGFloat(H))
-ctx.scaleBy(x: 1, y: -1)
+// 元画像をコピー
+// CGContext と CGImageDestination はどちらも同じメモリ順（底→上）で動作するため、
+// flip CTM は不要。render-text.swift と同じパターン。
 ctx.draw(inputImage, in: CGRect(x: 0, y: 0, width: CGFloat(W), height: CGFloat(H)))
-ctx.restoreGState()
 
 // グリッド描画
 if opts.divideN != nil {
