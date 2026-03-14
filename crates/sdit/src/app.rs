@@ -138,6 +138,19 @@ pub(crate) struct ViModeState {
 }
 
 // ---------------------------------------------------------------------------
+// 閉じる確認状態
+// ---------------------------------------------------------------------------
+
+/// セッション/ウィンドウ閉じる確認の対象。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PendingClose {
+    /// アクティブセッションを閉じる確認中。
+    Session(sdit_core::session::SessionId, winit::window::WindowId),
+    /// アプリケーション全体を終了する確認中。
+    Quit,
+}
+
+// ---------------------------------------------------------------------------
 // IME プリエディット状態
 // ---------------------------------------------------------------------------
 
@@ -347,6 +360,8 @@ pub(crate) struct SditApp {
     pub(crate) renaming_session: Option<(sdit_core::session::SessionId, String)>,
     /// スクロールバーをドラッグ中かどうか。
     pub(crate) scrollbar_dragging: bool,
+    /// 閉じる確認ダイアログが表示中かどうか。`Some` の場合は確認中。
+    pub(crate) pending_close: Option<PendingClose>,
     /// Secure Keyboard Entry が現在有効かどうか（macOS のみ有効）。
     #[cfg(target_os = "macos")]
     pub(crate) secure_input_enabled: bool,
@@ -410,6 +425,7 @@ impl SditApp {
             notification_in_flight: Arc::new(AtomicBool::new(false)),
             renaming_session: None,
             scrollbar_dragging: false,
+            pending_close: None,
             #[cfg(target_os = "macos")]
             secure_input_enabled: false,
             #[cfg(target_os = "macos")]

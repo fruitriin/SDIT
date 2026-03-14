@@ -116,6 +116,24 @@ impl Session {
         })
     }
 
+    /// シェルがサブプロセスを持っているかどうかを返す（フォアグラウンドプロセス実行中の判定）。
+    ///
+    /// `pgrep -P <pid>` コマンドで子プロセスの有無を確認する。
+    /// `pgrep` が存在しない環境では `false` を返す（安全側に倒す = 確認なしで閉じる）。
+    /// 子プロセスが既に終了している場合も `false` を返す。
+    pub fn has_foreground_process(&self) -> bool {
+        // 子プロセスが既に終了していれば false
+        if self.child_exited.load(Ordering::Acquire) {
+            return false;
+        }
+        std::process::Command::new("pgrep")
+            .arg("-P")
+            .arg(self.child_pid.to_string())
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+
     /// PTY のターミナルサイズを変更する（SIGWINCH を子プロセスに送信する）。
     pub fn resize_pty(&self, size: PtySize) {
         use std::os::fd::AsFd;

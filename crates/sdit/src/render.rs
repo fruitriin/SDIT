@@ -553,6 +553,88 @@ impl SditApp {
             }
         }
 
+        // 閉じる確認ダイアログ オーバーレイ描画
+        // pending_close の情報を先にコピーして借用競合を回避する
+        let pending_close_info: Option<(&'static str, bool)> = {
+            use crate::app::PendingClose;
+            self.pending_close.as_ref().and_then(|pending| match pending {
+                PendingClose::Session(_, wid) if *wid == window_id => {
+                    Some(("Close session? [y/n]", true))
+                }
+                PendingClose::Session(_, _) => None,
+                PendingClose::Quit => Some(("Quit SDIT? [y/n]", true)),
+            })
+        };
+        if let Some((msg, _)) = pending_close_info {
+            if grid_rows > 0 && grid_cols > 0 {
+                let atlas_size = ws.atlas.size() as f32;
+                // 暗い半透明オーバーレイ背景色
+                let overlay_bg = [0.0_f32, 0.0, 0.0, 0.7];
+                // 白文字
+                let overlay_fg = [1.0_f32, 1.0, 1.0, 1.0];
+
+                // 画面中央行に表示
+                let overlay_row = grid_rows / 2;
+                let msg_len = msg.chars().count().min(grid_cols);
+                let start_col = (grid_cols.saturating_sub(msg_len)) / 2;
+
+                // オーバーレイ行のセルを全て暗くする
+                for col in 0..grid_cols {
+                    let cell_index = overlay_row * grid_cols + col;
+                    let vertex = CellVertex {
+                        bg: overlay_bg,
+                        fg: overlay_fg,
+                        grid_pos: [col as f32, overlay_row as f32],
+                        uv: [0.0; 4],
+                        glyph_offset: [0.0; 2],
+                        glyph_size: [0.0; 2],
+                        cell_width_scale: 1.0,
+                        is_color_glyph: 0.0,
+                    };
+                    ws.cell_pipeline.overwrite_cell(&ws.gpu.queue, cell_index, &vertex);
+                }
+
+                // メッセージ文字を描画
+                for (i, ch) in msg.chars().enumerate().take(msg_len) {
+                    let col = start_col + i;
+                    if col >= grid_cols {
+                        break;
+                    }
+                    let (uv, glyph_offset, glyph_size) =
+                        if let Some(entry) = self.font_ctx.rasterize_glyph(ch, &mut ws.atlas) {
+                            let r = entry.region;
+                            let uv = [
+                                r.x as f32 / atlas_size,
+                                r.y as f32 / atlas_size,
+                                (r.x + r.width) as f32 / atlas_size,
+                                (r.y + r.height) as f32 / atlas_size,
+                            ];
+                            (
+                                uv,
+                                [entry.placement_left as f32, entry.placement_top as f32],
+                                [r.width as f32, r.height as f32],
+                            )
+                        } else {
+                            ([0.0_f32; 4], [0.0_f32; 2], [0.0_f32; 2])
+                        };
+                    let vertex = CellVertex {
+                        bg: overlay_bg,
+                        fg: overlay_fg,
+                        grid_pos: [col as f32, overlay_row as f32],
+                        uv,
+                        glyph_offset,
+                        glyph_size,
+                        cell_width_scale: 1.0,
+                        is_color_glyph: 0.0,
+                    };
+                    let cell_index = overlay_row * grid_cols + col;
+                    ws.cell_pipeline.overwrite_cell(&ws.gpu.queue, cell_index, &vertex);
+                }
+
+                ws.atlas.upload_if_dirty(&ws.gpu.queue);
+            }
+        }
+
         ws.window.request_redraw();
     }
 

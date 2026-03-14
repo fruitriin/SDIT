@@ -86,6 +86,24 @@ impl Default for OptionAsAlt {
     }
 }
 
+/// セッション/ウィンドウを閉じるときの確認ダイアログ設定。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfirmClose {
+    /// 確認ダイアログを表示しない。
+    Never,
+    /// 常に確認ダイアログを表示する。
+    Always,
+    /// フォアグラウンドプロセスが実行中の場合のみ確認ダイアログを表示する（デフォルト）。
+    ProcessRunning,
+}
+
+impl Default for ConfirmClose {
+    fn default() -> Self {
+        Self::ProcessRunning
+    }
+}
+
 /// ウィンドウ外観の設定。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
@@ -106,6 +124,12 @@ pub struct WindowConfig {
     pub startup_mode: StartupMode,
     /// 新しいセッション/ウィンドウ生成時に、アクティブセッションの作業ディレクトリを継承する（デフォルト: true）。
     pub inherit_working_directory: bool,
+    /// セッションを閉じるときの確認ダイアログ設定。
+    ///
+    /// `"never"`: 確認なしで閉じる。
+    /// `"always"`: 常に確認ダイアログを表示する。
+    /// `"process_running"`: フォアグラウンドプロセスが実行中の場合のみ確認する（デフォルト）。
+    pub confirm_close: ConfirmClose,
 }
 
 impl Default for WindowConfig {
@@ -119,6 +143,7 @@ impl Default for WindowConfig {
             rows: 24,
             startup_mode: StartupMode::Windowed,
             inherit_working_directory: true,
+            confirm_close: ConfirmClose::ProcessRunning,
         }
     }
 }
@@ -619,6 +644,10 @@ impl Config {
                 content.push_str("# rows: initial terminal height in rows (2-200, default: 24)\n");
                 content.push_str("# startup_mode: initial window state: \"Windowed\" (default), \"Maximized\", \"Fullscreen\"\n");
                 content.push_str("# inherit_working_directory: inherit active session's working directory for new sessions/windows (default: true)\n");
+                content.push_str("# confirm_close: show confirmation dialog when closing a session (default: \"process_running\")\n");
+                content.push_str("#   \"never\": close without confirmation\n");
+                content.push_str("#   \"always\": always show confirmation\n");
+                content.push_str("#   \"process_running\": show confirmation only when a foreground process is running\n");
             } else if line == "[paste]" {
                 content.push('\n');
                 content.push_str("# ── Paste ─────────────────────────────────────────────\n");
@@ -1344,5 +1373,42 @@ action = "open:https://github.com/issues/$0"
         let config: Config = toml::from_str(toml_str).unwrap();
         assert!(!config.scrolling.scroll_to_bottom_on_keystroke);
         assert!(config.scrolling.scroll_to_bottom_on_output);
+    }
+
+    // -----------------------------------------------------------------------
+    // ConfirmClose のテスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn confirm_close_default_is_process_running() {
+        let wc = WindowConfig::default();
+        assert_eq!(wc.confirm_close, ConfirmClose::ProcessRunning);
+    }
+
+    #[test]
+    fn confirm_close_deserialize_never() {
+        let toml_str = "[window]\nconfirm_close = \"never\"\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.window.confirm_close, ConfirmClose::Never);
+    }
+
+    #[test]
+    fn confirm_close_deserialize_always() {
+        let toml_str = "[window]\nconfirm_close = \"always\"\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.window.confirm_close, ConfirmClose::Always);
+    }
+
+    #[test]
+    fn confirm_close_deserialize_process_running() {
+        let toml_str = "[window]\nconfirm_close = \"process_running\"\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.window.confirm_close, ConfirmClose::ProcessRunning);
+    }
+
+    #[test]
+    fn confirm_close_default_in_full_config() {
+        let cfg = Config::default();
+        assert_eq!(cfg.window.confirm_close, ConfirmClose::ProcessRunning);
     }
 }

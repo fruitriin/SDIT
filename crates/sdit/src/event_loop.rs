@@ -13,8 +13,8 @@ use sdit_core::selection::{Selection, SelectionType};
 use sdit_core::terminal::TermMode;
 
 use crate::app::{
-    PreeditState, SditApp, SditEvent, SearchState, confirm_unsafe_paste, ime_commit_to_bytes,
-    is_unsafe_paste, wrap_bracketed_paste,
+    PendingClose, PreeditState, SditApp, SditEvent, SearchState, confirm_unsafe_paste,
+    ime_commit_to_bytes, is_unsafe_paste, wrap_bracketed_paste,
 };
 use sdit_core::config::keybinds::Action;
 use sdit_core::session::AppSnapshot;
@@ -45,6 +45,15 @@ impl ApplicationHandler<SditEvent> for SditApp {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
+                // CloseSession と同様の確認ロジック
+                if let Some(ws) = self.windows.get(&id) {
+                    let sid = ws.active_session_id();
+                    if self.should_confirm_close(sid) {
+                        self.pending_close = Some(PendingClose::Session(sid, id));
+                        self.redraw_session(sid);
+                        return;
+                    }
+                }
                 self.close_window(id);
                 if self.windows.is_empty() {
                     event_loop.exit();
@@ -76,6 +85,29 @@ impl ApplicationHandler<SditEvent> for SditApp {
 
             WindowEvent::KeyboardInput { event: key_event, .. } => {
                 if key_event.state == ElementState::Pressed {
+                    // --- 閉じる確認モード中のキー入力処理（最優先で評価）---
+                    if self.pending_close.is_some() {
+                        use winit::keyboard::Key;
+                        match &key_event.logical_key {
+                            // y または Enter で確認実行
+                            Key::Character(s) if s.as_str().eq_ignore_ascii_case("y") => {
+                                self.execute_pending_close(event_loop);
+                            }
+                            Key::Named(NamedKey::Enter) => {
+                                self.execute_pending_close(event_loop);
+                            }
+                            // n または Escape でキャンセル
+                            Key::Character(s) if s.as_str().eq_ignore_ascii_case("n") => {
+                                self.cancel_pending_close(id);
+                            }
+                            Key::Named(NamedKey::Escape) => {
+                                self.cancel_pending_close(id);
+                            }
+                            _ => {}
+                        }
+                        return;
+                    }
+
                     // --- リネームモード中のキー入力処理（最優先で評価）---
                     if self.renaming_session.is_some() {
                         if self.handle_rename_key(&key_event.logical_key, id) {
@@ -1184,6 +1216,14 @@ impl SditApp {
                 self.add_session_to_window(window_id);
             }
             Action::CloseSession => {
+                if let Some(ws) = self.windows.get(&window_id) {
+                    let sid = ws.active_session_id();
+                    if self.should_confirm_close(sid) {
+                        self.pending_close = Some(PendingClose::Session(sid, window_id));
+                        self.redraw_session(sid);
+                        return;
+                    }
+                }
                 let window_closed = self.remove_active_session(window_id);
                 if window_closed && self.windows.is_empty() {
                     event_loop.exit();
@@ -1299,6 +1339,16 @@ impl SditApp {
                 }
             }
             Action::Quit => {
+                // 実行中プロセスがあれば確認ダイアログを表示する。
+                if self.should_confirm_quit() {
+                    self.pending_close = Some(PendingClose::Quit);
+                    // アクティブウィンドウを再描画して確認オーバーレイを表示する
+                    if let Some(ws) = self.windows.get(&window_id) {
+                        let sid = ws.active_session_id();
+                        self.redraw_session(sid);
+                    }
+                    return;
+                }
                 // 全ウィンドウを閉じてイベントループを終了する。
                 let window_ids: Vec<WindowId> = self.windows.keys().copied().collect();
                 for wid in window_ids {
@@ -1398,80 +1448,6 @@ impl SditApp {
 // ---------------------------------------------------------------------------
 // 検索ヘルパー
 // ---------------------------------------------------------------------------
-
-impl SditApp {
-    /// 検索クエリでグリッドを検索し、結果を更新して再描画する。
-    pub(crate) fn update_search(&mut self, window_id: WindowId) {
-        let Some(ws) = self.windows.get(&window_id) else { return };
-        let sid = ws.active_session_id();
-        let Some(session) = self.session_mgr.get(sid) else { return };
-
-        {
-            let state =
-                session.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-            let grid = state.terminal.grid();
-
-            if let Some(ref mut search) = self.search {
-                use sdit_core::terminal::search::SearchEngine;
-                search.matches = SearchEngine::search(grid, &search.query);
-                if search.matches.is_empty() {
-                    search.current_match = 0;
-                } else {
-                    search.current_match =
-                        search.current_match.min(search.matches.len().saturating_sub(1));
-                }
-            }
-        }
-
-        self.redraw_session(sid);
-    }
-
-    /// 検索マッチ間をナビゲートする（direction: 1=次, -1=前）。
-    pub(crate) fn search_navigate(&mut self, direction: i32, window_id: WindowId) {
-        let Some(ws) = self.windows.get(&window_id) else { return };
-        let sid = ws.active_session_id();
-
-        if let Some(ref mut search) = self.search {
-            if search.matches.is_empty() {
-                return;
-            }
-            let len = search.matches.len();
-            if direction > 0 {
-                search.current_match = (search.current_match + 1) % len;
-            } else {
-                search.current_match =
-                    if search.current_match == 0 { len - 1 } else { search.current_match - 1 };
-            }
-
-            // マッチ位置にスクロール
-            let raw_row = search.matches[search.current_match].raw_row;
-            if let Some(session) = self.session_mgr.get(sid) {
-                use sdit_core::grid::{Dimensions, Scroll};
-                use sdit_core::terminal::search::SearchEngine;
-                let mut state =
-                    session.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-                let history = state.terminal.grid().history_size();
-                let screen = state.terminal.grid().screen_lines();
-                let target_offset =
-                    SearchEngine::display_offset_for_match(raw_row, history, screen);
-                let current_offset = state.terminal.grid().display_offset();
-                if target_offset != current_offset {
-                    // まず Bottom（表示端）にして、必要ならデルタスクロールで調整
-                    state.terminal.grid_mut().scroll_display(Scroll::Bottom);
-                    if target_offset > 0 {
-                        #[allow(clippy::cast_possible_wrap)]
-                        state
-                            .terminal
-                            .grid_mut()
-                            .scroll_display(Scroll::Delta(target_offset as isize));
-                    }
-                }
-            }
-        }
-
-        self.redraw_session(sid);
-    }
-}
 
 use crate::cwd_utils::{parse_osc7_cwd, trim_trailing_whitespace};
 use crate::selection_utils::expand_word;

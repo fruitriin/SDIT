@@ -1,5 +1,6 @@
 mod app;
 mod config_watcher;
+mod confirm_close;
 mod cwd_utils;
 mod event_loop;
 mod headless;
@@ -10,6 +11,7 @@ mod quick_select;
 mod rename;
 mod render;
 mod scrollbar;
+mod search;
 mod secure_input;
 mod selection_utils;
 mod url_hover;
