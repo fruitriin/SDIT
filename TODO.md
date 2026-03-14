@@ -61,10 +61,10 @@
 | done | 16.9 | `docs/plans/phase16.9-secure-input.md` | **完了** |
 | done | 16.1 | `docs/plans/phase16.1-scrollbar.md` | **完了** |
 | done | 16.3 | `docs/plans/phase16.3-confirm-close.md` | **完了** |
-| 高 | 17.1 | `docs/plans/phase17.1-theme-preset.md` | 未着手 |
-| 中高 | 17.2 | `docs/plans/phase17.2-window-decoration.md` | 未着手 |
-| 中高 | 17.3 | `docs/plans/phase17.3-always-on-top.md` | 未着手 |
-| 中 | 17.4 | `docs/plans/phase17.4-right-click-action.md` | 未着手 |
+| done | 17.1 | `docs/plans/phase17.1-theme-preset.md` | **完了** |
+| done | 17.2 | `docs/plans/phase17.2-window-decoration.md` | **完了** |
+| done | 17.3 | `docs/plans/phase17.3-always-on-top.md` | **完了** |
+| done | 17.4 | `docs/plans/phase17.4-right-click-action.md` | **完了** |
 | 中 | 17.5 | `docs/plans/phase17.5-command-palette.md` | 未着手 |
 | 中 | 17.6 | `docs/plans/phase17.6-session-restore.md` | 未着手 |
 
