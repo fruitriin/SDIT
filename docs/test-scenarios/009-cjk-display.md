@@ -12,8 +12,16 @@
 ## 手順
 1. SDIT をバックグラウンドで起動する
 2. window-info でウィンドウの存在を確認する（最大 15 秒ポーリング）
-3. send-keys で `echo こんにちは世界` を入力する
-4. send-keys で Return キーを送信する
+3. send-keys で `echo こんにちは世界` を **スペース込みで1文字列として** 入力する
+   ```bash
+   ./tools/test-utils/send-keys.sh sdit "echo こんにちは世界"
+   # ⚠️ "echo" と "こんにちは世界" を別々に送ると "echoこんにちは世界" になる
+   ```
+   IME 干渉が起きる場合は PTY 直接書き込みを使う:
+   ```bash
+   printf "echo こんにちは世界\r" > /dev/ttys$(./tools/test-utils/window-info sdit | python3 -c "import json,sys; print(json.load(sys.stdin)['tty'].replace('/dev/tty',''))" 2>/dev/null || echo "NNN")
+   ```
+4. send-keys を使った場合は Return キーを送信する（PTY 直接書き込みの場合は不要）
 5. 2 秒待機する（PTY 出力 → 描画の伝搬を待つ）
 6. capture-window でスクリーンショットを撮る（`tmp/009-cjk.png`）
 

@@ -51,6 +51,37 @@ fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Option<ExitStatus>
 - `verify-text`: OCR + 輝度分析 + SSIM の3層一括検証（テキストレポートのみ返す）
 - `send-keys.sh`: osascript の System Events でキーストローク送信
   - **重要**: AppleScript に変数を埋め込む際はバックスラッシュと二重引用符のエスケープが必須
+  - **コマンド文字列のスペース**: `echo` や `print` 等のコマンドと引数の間のスペースは、1つの文字列引数に含めること。分割して送ると結合されてしまう（→ 下記「シェルコマンド入力のスペース問題」参照）
+
+## シェルコマンド入力のスペース問題
+
+`send-keys.sh` でシェルコマンドを入力する際、**コマンドと引数は1つの文字列として渡す**こと。
+
+```bash
+# ✅ 正しい: スペース込みで1文字列
+./tools/test-utils/send-keys.sh sdit "echo こんにちは世界"
+
+# ❌ 誤り: コマンドと引数を別々に送ると結合される
+./tools/test-utils/send-keys.sh sdit "echo"
+./tools/test-utils/send-keys.sh sdit "こんにちは世界"
+# → "echoこんにちは世界" と入力され、コマンドとして認識されない
+```
+
+**代替手段: PTY 直接書き込み（最も安定）**
+
+IME 干渉や AppleScript のタイミング問題を回避する方法として PTY デバイスへの直接書き込みがある:
+
+```bash
+# PTY デバイスを特定
+ls /dev/ttys*  # SDIT が使用中の tty を確認
+
+# 直接書き込み（\r で Enter 相当）
+printf "echo こんにちは世界\r" > /dev/ttys002
+```
+
+PTY 直接書き込みは IME・AppleScript・権限の影響を受けないため、
+CJK 文字や特殊文字を含むコマンドに特に有効。
+ただし tty デバイス番号は起動のたびに変わるため `window-info` や `ps` で確認が必要。
 
 ## テキスト描画の自動検証パターン
 

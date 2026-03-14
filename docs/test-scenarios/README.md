@@ -35,3 +35,21 @@ GUI テストのシナリオを markdown で管理する。
 ## 命名規約
 
 `NNN-シナリオ名.md`（例: `001-basic-echo.md`, `002-key-input.md`）
+
+## テスト記述上の注意
+
+### send-keys.sh でのコマンド入力
+
+コマンドと引数のスペースは **1つの文字列に含める**こと:
+
+```bash
+# ✅ 正しい
+./tools/test-utils/send-keys.sh sdit "echo hello world"
+
+# ❌ 誤り（"echohello world" と結合される）
+./tools/test-utils/send-keys.sh sdit "echo"
+./tools/test-utils/send-keys.sh sdit "hello world"
+```
+
+CJK 文字など IME が干渉する文字列は `printf "...\r" > /dev/ttysNNN`（PTY 直接書き込み）が安定。
+詳細は `docs/knowhow/integration-testing-patterns.md` の「シェルコマンド入力のスペース問題」を参照。
