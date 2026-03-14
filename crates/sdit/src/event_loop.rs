@@ -38,6 +38,13 @@ impl ApplicationHandler<SditEvent> for SditApp {
         }
         self.initialized = true;
 
+        // winit が NSApp を初期化した後でメニューバーを登録する。
+        // init_for_nsapp() を event_loop.run_app() より前に呼ぶと NSApp 初期化で上書きされる。
+        #[cfg(target_os = "macos")]
+        if let Some(menu_bar) = self.menu_bar.take() {
+            menu_bar.init_for_nsapp();
+        }
+
         let snapshot = AppSnapshot::load(&AppSnapshot::default_path());
 
         // restore_session が有効かつ window_sessions に保存データがある場合は復元する。

@@ -49,11 +49,12 @@ fn main() {
     );
 
     // macOS メニューバーの初期化
+    // init_for_nsapp() は winit の NSApp 初期化後（resumed コールバック内）に呼ぶ必要があるため、
+    // ここでは menu_bar を構築して SditApp に渡すのみ。
     // _menu_bar をドロップするとメニューが消えるため変数に保持する。
     #[cfg(target_os = "macos")]
-    let (_menu_bar, menu_actions) = {
+    let (menu_bar, menu_actions) = {
         let (menu_bar, id_map) = menu::build_menu_bar();
-        menu_bar.init_for_nsapp();
 
         let shared = menu::make_shared_actions(id_map);
         let handler_actions = shared.clone();
@@ -71,7 +72,7 @@ fn main() {
     };
 
     #[cfg(target_os = "macos")]
-    let mut app = SditApp::new(proxy, smoke_test, &config, menu_actions);
+    let mut app = SditApp::new(proxy, smoke_test, &config, menu_actions, menu_bar);
     #[cfg(not(target_os = "macos"))]
     let mut app = SditApp::new(proxy, smoke_test, &config);
     event_loop.run_app(&mut app).unwrap();

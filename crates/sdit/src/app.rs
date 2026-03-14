@@ -400,6 +400,10 @@ pub(crate) struct SditApp {
     /// サイドバー領域の右クリックメニュー（初期化時に1回構築）。
     #[cfg(target_os = "macos")]
     pub(crate) sidebar_ctx_menu: muda::Menu,
+    /// メニューバー本体。`resumed()` で `init_for_nsapp()` を呼んだ後に `None` になる。
+    /// winit が NSApp を初期化した後でないとメニューが上書きされるため遅延初期化する。
+    #[cfg(target_os = "macos")]
+    pub(crate) menu_bar: Option<muda::Menu>,
 }
 
 impl SditApp {
@@ -409,6 +413,7 @@ impl SditApp {
         smoke_test: bool,
         config: &sdit_core::config::Config,
         #[cfg(target_os = "macos")] menu_actions: crate::menu::SharedMenuActions,
+        #[cfg(target_os = "macos")] menu_bar: muda::Menu,
     ) -> Self {
         let default_font_size = config.font.clamped_size();
         Self {
@@ -468,6 +473,8 @@ impl SditApp {
                 menu_actions.lock().unwrap_or_else(std::sync::PoisonError::into_inner).extend(ids);
                 menu
             },
+            #[cfg(target_os = "macos")]
+            menu_bar: Some(menu_bar),
         }
     }
 
