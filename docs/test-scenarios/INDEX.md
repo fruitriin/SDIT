@@ -2,9 +2,9 @@
 
 | シナリオ | 要約 | 最終実行 | 結果 |
 |---|---|---|---|
-| [001-basic-echo](001-basic-echo.md) | 基本的な echo 動作確認 | 2026-03-13 | PARTIAL |
+| [001-basic-echo](001-basic-echo.md) | 基本的な echo 動作確認 | 2026-03-15 | PASS |
 | [002-window-resize](002-window-resize.md) | ウィンドウリサイズ時のグリッド再計算確認 | 2026-03-13 | PARTIAL |
-| [003-multi-window](003-multi-window.md) | 複数ウィンドウ（Cmd+N）の生成・独立動作確認 | 2026-03-13 | PARTIAL |
+| [003-multi-window](003-multi-window.md) | 複数ウィンドウ（Cmd+N）の生成・独立動作確認 | 2026-03-15 | PASS |
 | [004-window-independent-close](004-window-independent-close.md) | ウィンドウ独立クローズの確認 | 2026-03-13 | PASS |
 | [005-session-add-sidebar](005-session-add-sidebar.md) | セッション追加とサイドバー表示確認 | 2026-03-13 | PASS |
 | [006-session-switch](006-session-switch.md) | セッション切り替え（サイドバークリック）確認 | - | - |
@@ -31,3 +31,4 @@
 | [027-vi-mode](027-vi-mode.md) | vi モード起動/終了（Cmd+Shift+V/Escape）・hjkl 基本移動・v 文字選択・V 行選択・y ヤンク・/ 検索連携・ブロックカーソル描画の確認 | 2026-03-14 | UNIT_ONLY |
 | [028-macos-menubar](028-macos-menubar.md) | macOS ネイティブメニューバー（sdit/File/Edit/View/Session）の構造確認・メニュー操作の動作確認・Phase 21.6 クラッシュ修正確認 | 2026-03-15 | PASS |
 | [029-image-tools](029-image-tools.md) | annotate-grid（--divide/--every/スタイルオプション）と clip-image（--grid-cell/--rect）の動作確認・エッジケースバリデーション | 2026-03-14 | PARTIAL |
+| [030-pty-deadlock-fix](030-pty-deadlock-fix.md) | PTY デッドロック修正確認（DA/DSR クエリ後の停滞回避・メニュー操作との組み合わせ） | 2026-03-15 | PASS |

@@ -38,16 +38,17 @@ pub(crate) fn spawn_pty_reader(
                         break;
                     }
                     Ok(n) => {
-                        {
+                        // Mutex ロック内で処理し、PTY への応答バイト列はロック外で送信する。
+                        // write_tx.send() はチャンネルが満杯のときブロッキングするため、
+                        // Mutex を保持したままだとメインスレッドが同 Mutex を取得できず停滞する。
+                        let pending_write = {
                             let mut state = term_state
                                 .lock()
                                 .unwrap_or_else(std::sync::PoisonError::into_inner);
                             let TerminalState { processor, terminal } = &mut *state;
                             processor.advance(terminal, &buf[..n]);
-                            // Terminal からの応答（DA/DSR/CPR等）を PTY に書き戻す
-                            if let Some(response) = terminal.drain_pending_writes() {
-                                let _ = write_tx.send(response);
-                            }
+                            // Terminal からの応答（DA/DSR/CPR等）を回収。送信はロック外で行う。
+                            let pending = terminal.drain_pending_writes();
                             // BEL 処理（100ms レート制限: BEL ボムによるイベントキュー枯渇を防ぐ）
                             if terminal.take_bell() {
                                 let now = std::time::Instant::now();
@@ -87,6 +88,11 @@ pub(crate) fn spawn_pty_reader(
                             if terminal.grid().display_offset() > 0 {
                                 terminal.grid_mut().scroll_display(Scroll::Bottom);
                             }
+                            pending
+                        };
+                        // Mutex ロック解放後に PTY へ応答を書き戻す（デッドロック回避）
+                        if let Some(response) = pending_write {
+                            let _ = write_tx.send(response);
                         }
                         let _ = event_proxy.send_event(SditEvent::PtyOutput(session_id));
                     }

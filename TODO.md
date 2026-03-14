@@ -18,7 +18,7 @@
 | done | 21.1 | `docs/plans/phase21.1-new-window-blank.md` | **完了** |
 | done | 21.2 | `docs/plans/phase21.2-click-caret-fix.md` | **完了** |
 | done | 21.3 | `docs/plans/phase21.3-inverse-rendering.md` | **完了** |
-| 低 | 21.4 | `docs/plans/phase21.4-pty-deadlock.md` | 未着手 |
+| done | 21.4 | `docs/plans/phase21.4-pty-deadlock.md` | **完了** |
 | done | 21.5 | `docs/plans/phase21.5-menubar-fix.md` | **完了** |
 | done | 21.6 | `docs/plans/phase21.6-menu-click-crash.md` | **完了** |
 | 中 | 22.1 | `docs/plans/phase22.1-tab-drag-detach.md` | 未着手 |
