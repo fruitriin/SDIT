@@ -27,4 +27,8 @@ CLAUDE.local.md
 # Test output (GUI interaction tests) - compiled binaries and screenshots
 /tools/test-utils/window-info
 /tools/test-utils/capture-window
+/tools/test-utils/render-text
+/tools/test-utils/verify-text
+/tools/test-utils/annotate-grid
+/tools/test-utils/clip-image
 tmp/
