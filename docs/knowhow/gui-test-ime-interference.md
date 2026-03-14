@@ -85,13 +85,33 @@ sleep 0.2
 # Google IME など IME によっては切り替わらない場合がある
 ```
 
-## 推奨方針
+## 推奨方針（実証済み）
 
-| 入力内容 | 推奨手段 |
-|---|---|
-| ASCII のみ | key code 102 先打ち + `send-keys.sh` |
-| CJK 文字を含む | PTY 直接書き込み（最も安定）または入力ソース直接切り替え |
-| テスト間の状態リセット | 入力ソース直接切り替えを毎回実行 |
+| 入力内容 | 推奨手段 | 理由 |
+|---|---|---|
+| ASCII のみ | key code 102 先打ち + `send-keys.sh` | 動作安定 |
+| CJK 文字を含む | **PTY 直接書き込み一択** | 下記参照 |
+
+### CJK 入力は PTY 直接書き込み一択
+
+`send-keys.sh`（AppleScript keystroke）+ Google IME の組み合わせでは、
+どのようなアプローチを試みても CJK コマンドの実行が安定しない：
+
+- `key code 102` で英数切り替え → スペースが IME に消費される
+- `echo` → ` ` → `こんにちわ世界` を分割送信 → Enter が何回送っても吸われ続ける
+- `IMKCFRunLoopWakeUpReliable` エラーが発生し fish + IME が不安定な状態になる
+
+**PTY 直接書き込みを使うこと：**
+
+```bash
+# PTY デバイスを特定
+TTY=$(ps -p <PID> -o tty= | tr -d ' ')
+
+# コマンドを直接書き込む（\r = Enter）
+printf "echo こんにちわ世界\r" > /dev/$TTY
+```
+
+PTY 直接書き込みは AppleScript・IME・権限を一切経由しないため完全に安定する。
 
 ## スペースが消える問題（実測）
 
