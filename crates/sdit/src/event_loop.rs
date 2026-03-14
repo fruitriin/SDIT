@@ -1269,6 +1269,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 }
             }
 
+            WindowEvent::CursorLeft { .. } => self.drag_detach_on_cursor_left(id, event_loop), // drag detach
             _ => {}
         }
     }

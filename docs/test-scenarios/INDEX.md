@@ -32,3 +32,4 @@
 | [028-macos-menubar](028-macos-menubar.md) | macOS ネイティブメニューバー（sdit/File/Edit/View/Session）の構造確認・メニュー操作の動作確認・Phase 21.6 クラッシュ修正確認 | 2026-03-15 | PASS |
 | [029-image-tools](029-image-tools.md) | annotate-grid（--divide/--every/スタイルオプション）と clip-image（--grid-cell/--rect）の動作確認・エッジケースバリデーション | 2026-03-14 | PARTIAL |
 | [030-pty-deadlock-fix](030-pty-deadlock-fix.md) | PTY デッドロック修正確認（DA/DSR クエリ後の停滞回避・メニュー操作との組み合わせ） | 2026-03-15 | PASS |
+| [031-tab-drag-detach](031-tab-drag-detach.md) | タブドラッグ切り出し（Chrome-like UX）・メニュー操作による DetachSession 代替確認 | 2026-03-15 | UNIT_ONLY |

@@ -737,13 +737,36 @@ impl SditApp {
         self.save_session_snapshot();
     }
 
+    /// CursorLeft 時にサイドバードラッグ中ならタブを切り出す（Chrome-like UX）。
+    pub(crate) fn drag_detach_on_cursor_left(
+        &mut self,
+        window_id: winit::window::WindowId,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+    ) {
+        if self.drag_source_row.is_none() {
+            return;
+        }
+        self.drag_source_row = None;
+        let screen_pos = self
+            .windows
+            .get(&window_id)
+            .and_then(|ws| ws.window.outer_position().ok())
+            .zip(self.cursor_position)
+            .map(|(win_pos, (cx, cy))| {
+                winit::dpi::PhysicalPosition::new(win_pos.x + cx as i32, win_pos.y + cy as i32)
+            });
+        self.detach_session_to_new_window(window_id, event_loop, screen_pos);
+    }
+
     /// アクティブセッションを新しいウィンドウに切り出す（PTY は維持）。
     ///
     /// セッションが1つしかない場合は何もしない（切出す意味がない）。
+    /// `cursor_pos`: ドラッグ切り出し時に新ウィンドウを配置する画面座標。None のときはカスケード配置。
     pub(crate) fn detach_session_to_new_window(
         &mut self,
         source_window_id: WindowId,
         event_loop: &ActiveEventLoop,
+        cursor_pos: Option<winit::dpi::PhysicalPosition<i32>>,
     ) {
         let Some(ws) = self.windows.get(&source_window_id) else { return };
         if ws.sessions.len() <= 1 {
@@ -789,7 +812,9 @@ impl SditApp {
             .with_transparent(needs_transparent)
             .with_blur(self.config.window.blur);
 
-        if let Some(pos) = self.cascade_position() {
+        // ドラッグ切り出しの場合はカーソル座標、それ以外はカスケード配置
+        let placement = cursor_pos.or_else(|| self.cascade_position());
+        if let Some(pos) = placement {
             attrs = attrs.with_position(pos);
         }
 

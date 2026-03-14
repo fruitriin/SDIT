@@ -26,7 +26,7 @@ impl SditApp {
     ) {
         match action {
             Action::DetachSession => {
-                self.detach_session_to_new_window(window_id, event_loop);
+                self.detach_session_to_new_window(window_id, event_loop, None);
             }
             Action::NewWindow => {
                 // inherit_working_directory: アクティブセッションの CWD を継承する

@@ -84,6 +84,23 @@ SDIT の設計哲学（SDIファースト、縦タブ）を維持しつつ、最
 - `crates/sdit/src/event_loop.rs` — サイドバードラッグ中の CursorMoved / CursorLeft 処理
 - `crates/sdit/src/window_ops.rs` — `detach_session_to_new_window()` に位置指定パラメータ追加
 
+## 実装結果（2026-03-15 完了）
+
+### 実装した変更（A案）
+
+- `window_ops.rs`: `detach_session_to_new_window()` に `cursor_pos: Option<PhysicalPosition<i32>>` 追加。`drag_detach_on_cursor_left()` ヘルパーを新規追加。
+- `event_loop.rs`: `WindowEvent::CursorLeft` ハンドラで `drag_detach_on_cursor_left()` を呼ぶ（1行）。
+- `action_handlers.rs`: 既存 DetachSession 呼び出しに `None` を渡す（後方互換）。
+
+### テスト結果
+- cargo test 441 件 PASS ✓
+- セキュリティレビュー: Critical/High/Medium 0件（Low/Info のみ）✓
+- GUI テスト: ディスプレイスリープのためスキップ（UNIT_ONLY）
+
+### 未実装（将来フェーズ）
+- Step 2: ドラッグ中ビジュアルフィードバック
+- Step 3: 別ウィンドウへのドロップ合体（ドラッグ合体）
+
 ## セキュリティ影響
 
 なし
