@@ -63,26 +63,51 @@ pub struct FontAdjust {
     pub baseline: f32,
 }
 
-impl Default for FontAdjust {
-    fn default() -> Self {
-        Self { cell_width: 0.0, cell_height: 0.0, baseline: 0.0 }
-    }
-}
-
 impl FontAdjust {
+    /// セル幅調整値の最小値（ピクセル）。
+    pub const MIN_CELL_WIDTH: f32 = -10.0;
+    /// セル幅調整値の最大値（ピクセル）。
+    pub const MAX_CELL_WIDTH: f32 = 10.0;
+    /// セル高さ調整値の最小値（ピクセル）。
+    pub const MIN_CELL_HEIGHT: f32 = -10.0;
+    /// セル高さ調整値の最大値（ピクセル）。
+    pub const MAX_CELL_HEIGHT: f32 = 10.0;
+    /// ベースライン調整値の最小値（ピクセル）。
+    pub const MIN_BASELINE: f32 = -20.0;
+    /// ベースライン調整値の最大値（ピクセル）。
+    pub const MAX_BASELINE: f32 = 20.0;
+
     /// `cell_width` を安全な範囲にクランプする。NaN/Inf は 0.0 にフォールバック。
     pub fn clamped_cell_width(&self) -> f32 {
-        if self.cell_width.is_finite() { self.cell_width.clamp(-10.0, 10.0) } else { 0.0 }
+        if self.cell_width.is_finite() {
+            self.cell_width.clamp(Self::MIN_CELL_WIDTH, Self::MAX_CELL_WIDTH)
+        } else {
+            0.0
+        }
     }
 
     /// `cell_height` を安全な範囲にクランプする。NaN/Inf は 0.0 にフォールバック。
     pub fn clamped_cell_height(&self) -> f32 {
-        if self.cell_height.is_finite() { self.cell_height.clamp(-10.0, 10.0) } else { 0.0 }
+        if self.cell_height.is_finite() {
+            self.cell_height.clamp(Self::MIN_CELL_HEIGHT, Self::MAX_CELL_HEIGHT)
+        } else {
+            0.0
+        }
     }
 
     /// `baseline` を安全な範囲にクランプする。NaN/Inf は 0.0 にフォールバック。
     pub fn clamped_baseline(&self) -> f32 {
-        if self.baseline.is_finite() { self.baseline.clamp(-20.0, 20.0) } else { 0.0 }
+        if self.baseline.is_finite() {
+            self.baseline.clamp(Self::MIN_BASELINE, Self::MAX_BASELINE)
+        } else {
+            0.0
+        }
+    }
+}
+
+impl Default for FontAdjust {
+    fn default() -> Self {
+        Self { cell_width: 0.0, cell_height: 0.0, baseline: 0.0 }
     }
 }
 
@@ -136,12 +161,39 @@ pub struct FontConfig {
     pub thicken: bool,
 }
 
+impl FontConfig {
+    /// フォントサイズのデフォルト値（ピクセル）。
+    pub const DEFAULT_SIZE: f32 = 14.0;
+    /// フォントサイズの最小値（ピクセル）。
+    pub const MIN_SIZE: f32 = 1.0;
+    /// フォントサイズの最大値（ピクセル）。
+    pub const MAX_SIZE: f32 = 200.0;
+    /// 行高倍率のデフォルト値。
+    pub const DEFAULT_LINE_HEIGHT: f32 = 1.2;
+    /// 行高倍率の最小値。
+    pub const MIN_LINE_HEIGHT: f32 = 0.5;
+    /// 行高倍率の最大値。
+    pub const MAX_LINE_HEIGHT: f32 = 5.0;
+    /// codepoint_map の最大エントリ数。
+    pub const MAX_CODEPOINT_MAP_ENTRIES: usize = 64;
+    /// codepoint_map キーの最大バイト長。
+    pub const MAX_CODEPOINT_MAP_KEY_LEN: usize = 32;
+    /// codepoint_map 値の最大バイト長。
+    pub const MAX_CODEPOINT_MAP_VALUE_LEN: usize = 128;
+    /// variation の最大エントリ数。
+    pub const MAX_VARIATION_ENTRIES: usize = 16;
+    /// variation/feature キーの最大バイト長。
+    pub const MAX_TAG_LEN: usize = 8;
+    /// feature の最大エントリ数。
+    pub const MAX_FEATURE_ENTRIES: usize = 32;
+}
+
 impl Default for FontConfig {
     fn default() -> Self {
         Self {
             family: default_font_family().to_owned(),
-            size: 14.0,
-            line_height: 1.2,
+            size: Self::DEFAULT_SIZE,
+            line_height: Self::DEFAULT_LINE_HEIGHT,
             fallback_families: Vec::new(),
             codepoint_map: HashMap::new(),
             variation: HashMap::new(),
@@ -164,32 +216,40 @@ fn default_font_family() -> &'static str {
 }
 
 impl FontConfig {
-    /// フォントサイズを安全な範囲にクランプする（1.0〜200.0）。
-    /// NaN/Infinity はデフォルト値（14.0）にフォールバックする。
+    /// フォントサイズを安全な範囲にクランプする（MIN_SIZE〜MAX_SIZE）。
+    /// NaN/Infinity はデフォルト値（DEFAULT_SIZE）にフォールバックする。
     pub fn clamped_size(&self) -> f32 {
-        if self.size.is_finite() { self.size.clamp(1.0, 200.0) } else { 14.0 }
+        if self.size.is_finite() {
+            self.size.clamp(Self::MIN_SIZE, Self::MAX_SIZE)
+        } else {
+            Self::DEFAULT_SIZE
+        }
     }
 
-    /// 行高倍率を安全な範囲にクランプする（0.5〜5.0）。
-    /// NaN/Infinity はデフォルト値（1.2）にフォールバックする。
+    /// 行高倍率を安全な範囲にクランプする（MIN_LINE_HEIGHT〜MAX_LINE_HEIGHT）。
+    /// NaN/Infinity はデフォルト値（DEFAULT_LINE_HEIGHT）にフォールバックする。
     pub fn clamped_line_height(&self) -> f32 {
-        if self.line_height.is_finite() { self.line_height.clamp(0.5, 5.0) } else { 1.2 }
+        if self.line_height.is_finite() {
+            self.line_height.clamp(Self::MIN_LINE_HEIGHT, Self::MAX_LINE_HEIGHT)
+        } else {
+            Self::DEFAULT_LINE_HEIGHT
+        }
     }
 
     /// `codepoint_map` をパースして `Vec<CodepointRange>` に変換する。
     ///
-    /// パース失敗エントリはスキップする。エントリ数は最大 64 に制限する。
+    /// パース失敗エントリはスキップする。エントリ数は最大 MAX_CODEPOINT_MAP_ENTRIES に制限する。
     pub fn parsed_codepoint_map(&self) -> Vec<CodepointRange> {
         self.codepoint_map
             .iter()
-            .take(64)
+            .take(Self::MAX_CODEPOINT_MAP_ENTRIES)
             .filter_map(|(range_str, family)| {
-                // キー長チェック（32文字以内）
-                if range_str.len() > 32 {
+                // キー長チェック
+                if range_str.len() > Self::MAX_CODEPOINT_MAP_KEY_LEN {
                     return None;
                 }
-                // 値長チェック（128文字以内）
-                if family.len() > 128 {
+                // 値長チェック
+                if family.len() > Self::MAX_CODEPOINT_MAP_VALUE_LEN {
                     return None;
                 }
                 CodepointRange::parse(range_str, family)
@@ -197,50 +257,66 @@ impl FontConfig {
             .collect()
     }
 
-    /// `variation` のエントリ数を最大 16 に制限して返す。NaN/Inf 値は除外する。
+    /// `variation` のエントリ数を最大 MAX_VARIATION_ENTRIES に制限して返す。NaN/Inf 値は除外する。
     pub fn clamped_variation(&self) -> impl Iterator<Item = (&str, f32)> {
         self.variation
             .iter()
-            .take(16)
-            .filter(|(k, _)| k.len() <= 8)
+            .take(Self::MAX_VARIATION_ENTRIES)
+            .filter(|(k, _)| k.len() <= Self::MAX_TAG_LEN)
             .filter_map(|(k, &v)| if v.is_finite() { Some((k.as_str(), v)) } else { None })
     }
 
     /// デシリアライズ後に各 HashMap のエントリ数を上限に合わせて truncate する。
     ///
-    /// - `codepoint_map`: 最大 64 エントリ
-    /// - `variation`: 最大 16 エントリ
-    /// - `feature`: 最大 32 エントリ
+    /// - `codepoint_map`: 最大 MAX_CODEPOINT_MAP_ENTRIES エントリ
+    /// - `variation`: 最大 MAX_VARIATION_ENTRIES エントリ
+    /// - `feature`: 最大 MAX_FEATURE_ENTRIES エントリ
     pub fn validate(&mut self) {
-        if self.codepoint_map.len() > 64 {
+        if self.codepoint_map.len() > Self::MAX_CODEPOINT_MAP_ENTRIES {
             log::warn!(
-                "Too many codepoint_map entries ({}), truncating to 64",
-                self.codepoint_map.len()
+                "Too many codepoint_map entries ({}), truncating to {}",
+                self.codepoint_map.len(),
+                Self::MAX_CODEPOINT_MAP_ENTRIES
             );
-            let keys: Vec<_> = self.codepoint_map.keys().skip(64).cloned().collect();
+            let keys: Vec<_> =
+                self.codepoint_map.keys().skip(Self::MAX_CODEPOINT_MAP_ENTRIES).cloned().collect();
             for k in keys {
                 self.codepoint_map.remove(&k);
             }
         }
-        if self.variation.len() > 16 {
-            log::warn!("Too many variation entries ({}), truncating to 16", self.variation.len());
-            let keys: Vec<_> = self.variation.keys().skip(16).cloned().collect();
+        if self.variation.len() > Self::MAX_VARIATION_ENTRIES {
+            log::warn!(
+                "Too many variation entries ({}), truncating to {}",
+                self.variation.len(),
+                Self::MAX_VARIATION_ENTRIES
+            );
+            let keys: Vec<_> =
+                self.variation.keys().skip(Self::MAX_VARIATION_ENTRIES).cloned().collect();
             for k in keys {
                 self.variation.remove(&k);
             }
         }
-        if self.feature.len() > 32 {
-            log::warn!("Too many feature entries ({}), truncating to 32", self.feature.len());
-            let keys: Vec<_> = self.feature.keys().skip(32).cloned().collect();
+        if self.feature.len() > Self::MAX_FEATURE_ENTRIES {
+            log::warn!(
+                "Too many feature entries ({}), truncating to {}",
+                self.feature.len(),
+                Self::MAX_FEATURE_ENTRIES
+            );
+            let keys: Vec<_> =
+                self.feature.keys().skip(Self::MAX_FEATURE_ENTRIES).cloned().collect();
             for k in keys {
                 self.feature.remove(&k);
             }
         }
     }
 
-    /// `feature` のエントリ数を最大 32 に制限して返す。
+    /// `feature` のエントリ数を最大 MAX_FEATURE_ENTRIES に制限して返す。
     pub fn clamped_feature(&self) -> impl Iterator<Item = (&str, bool)> {
-        self.feature.iter().take(32).filter(|(k, _)| k.len() <= 8).map(|(k, &v)| (k.as_str(), v))
+        self.feature
+            .iter()
+            .take(Self::MAX_FEATURE_ENTRIES)
+            .filter(|(k, _)| k.len() <= Self::MAX_TAG_LEN)
+            .map(|(k, &v)| (k.as_str(), v))
     }
 }
 
@@ -252,31 +328,31 @@ mod tests {
     fn default_font_config() {
         let config = FontConfig::default();
         assert!(!config.family.is_empty());
-        assert!((config.size - 14.0).abs() < f32::EPSILON);
-        assert!((config.line_height - 1.2).abs() < f32::EPSILON);
+        assert!((config.size - FontConfig::DEFAULT_SIZE).abs() < f32::EPSILON);
+        assert!((config.line_height - FontConfig::DEFAULT_LINE_HEIGHT).abs() < f32::EPSILON);
     }
 
     #[test]
     fn clamped_size_bounds() {
         let small = FontConfig { size: 0.0, ..FontConfig::default() };
-        assert!((small.clamped_size() - 1.0).abs() < f32::EPSILON);
+        assert!((small.clamped_size() - FontConfig::MIN_SIZE).abs() < f32::EPSILON);
         let large = FontConfig { size: 999.0, ..FontConfig::default() };
-        assert!((large.clamped_size() - 200.0).abs() < f32::EPSILON);
+        assert!((large.clamped_size() - FontConfig::MAX_SIZE).abs() < f32::EPSILON);
     }
 
     #[test]
     fn clamped_nan_fallback() {
         let nan = FontConfig { size: f32::NAN, line_height: f32::NAN, ..FontConfig::default() };
-        assert!((nan.clamped_size() - 14.0).abs() < f32::EPSILON);
-        assert!((nan.clamped_line_height() - 1.2).abs() < f32::EPSILON);
+        assert!((nan.clamped_size() - FontConfig::DEFAULT_SIZE).abs() < f32::EPSILON);
+        assert!((nan.clamped_line_height() - FontConfig::DEFAULT_LINE_HEIGHT).abs() < f32::EPSILON);
 
         let inf = FontConfig {
             size: f32::INFINITY,
             line_height: f32::NEG_INFINITY,
             ..FontConfig::default()
         };
-        assert!((inf.clamped_size() - 14.0).abs() < f32::EPSILON);
-        assert!((inf.clamped_line_height() - 1.2).abs() < f32::EPSILON);
+        assert!((inf.clamped_size() - FontConfig::DEFAULT_SIZE).abs() < f32::EPSILON);
+        assert!((inf.clamped_line_height() - FontConfig::DEFAULT_LINE_HEIGHT).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -286,7 +362,7 @@ mod tests {
         assert!((config.size - 18.0).abs() < f32::EPSILON);
         // family と line_height はデフォルト値
         assert!(!config.family.is_empty());
-        assert!((config.line_height - 1.2).abs() < f32::EPSILON);
+        assert!((config.line_height - FontConfig::DEFAULT_LINE_HEIGHT).abs() < f32::EPSILON);
     }
 
     // -----------------------------------------------------------------------
@@ -303,28 +379,30 @@ mod tests {
 
     #[test]
     fn font_adjust_clamp_cell_width() {
-        let adj = FontAdjust { cell_width: 20.0, ..Default::default() };
-        assert!((adj.clamped_cell_width() - 10.0).abs() < f32::EPSILON);
-        let adj = FontAdjust { cell_width: -20.0, ..Default::default() };
-        assert!((adj.clamped_cell_width() - (-10.0)).abs() < f32::EPSILON);
+        let adj = FontAdjust { cell_width: FontAdjust::MAX_CELL_WIDTH * 2.0, ..Default::default() };
+        assert!((adj.clamped_cell_width() - FontAdjust::MAX_CELL_WIDTH).abs() < f32::EPSILON);
+        let adj = FontAdjust { cell_width: FontAdjust::MIN_CELL_WIDTH * 2.0, ..Default::default() };
+        assert!((adj.clamped_cell_width() - FontAdjust::MIN_CELL_WIDTH).abs() < f32::EPSILON);
         let adj = FontAdjust { cell_width: 3.5, ..Default::default() };
         assert!((adj.clamped_cell_width() - 3.5).abs() < f32::EPSILON);
     }
 
     #[test]
     fn font_adjust_clamp_cell_height() {
-        let adj = FontAdjust { cell_height: 15.0, ..Default::default() };
-        assert!((adj.clamped_cell_height() - 10.0).abs() < f32::EPSILON);
-        let adj = FontAdjust { cell_height: -15.0, ..Default::default() };
-        assert!((adj.clamped_cell_height() - (-10.0)).abs() < f32::EPSILON);
+        let adj =
+            FontAdjust { cell_height: FontAdjust::MAX_CELL_HEIGHT + 5.0, ..Default::default() };
+        assert!((adj.clamped_cell_height() - FontAdjust::MAX_CELL_HEIGHT).abs() < f32::EPSILON);
+        let adj =
+            FontAdjust { cell_height: FontAdjust::MIN_CELL_HEIGHT - 5.0, ..Default::default() };
+        assert!((adj.clamped_cell_height() - FontAdjust::MIN_CELL_HEIGHT).abs() < f32::EPSILON);
     }
 
     #[test]
     fn font_adjust_clamp_baseline() {
-        let adj = FontAdjust { baseline: 30.0, ..Default::default() };
-        assert!((adj.clamped_baseline() - 20.0).abs() < f32::EPSILON);
-        let adj = FontAdjust { baseline: -30.0, ..Default::default() };
-        assert!((adj.clamped_baseline() - (-20.0)).abs() < f32::EPSILON);
+        let adj = FontAdjust { baseline: FontAdjust::MAX_BASELINE + 10.0, ..Default::default() };
+        assert!((adj.clamped_baseline() - FontAdjust::MAX_BASELINE).abs() < f32::EPSILON);
+        let adj = FontAdjust { baseline: FontAdjust::MIN_BASELINE - 10.0, ..Default::default() };
+        assert!((adj.clamped_baseline() - FontAdjust::MIN_BASELINE).abs() < f32::EPSILON);
         let adj = FontAdjust { baseline: 5.0, ..Default::default() };
         assert!((adj.clamped_baseline() - 5.0).abs() < f32::EPSILON);
     }
@@ -511,36 +589,39 @@ family = "Menlo"
     // -----------------------------------------------------------------------
 
     #[test]
-    fn validate_truncates_codepoint_map_over_64() {
+    fn validate_truncates_codepoint_map_over_max() {
         let mut config = FontConfig::default();
-        for i in 0..70u32 {
+        let over = FontConfig::MAX_CODEPOINT_MAP_ENTRIES + 6;
+        for i in 0..over as u32 {
             config.codepoint_map.insert(format!("U+{i:04X}"), format!("Font{i}"));
         }
-        assert_eq!(config.codepoint_map.len(), 70);
+        assert_eq!(config.codepoint_map.len(), over);
         config.validate();
-        assert_eq!(config.codepoint_map.len(), 64);
+        assert_eq!(config.codepoint_map.len(), FontConfig::MAX_CODEPOINT_MAP_ENTRIES);
     }
 
     #[test]
-    fn validate_truncates_variation_over_16() {
+    fn validate_truncates_variation_over_max() {
         let mut config = FontConfig::default();
-        for i in 0..20u32 {
+        let over = FontConfig::MAX_VARIATION_ENTRIES + 4;
+        for i in 0..over as u32 {
             config.variation.insert(format!("tag{i}"), i as f32);
         }
-        assert_eq!(config.variation.len(), 20);
+        assert_eq!(config.variation.len(), over);
         config.validate();
-        assert_eq!(config.variation.len(), 16);
+        assert_eq!(config.variation.len(), FontConfig::MAX_VARIATION_ENTRIES);
     }
 
     #[test]
-    fn validate_truncates_feature_over_32() {
+    fn validate_truncates_feature_over_max() {
         let mut config = FontConfig::default();
-        for i in 0..40u32 {
+        let over = FontConfig::MAX_FEATURE_ENTRIES + 8;
+        for i in 0..over as u32 {
             config.feature.insert(format!("tag{i}"), i % 2 == 0);
         }
-        assert_eq!(config.feature.len(), 40);
+        assert_eq!(config.feature.len(), over);
         config.validate();
-        assert_eq!(config.feature.len(), 32);
+        assert_eq!(config.feature.len(), FontConfig::MAX_FEATURE_ENTRIES);
     }
 
     #[test]

@@ -217,11 +217,13 @@ mod tests {
 
     #[test]
     fn grow_visible_increases_len() {
-        let mut s = make_storage(10);
+        let initial = 10;
+        let grow_by = 5;
+        let mut s = make_storage(initial);
         let template = Cell::default();
-        s.grow_visible(5, 80, &template);
-        assert_eq!(s.visible_lines, 15);
-        assert_eq!(s.len(), 15);
+        s.grow_visible(grow_by, 80, &template);
+        assert_eq!(s.visible_lines, initial + grow_by);
+        assert_eq!(s.len(), initial + grow_by);
     }
 
     #[test]

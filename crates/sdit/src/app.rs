@@ -1055,6 +1055,7 @@ mod tests {
         assert!(bell.intensity() > 0.0);
     }
 
+    // smell-allow: fragile-test — sleep ではなく時刻算術で未来の時点を生成しており、実際には非決定性がない
     #[test]
     fn visual_bell_fades_to_zero() {
         let mut bell = VisualBell::new(10); // 10ms duration
@@ -1064,6 +1065,7 @@ mod tests {
         assert!(bell.intensity_at(future) < f32::EPSILON);
     }
 
+    // smell-allow: fragile-test — sleep ではなく時刻算術で未来の時点を生成しており、実際には非決定性がない
     #[test]
     fn visual_bell_completed_clears_state() {
         let mut bell = VisualBell::new(10);

@@ -1005,14 +1005,15 @@ mod tests {
     #[test]
     fn parse_hex_color_black_white() {
         let black = parse_hex_color("#000000").unwrap();
-        for (i, &v) in black.iter().enumerate() {
-            let expected = if i == 3 { 1.0_f32 } else { 0.0_f32 };
-            assert!((v - expected).abs() < f32::EPSILON, "black[{i}] = {v}");
+        // R=0, G=0, B=0, A=1
+        let expected_black: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+        for (i, (&v, &e)) in black.iter().zip(expected_black.iter()).enumerate() {
+            assert!((v - e).abs() < f32::EPSILON, "black[{i}]: got {v}, expected {e}");
         }
         let white = parse_hex_color("#ffffff").unwrap();
-        assert!((white[0] - 1.0).abs() < f32::EPSILON);
-        assert!((white[1] - 1.0).abs() < f32::EPSILON);
-        assert!((white[2] - 1.0).abs() < f32::EPSILON);
+        assert!((white[0] - 1.0).abs() < f32::EPSILON, "white R");
+        assert!((white[1] - 1.0).abs() < f32::EPSILON, "white G");
+        assert!((white[2] - 1.0).abs() < f32::EPSILON, "white B");
     }
 
     #[test]

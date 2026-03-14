@@ -206,9 +206,11 @@ mod tests {
         let results = SearchEngine::search(&grid, "world");
         assert_eq!(results.len(), 1);
         let m = &results[0];
-        // "hello world" => 'w' は col 6
-        assert_eq!(m.start_col, 6);
-        assert_eq!(m.end_col, 11);
+        // "hello world" => "world" は col 6 から始まる
+        let expected_start = "hello ".len();
+        let expected_end = expected_start + "world".len();
+        assert_eq!(m.start_col, expected_start);
+        assert_eq!(m.end_col, expected_end);
     }
 
     #[test]
@@ -216,11 +218,11 @@ mod tests {
         // "abab" を検索すると "ab" が 2 回マッチ
         let grid = make_grid_with_text(5, 40, 0, "abab");
         let results = SearchEngine::search(&grid, "ab");
-        assert_eq!(results.len(), 2);
-        assert_eq!(results[0].start_col, 0);
-        assert_eq!(results[0].end_col, 2);
-        assert_eq!(results[1].start_col, 2);
-        assert_eq!(results[1].end_col, 4);
+        assert_eq!(results.len(), 2, "should find 2 non-overlapping matches");
+        assert_eq!(results[0].start_col, 0, "first match starts at col 0");
+        assert_eq!(results[0].end_col, 2, "first match ends at col 2");
+        assert_eq!(results[1].start_col, 2, "second match starts at col 2");
+        assert_eq!(results[1].end_col, 4, "second match ends at col 4");
     }
 
     #[test]
@@ -249,15 +251,16 @@ mod tests {
         let grid = make_grid_with_text(5, 40, 0, "Hello World");
         // 小文字で検索
         let results = SearchEngine::search(&grid, "hello");
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].start_col, 0);
-        assert_eq!(results[0].end_col, 5);
+        assert_eq!(results.len(), 1, "lowercase 'hello' should match once");
+        assert_eq!(results[0].start_col, 0, "lowercase match starts at col 0");
+        assert_eq!(results[0].end_col, "hello".len(), "lowercase match end col");
 
         // 大文字で検索
         let results2 = SearchEngine::search(&grid, "WORLD");
-        assert_eq!(results2.len(), 1);
-        assert_eq!(results2[0].start_col, 6);
-        assert_eq!(results2[0].end_col, 11);
+        assert_eq!(results2.len(), 1, "uppercase 'WORLD' should match once");
+        let world_start = "Hello ".len();
+        assert_eq!(results2[0].start_col, world_start, "uppercase match start col");
+        assert_eq!(results2[0].end_col, world_start + "WORLD".len(), "uppercase match end col");
     }
 
     #[test]
@@ -298,18 +301,21 @@ mod tests {
 
     #[test]
     fn display_offset_for_match_in_history() {
-        // history_size=20, screen_lines=10
-        // raw_row=3 (履歴行)
+        let history_size = 20;
+        let screen_lines = 10;
+        // raw_row=3 (履歴行の先頭付近)
         // half=5, view_start = max(3-5, 0) = 0
-        // display_offset = 20 - 0 = 20
-        let offset = SearchEngine::display_offset_for_match(3, 20, 10);
-        assert_eq!(offset, 20);
+        // display_offset = history_size - 0 = 20
+        let raw_row = 3;
+        let offset = SearchEngine::display_offset_for_match(raw_row, history_size, screen_lines);
+        assert_eq!(offset, history_size);
 
-        // raw_row=10 (履歴行)
+        // raw_row=10 (履歴行の中間)
         // view_start = 10 - 5 = 5
-        // display_offset = 20 - 5 = 15
-        let offset2 = SearchEngine::display_offset_for_match(10, 20, 10);
-        assert_eq!(offset2, 15);
+        // display_offset = history_size - 5 = 15
+        let raw_row2 = 10;
+        let offset2 = SearchEngine::display_offset_for_match(raw_row2, history_size, screen_lines);
+        assert_eq!(offset2, history_size - (raw_row2 - screen_lines / 2));
     }
 
     #[test]

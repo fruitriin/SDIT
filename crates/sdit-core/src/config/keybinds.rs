@@ -358,12 +358,12 @@ action = "AddSession"
 "#;
         let wrapper: KeybindWrapper = toml::from_str(toml_str).unwrap();
         let config = wrapper.keybinds;
-        assert_eq!(config.bindings.len(), 2);
-        assert_eq!(config.bindings[0].action, Action::NewWindow);
-        assert_eq!(config.bindings[0].key, "n");
-        assert_eq!(config.bindings[0].mods, "super");
-        assert_eq!(config.bindings[1].action, Action::AddSession);
-        assert_eq!(config.bindings[1].mods, "super|shift");
+        assert_eq!(config.bindings.len(), 2, "should parse 2 bindings");
+        assert_eq!(config.bindings[0].action, Action::NewWindow, "first binding action");
+        assert_eq!(config.bindings[0].key, "n", "first binding key");
+        assert_eq!(config.bindings[0].mods, "super", "first binding mods");
+        assert_eq!(config.bindings[1].action, Action::AddSession, "second binding action");
+        assert_eq!(config.bindings[1].mods, "super|shift", "second binding mods");
     }
 
     #[test]

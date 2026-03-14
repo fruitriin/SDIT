@@ -59,6 +59,7 @@ fn row_text(terminal: &Terminal, line: i32) -> String {
     s.trim_end().to_string()
 }
 
+// smell-allow: silent-skip, conditional-test-logic — TTY がない CI では PTY 統合テスト不可
 #[test]
 fn echo_appears_in_grid() {
     if !is_tty() {
@@ -91,6 +92,7 @@ fn echo_appears_in_grid() {
     let _ = pty.try_wait();
 }
 
+// smell-allow: silent-skip, conditional-test-logic — TTY がない CI では PTY 統合テスト不可
 #[test]
 fn shell_command_pipeline() {
     if !is_tty() {
@@ -109,11 +111,8 @@ fn shell_command_pipeline() {
     let mut terminal = Terminal::new(24, 80, 1000);
     let mut processor = Processor::new();
 
-    // Wait a moment for shell to initialise.
-    std::thread::sleep(Duration::from_millis(100));
-
-    // Drain any initial output (prompt etc.)
-    read_until(&mut pty, &mut terminal, &mut processor, Duration::from_millis(500), |_| false);
+    // シェル初期化を待つ: 初期出力（プロンプト等）をポーリングで読み切る
+    read_until(&mut pty, &mut terminal, &mut processor, Duration::from_secs(2), |_| false);
 
     // Send a command that produces known output.
     pty.write_all(b"printf 'GRID_CHECK_42\\n'\n").expect("write failed");
@@ -135,6 +134,7 @@ fn shell_command_pipeline() {
 ///
 /// macOS 26 では spawn 前に TIOCSWINSZ を呼ぶと ENOTTY になる。
 /// `Pty::spawn()` の実装が「spawn 後に resize」の順序を守っていることを検証する。
+// smell-allow: silent-skip, conditional-test-logic — TTY がない CI では PTY 統合テスト不可
 #[test]
 fn pty_spawn_then_resize() {
     if !is_tty() {
@@ -164,6 +164,7 @@ fn pty_spawn_then_resize() {
     let _ = pty.kill();
 }
 
+// smell-allow: silent-skip, conditional-test-logic — TTY がない CI では PTY 統合テスト不可
 #[test]
 fn cursor_position_after_escape_sequence() {
     if !is_tty() {

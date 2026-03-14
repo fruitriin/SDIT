@@ -335,8 +335,10 @@ mod tests {
         let matches = detector.detect_urls_in_line(&cells);
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].url, "https://example.com");
-        assert_eq!(matches[0].start_col, 6);
-        assert_eq!(matches[0].end_col, 25);
+        let expected_start = "visit ".len();
+        let expected_end = expected_start + "https://example.com".len();
+        assert_eq!(matches[0].start_col, expected_start);
+        assert_eq!(matches[0].end_col, expected_end);
     }
 
     #[test]

@@ -260,6 +260,7 @@ mod tests {
     /// コンパイル時チェック: これがコンパイルできれば全バリアントが存在する。
     #[test]
     fn menu_actions_are_defined() {
+        // smell-allow: magic-number — 配列の要素数は上の定義から自明
         // 各バリアントを列挙してコンパイル時に検証する
         let actions = [
             Action::About,

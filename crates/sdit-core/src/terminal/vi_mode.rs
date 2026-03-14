@@ -577,12 +577,15 @@ mod tests {
 
     #[test]
     fn vi_cursor_first_last() {
-        let grid = make_grid(5, 80);
-        let cursor = ViCursor::new(Point::new(Line(0), Column(40)));
+        let cols = 80;
+        let mid_col = 40;
+        let last_col = cols - 1;
+        let grid = make_grid(5, cols);
+        let cursor = ViCursor::new(Point::new(Line(0), Column(mid_col)));
         let moved_first = cursor.motion(&grid, ViMotion::First);
         assert_eq!(moved_first.point.column.0, 0);
         let moved_last = cursor.motion(&grid, ViMotion::Last);
-        assert_eq!(moved_last.point.column.0, 79);
+        assert_eq!(moved_last.point.column.0, last_col);
     }
 
     #[test]

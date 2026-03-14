@@ -77,6 +77,7 @@
 | ファイル | 要約 | キーワード |
 |---|---|---|
 | [delegating-to-codex-copilot.md](delegating-to-codex-copilot.md) | Codex CLI / Copilot CLI へのタスク移譲: モデル特性、プロンプトのコツ、パーミッション変換、振り分け基準 | `codex exec`, `copilot -p`, `--full-auto`, `--allow-tool`, `AGENTS.md`, `GPT-5 Codex`, `GPT-5 mini`, `permissions-to-flags.sh`, `sandbox`, `workspace-write` |
+| [test-smell-detector.md](test-smell-detector.md) | savanna-smell-detector の導入ノウハウ: CI設定、severity段階的引き下げ、smell-allowパターン集、修正パターン（定数化・変数バインド・テスト分離） | `savanna-smell-detector`, `smell-allow`, `--magic-number-whitelist`, `--assertion-roulette-threshold`, `severity 1`, `t_wada`, `DEFAULT_*`, `scripts/check.sh` |
 
 ## アーカイブ済み
 

@@ -333,12 +333,15 @@ pub(crate) fn calc_quick_terminal_geometry(
         screen_size
     };
 
-    // size_ratio を安全な範囲に二重 clamp する（0.1〜1.0）
-    // NaN などの異常値も 0.1〜1.0 の範囲に収める
+    // size_ratio を安全な範囲に二重 clamp する（MIN_SIZE〜MAX_SIZE）
+    // NaN などの異常値も MIN_SIZE〜MAX_SIZE の範囲に収める
     let size_ratio = if size_ratio.is_finite() {
-        size_ratio.clamp(0.1, 1.0)
+        size_ratio.clamp(
+            sdit_core::config::QuickTerminalConfig::MIN_SIZE,
+            sdit_core::config::QuickTerminalConfig::MAX_SIZE,
+        )
     } else {
-        0.4 // デフォルト値
+        sdit_core::config::QuickTerminalConfig::DEFAULT_SIZE
     };
 
     // u32 → i32 キャスト: 通常のディスプレイサイズ（最大 ~32767px）では安全
@@ -466,16 +469,18 @@ mod tests {
     #[test]
     fn calc_geometry_top() {
         // t=1.0（完全表示）では y=0 で画面幅のウィンドウ
+        let ratio = 0.4f32;
         let (x, y, w, h) = calc_quick_terminal_geometry(
             sdit_core::config::QuickTerminalPosition::Top,
-            0.4,
+            ratio,
             SCREEN_FHD,
             1.0,
         );
+        let expected_h = (SCREEN_FHD.1 as f32 * ratio) as u32;
         assert_eq!(x, 0);
         assert_eq!(y, 0);
         assert_eq!(w, SCREEN_FHD.0);
-        assert_eq!(h, 432); // 1080 * 0.4 = 432
+        assert_eq!(h, expected_h);
     }
 
     #[test]
@@ -587,17 +592,19 @@ mod tests {
     #[test]
     fn calc_geometry_zero_screen_size() {
         // screen_size が (0, 0) の場合はフォールバック (FALLBACK_SCREEN_WIDTH, FALLBACK_SCREEN_HEIGHT) を使用する
+        let ratio = 0.4f32;
         let (x, y, w, h) = calc_quick_terminal_geometry(
             sdit_core::config::QuickTerminalPosition::Top,
-            0.4,
+            ratio,
             (0, 0),
             1.0,
         );
+        let expected_h = (FALLBACK_SCREEN_HEIGHT as f32 * ratio) as u32;
         // フォールバック値で計算される
         assert_eq!(x, 0);
         assert_eq!(y, 0); // t=1.0 なので y=0
         assert_eq!(w, FALLBACK_SCREEN_WIDTH);
-        assert_eq!(h, 240); // FALLBACK_SCREEN_HEIGHT * 0.4 = 240
+        assert_eq!(h, expected_h);
     }
 
     #[test]
@@ -605,6 +612,8 @@ mod tests {
         // 4方向すべてで通常のディスプレイサイズが正しく計算される
         let screen = SCREEN_QHD;
         let ratio = 0.5f32;
+        let expected_h_top = (screen.1 as f32 * ratio) as u32; // 縦方向: 1440 * 0.5
+        let expected_w_left = (screen.0 as f32 * ratio) as u32; // 横方向: 2560 * 0.5
 
         // Top: t=1.0
         let (x, _y, w, h) = calc_quick_terminal_geometry(
@@ -613,9 +622,9 @@ mod tests {
             screen,
             1.0,
         );
-        assert_eq!(x, 0);
-        assert_eq!(w, SCREEN_QHD.0);
-        assert_eq!(h, 720); // 1440 * 0.5
+        assert_eq!(x, 0, "Top: x should be 0");
+        assert_eq!(w, SCREEN_QHD.0, "Top: width should span full screen");
+        assert_eq!(h, expected_h_top, "Top: height should be screen * ratio");
 
         // Bottom: t=1.0
         let (_x, y, w, h) = calc_quick_terminal_geometry(
@@ -624,8 +633,8 @@ mod tests {
             screen,
             1.0,
         );
-        assert_eq!(w, SCREEN_QHD.0);
-        assert_eq!(y, SCREEN_QHD.1 as i32 - h as i32);
+        assert_eq!(w, SCREEN_QHD.0, "Bottom: width should span full screen");
+        assert_eq!(y, SCREEN_QHD.1 as i32 - h as i32, "Bottom: y should align to screen bottom");
 
         // Left: t=1.0
         let (x, y, w, h) = calc_quick_terminal_geometry(
@@ -634,10 +643,10 @@ mod tests {
             screen,
             1.0,
         );
-        assert_eq!(x, 0);
-        assert_eq!(y, 0);
-        assert_eq!(w, 1280); // 2560 * 0.5
-        assert_eq!(h, SCREEN_QHD.1);
+        assert_eq!(x, 0, "Left: x should be 0");
+        assert_eq!(y, 0, "Left: y should be 0");
+        assert_eq!(w, expected_w_left, "Left: width should be screen * ratio");
+        assert_eq!(h, SCREEN_QHD.1, "Left: height should span full screen");
 
         // Right: t=1.0
         let (x, _y, w, h) = calc_quick_terminal_geometry(
@@ -646,6 +655,6 @@ mod tests {
             screen,
             1.0,
         );
-        assert_eq!(x, SCREEN_QHD.0 as i32 - w as i32);
+        assert_eq!(x, SCREEN_QHD.0 as i32 - w as i32, "Right: x should align to screen right");
     }
 }

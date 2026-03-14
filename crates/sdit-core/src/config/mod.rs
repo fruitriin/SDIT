@@ -225,8 +225,8 @@ impl Default for WindowConfig {
             blur: false,
             padding_x: 0,
             padding_y: 0,
-            columns: 80,
-            rows: 24,
+            columns: Self::DEFAULT_COLUMNS,
+            rows: Self::DEFAULT_ROWS,
             startup_mode: StartupMode::Windowed,
             inherit_working_directory: true,
             confirm_close: ConfirmClose::ProcessRunning,
@@ -234,7 +234,7 @@ impl Default for WindowConfig {
             always_on_top: false,
             restore_session: true,
             background_image: None,
-            background_image_opacity: 0.3,
+            background_image_opacity: Self::DEFAULT_BACKGROUND_IMAGE_OPACITY,
             background_image_fit: BackgroundImageFit::Cover,
             working_directory: None,
             padding_color: PaddingColor::Background,
@@ -246,6 +246,27 @@ impl Default for WindowConfig {
 }
 
 impl WindowConfig {
+    /// 初期ウィンドウ幅のデフォルト値（列数）。
+    pub const DEFAULT_COLUMNS: u16 = 80;
+    /// 初期ウィンドウ高さのデフォルト値（行数）。
+    pub const DEFAULT_ROWS: u16 = 24;
+    /// ウィンドウ幅の最小値（列数）。
+    pub const MIN_COLUMNS: u16 = 10;
+    /// ウィンドウ幅の最大値（列数）。
+    pub const MAX_COLUMNS: u16 = 500;
+    /// ウィンドウ高さの最小値（行数）。
+    pub const MIN_ROWS: u16 = 2;
+    /// ウィンドウ高さの最大値（行数）。
+    pub const MAX_ROWS: u16 = 200;
+    /// パディングの最大値（ピクセル）。
+    pub const MAX_PADDING: u16 = 200;
+    /// 背景画像不透明度のデフォルト値。
+    pub const DEFAULT_BACKGROUND_IMAGE_OPACITY: f32 = 0.3;
+    /// ウィンドウ位置の最小値（物理ピクセル）。
+    pub const MIN_POSITION: i32 = -16000;
+    /// ウィンドウ位置の最大値（物理ピクセル）。
+    pub const MAX_POSITION: i32 = 32000;
+
     /// opacity を安全な範囲にクランプする。
     ///
     /// NaN や Inf が渡された場合はデフォルト値 1.0 を返す。
@@ -253,45 +274,48 @@ impl WindowConfig {
         if self.opacity.is_finite() { self.opacity.clamp(0.0, 1.0) } else { 1.0 }
     }
 
-    /// `padding_x` を安全な範囲（0〜200 ピクセル）にクランプする。
+    /// `padding_x` を安全な範囲（0〜MAX_PADDING ピクセル）にクランプする。
     pub fn clamped_padding_x(&self) -> u16 {
-        self.padding_x.min(200)
+        self.padding_x.min(Self::MAX_PADDING)
     }
 
-    /// `padding_y` を安全な範囲（0〜200 ピクセル）にクランプする。
+    /// `padding_y` を安全な範囲（0〜MAX_PADDING ピクセル）にクランプする。
     pub fn clamped_padding_y(&self) -> u16 {
-        self.padding_y.min(200)
+        self.padding_y.min(Self::MAX_PADDING)
     }
 
-    /// `columns` を安全な範囲（10〜500）にクランプする。
+    /// `columns` を安全な範囲（MIN_COLUMNS〜MAX_COLUMNS）にクランプする。
     pub fn clamped_columns(&self) -> u16 {
-        self.columns.clamp(10, 500)
+        self.columns.clamp(Self::MIN_COLUMNS, Self::MAX_COLUMNS)
     }
 
-    /// `rows` を安全な範囲（2〜200）にクランプする。
+    /// `rows` を安全な範囲（MIN_ROWS〜MAX_ROWS）にクランプする。
     pub fn clamped_rows(&self) -> u16 {
-        self.rows.clamp(2, 200)
+        self.rows.clamp(Self::MIN_ROWS, Self::MAX_ROWS)
     }
 
     /// `background_image_opacity` を安全な範囲にクランプする。
     ///
-    /// NaN や Inf が渡された場合はデフォルト値 0.3 を返す。
+    /// NaN や Inf が渡された場合はデフォルト値 DEFAULT_BACKGROUND_IMAGE_OPACITY を返す。
     pub fn clamped_background_image_opacity(&self) -> f32 {
         if self.background_image_opacity.is_finite() {
             self.background_image_opacity.clamp(0.0, 1.0)
         } else {
-            0.3
+            Self::DEFAULT_BACKGROUND_IMAGE_OPACITY
         }
     }
 
     /// `position_x/y` を安全な範囲にクランプして返す。
     ///
     /// 両方 `Some` のときのみ座標を返す。
-    /// マルチディスプレイ環境を考慮し、合理的な範囲（-16000〜32000）にクランプする。
+    /// マルチディスプレイ環境を考慮し、合理的な範囲（MIN_POSITION〜MAX_POSITION）にクランプする。
     /// 一般的な最大解像度（8K × 4 ディスプレイ程度）を上限とする。
     pub fn clamped_position(&self) -> Option<(i32, i32)> {
         match (self.position_x, self.position_y) {
-            (Some(x), Some(y)) => Some((x.clamp(-16000, 32000), y.clamp(-16000, 32000))),
+            (Some(x), Some(y)) => Some((
+                x.clamp(Self::MIN_POSITION, Self::MAX_POSITION),
+                y.clamp(Self::MIN_POSITION, Self::MAX_POSITION),
+            )),
             _ => None,
         }
     }
@@ -309,16 +333,23 @@ pub struct BellConfig {
     pub duration_ms: u32,
 }
 
-impl Default for BellConfig {
-    fn default() -> Self {
-        Self { visual: true, dock_bounce: true, duration_ms: 150 }
+impl BellConfig {
+    /// ビジュアルベルのフェードアウト時間のデフォルト値（ミリ秒）。
+    pub const DEFAULT_DURATION_MS: u32 = 150;
+    /// duration_ms の最小値。
+    pub const MIN_DURATION_MS: u32 = 1;
+    /// duration_ms の最大値。
+    pub const MAX_DURATION_MS: u32 = 5000;
+
+    /// duration_ms を安全な範囲にクランプする（0 除算防止 + 長期ループ防止）。
+    pub fn clamped_duration_ms(&self) -> u32 {
+        self.duration_ms.clamp(Self::MIN_DURATION_MS, Self::MAX_DURATION_MS)
     }
 }
 
-impl BellConfig {
-    /// duration_ms を安全な範囲にクランプする（0 除算防止 + 長期ループ防止）。
-    pub fn clamped_duration_ms(&self) -> u32 {
-        self.duration_ms.clamp(1, 5000)
+impl Default for BellConfig {
+    fn default() -> Self {
+        Self { visual: true, dock_bounce: true, duration_ms: Self::DEFAULT_DURATION_MS }
     }
 }
 
@@ -352,20 +383,28 @@ pub struct NotificationConfig {
     pub command_notify_threshold: u32,
 }
 
+impl NotificationConfig {
+    /// コマンド終了通知閾値のデフォルト値（秒）。
+    pub const DEFAULT_COMMAND_NOTIFY_THRESHOLD: u32 = 10;
+    /// コマンド終了通知閾値の最小値（秒）。
+    pub const MIN_COMMAND_NOTIFY_THRESHOLD: u32 = 1;
+    /// コマンド終了通知閾値の最大値（秒）。
+    pub const MAX_COMMAND_NOTIFY_THRESHOLD: u32 = 3600;
+
+    /// `command_notify_threshold` を安全な範囲にクランプする（MIN〜MAX秒）。
+    pub fn clamped_command_notify_threshold(&self) -> u32 {
+        self.command_notify_threshold
+            .clamp(Self::MIN_COMMAND_NOTIFY_THRESHOLD, Self::MAX_COMMAND_NOTIFY_THRESHOLD)
+    }
+}
+
 impl Default for NotificationConfig {
     fn default() -> Self {
         Self {
             enabled: true,
             command_notify: CommandNotifyMode::default(),
-            command_notify_threshold: 10,
+            command_notify_threshold: Self::DEFAULT_COMMAND_NOTIFY_THRESHOLD,
         }
-    }
-}
-
-impl NotificationConfig {
-    /// `command_notify_threshold` を安全な範囲にクランプする（1〜3600秒）。
-    pub fn clamped_command_notify_threshold(&self) -> u32 {
-        self.command_notify_threshold.clamp(1, 3600)
     }
 }
 
@@ -419,20 +458,27 @@ pub struct ScrollingConfig {
     pub scroll_to_bottom_on_output: bool,
 }
 
-impl Default for ScrollingConfig {
-    fn default() -> Self {
-        Self {
-            multiplier: 3,
-            scroll_to_bottom_on_keystroke: true,
-            scroll_to_bottom_on_output: false,
-        }
+impl ScrollingConfig {
+    /// スクロール倍率のデフォルト値。
+    pub const DEFAULT_MULTIPLIER: u32 = 3;
+    /// スクロール倍率の最小値。
+    pub const MIN_MULTIPLIER: u32 = 1;
+    /// スクロール倍率の最大値。
+    pub const MAX_MULTIPLIER: u32 = 100;
+
+    /// multiplier を安全な範囲（MIN_MULTIPLIER〜MAX_MULTIPLIER）にクランプする。
+    pub fn clamped_multiplier(&self) -> u32 {
+        self.multiplier.clamp(Self::MIN_MULTIPLIER, Self::MAX_MULTIPLIER)
     }
 }
 
-impl ScrollingConfig {
-    /// multiplier を安全な範囲（1〜100）にクランプする。
-    pub fn clamped_multiplier(&self) -> u32 {
-        self.multiplier.clamp(1, 100)
+impl Default for ScrollingConfig {
+    fn default() -> Self {
+        Self {
+            multiplier: Self::DEFAULT_MULTIPLIER,
+            scroll_to_bottom_on_keystroke: true,
+            scroll_to_bottom_on_output: false,
+        }
     }
 }
 
@@ -475,11 +521,20 @@ impl Default for SelectionConfig {
 }
 
 impl SelectionConfig {
-    /// word_chars を最大 256 文字にクランプして返す。
+    /// word_chars の最大文字数。
+    pub const MAX_WORD_CHARS: usize = 256;
+    /// clipboard_codepoint_map の最大エントリ数。
+    pub const MAX_CLIPBOARD_CODEPOINT_MAP_ENTRIES: usize = 64;
+    /// codepoint_map の各 replacement 文字列の最大文字数。
+    pub const MAX_REPLACEMENT_CHARS: usize = 256;
+    /// codepoint_map 適用時の出力サイズ上限（入力の何倍まで許容するか）。
+    pub const MAX_OUTPUT_MULTIPLIER: usize = 10;
+
+    /// word_chars を最大 MAX_WORD_CHARS 文字にクランプして返す。
     pub fn clamped_word_chars(&self) -> &str {
         let s = self.word_chars.as_str();
         // バイト境界ではなく char 境界でカット
-        let end = s.char_indices().nth(256).map(|(i, _)| i).unwrap_or(s.len());
+        let end = s.char_indices().nth(Self::MAX_WORD_CHARS).map(|(i, _)| i).unwrap_or(s.len());
         &s[..end]
     }
 
@@ -494,23 +549,18 @@ impl SelectionConfig {
             return text.to_owned();
         }
 
-        /// replacement 文字列の最大長（chars 単位）。
-        const MAX_REPLACEMENT_CHARS: usize = 256;
-        /// 出力サイズ上限: 入力の 10 倍まで。
-        const MAX_OUTPUT_MULTIPLIER: usize = 10;
-
-        // キーをパースしてレンジリストを構築（最大 64 エントリ）
+        // キーをパースしてレンジリストを構築（最大 MAX_CLIPBOARD_CODEPOINT_MAP_ENTRIES エントリ）
         // replacement が長すぎるエントリは除外して warn する。
         let ranges: Vec<(u32, u32, &str)> = self
             .clipboard_codepoint_map
             .iter()
-            .take(64)
+            .take(Self::MAX_CLIPBOARD_CODEPOINT_MAP_ENTRIES)
             .filter_map(|(range_str, replacement)| {
-                if replacement.chars().count() > MAX_REPLACEMENT_CHARS {
+                if replacement.chars().count() > Self::MAX_REPLACEMENT_CHARS {
                     log::warn!(
                         "apply_codepoint_map: replacement for \"{}\" exceeds {} chars, skipping",
                         range_str,
-                        MAX_REPLACEMENT_CHARS
+                        Self::MAX_REPLACEMENT_CHARS
                     );
                     return None;
                 }
@@ -523,14 +573,14 @@ impl SelectionConfig {
             return text.to_owned();
         }
 
-        let max_output_len = text.len().saturating_mul(MAX_OUTPUT_MULTIPLIER);
+        let max_output_len = text.len().saturating_mul(Self::MAX_OUTPUT_MULTIPLIER);
         let mut result = String::with_capacity(text.len());
         for c in text.chars() {
             // 出力膨張チェック
             if result.len() > max_output_len {
                 log::warn!(
                     "apply_codepoint_map: output exceeded {}x input size, truncating",
-                    MAX_OUTPUT_MULTIPLIER
+                    Self::MAX_OUTPUT_MULTIPLIER
                 );
                 break;
             }
@@ -616,7 +666,7 @@ impl Default for RightClickAction {
 }
 
 fn default_click_repeat_interval() -> u32 {
-    300
+    MouseConfig::DEFAULT_CLICK_REPEAT_INTERVAL
 }
 
 /// マウス設定。
@@ -648,16 +698,23 @@ pub struct ScrollbarConfig {
     pub width: u8,
 }
 
-impl Default for ScrollbarConfig {
-    fn default() -> Self {
-        Self { enabled: true, width: 8 }
+impl ScrollbarConfig {
+    /// スクロールバー幅のデフォルト値（ピクセル）。
+    pub const DEFAULT_WIDTH: u8 = 8;
+    /// スクロールバー幅の最小値（ピクセル）。
+    pub const MIN_WIDTH: u8 = 2;
+    /// スクロールバー幅の最大値（ピクセル）。
+    pub const MAX_WIDTH: u8 = 32;
+
+    /// width を安全な範囲（2〜32）にクランプする。
+    pub fn clamped_width(&self) -> u8 {
+        self.width.clamp(Self::MIN_WIDTH, Self::MAX_WIDTH)
     }
 }
 
-impl ScrollbarConfig {
-    /// width を安全な範囲（2〜32）にクランプする。
-    pub fn clamped_width(&self) -> u8 {
-        self.width.clamp(2, 32)
+impl Default for ScrollbarConfig {
+    fn default() -> Self {
+        Self { enabled: true, width: Self::DEFAULT_WIDTH }
     }
 }
 
@@ -691,6 +748,21 @@ pub struct LinkConfig {
     pub action: String,
 }
 
+impl MouseConfig {
+    /// クリック繰り返し間隔のデフォルト値（ミリ秒）。
+    pub const DEFAULT_CLICK_REPEAT_INTERVAL: u32 = 300;
+    /// クリック繰り返し間隔の最小値（ミリ秒）。
+    pub const MIN_CLICK_REPEAT_INTERVAL: u32 = 50;
+    /// クリック繰り返し間隔の最大値（ミリ秒）。
+    pub const MAX_CLICK_REPEAT_INTERVAL: u32 = 2000;
+
+    /// `click_repeat_interval` を安全な範囲（MIN_CLICK_REPEAT_INTERVAL〜MAX_CLICK_REPEAT_INTERVAL ミリ秒）にクランプする。
+    pub fn clamped_click_repeat_interval(&self) -> u32 {
+        self.click_repeat_interval
+            .clamp(Self::MIN_CLICK_REPEAT_INTERVAL, Self::MAX_CLICK_REPEAT_INTERVAL)
+    }
+}
+
 impl Default for MouseConfig {
     fn default() -> Self {
         Self {
@@ -699,13 +771,6 @@ impl Default for MouseConfig {
             click_repeat_interval: default_click_repeat_interval(),
             focus_follows_mouse: false,
         }
-    }
-}
-
-impl MouseConfig {
-    /// `click_repeat_interval` を安全な範囲（50〜2000 ミリ秒）にクランプする。
-    pub fn clamped_click_repeat_interval(&self) -> u32 {
-        self.click_repeat_interval.clamp(50, 2000)
     }
 }
 
@@ -737,16 +802,21 @@ impl QuickSelectConfig {
     }
 }
 
-impl Default for ScrollbackConfig {
-    fn default() -> Self {
-        Self { lines: 10_000 }
+impl ScrollbackConfig {
+    /// スクロールバック行数のデフォルト値。
+    pub const DEFAULT_LINES: u32 = 10_000;
+    /// スクロールバック行数の最大値。
+    pub const MAX_LINES: usize = 1_000_000;
+
+    /// lines を安全な範囲にクランプする（0〜MAX_LINES）。
+    pub fn clamped_lines(&self) -> usize {
+        (self.lines as usize).min(Self::MAX_LINES)
     }
 }
 
-impl ScrollbackConfig {
-    /// lines を安全な範囲にクランプする（0-1,000,000）。
-    pub fn clamped_lines(&self) -> usize {
-        (self.lines as usize).min(1_000_000)
+impl Default for ScrollbackConfig {
+    fn default() -> Self {
+        Self { lines: Self::DEFAULT_LINES }
     }
 }
 
@@ -771,7 +841,7 @@ impl Default for QuickTerminalPosition {
 }
 
 fn default_quick_terminal_size() -> f32 {
-    0.4
+    QuickTerminalConfig::DEFAULT_SIZE
 }
 
 fn default_quick_terminal_hotkey() -> String {
@@ -779,7 +849,7 @@ fn default_quick_terminal_hotkey() -> String {
 }
 
 fn default_quick_terminal_animation_duration() -> f32 {
-    0.2
+    QuickTerminalConfig::DEFAULT_ANIMATION_DURATION
 }
 
 /// Quick Terminal（ドロップダウンターミナル）設定。
@@ -807,6 +877,44 @@ pub struct QuickTerminalConfig {
     pub animation_duration: f32,
 }
 
+impl QuickTerminalConfig {
+    /// ウィンドウサイズ比率のデフォルト値。
+    pub const DEFAULT_SIZE: f32 = 0.4;
+    /// ウィンドウサイズ比率の最小値。
+    pub const MIN_SIZE: f32 = 0.1;
+    /// ウィンドウサイズ比率の最大値。
+    pub const MAX_SIZE: f32 = 1.0;
+    /// アニメーション時間のデフォルト値（秒）。
+    pub const DEFAULT_ANIMATION_DURATION: f32 = 0.2;
+    /// アニメーション時間の最小値（秒）。
+    pub const MIN_ANIMATION_DURATION: f32 = 0.0;
+    /// アニメーション時間の最大値（秒）。
+    pub const MAX_ANIMATION_DURATION: f32 = 2.0;
+
+    /// size を安全な範囲（MIN_SIZE〜MAX_SIZE）にクランプする。
+    ///
+    /// NaN や Inf が渡された場合はデフォルト値 DEFAULT_SIZE を返す。
+    pub fn clamped_size(&self) -> f32 {
+        if self.size.is_finite() {
+            self.size.clamp(Self::MIN_SIZE, Self::MAX_SIZE)
+        } else {
+            Self::DEFAULT_SIZE
+        }
+    }
+
+    /// animation_duration を安全な範囲（MIN_ANIMATION_DURATION〜MAX_ANIMATION_DURATION）にクランプする。
+    ///
+    /// NaN や Inf が渡された場合はデフォルト値 DEFAULT_ANIMATION_DURATION を返す。
+    pub fn clamped_animation_duration(&self) -> f32 {
+        if self.animation_duration.is_finite() {
+            self.animation_duration
+                .clamp(Self::MIN_ANIMATION_DURATION, Self::MAX_ANIMATION_DURATION)
+        } else {
+            Self::DEFAULT_ANIMATION_DURATION
+        }
+    }
+}
+
 impl Default for QuickTerminalConfig {
     fn default() -> Self {
         Self {
@@ -819,30 +927,10 @@ impl Default for QuickTerminalConfig {
     }
 }
 
-impl QuickTerminalConfig {
-    /// size を安全な範囲（0.1〜1.0）にクランプする。
-    ///
-    /// NaN や Inf が渡された場合はデフォルト値 0.4 を返す。
-    pub fn clamped_size(&self) -> f32 {
-        if self.size.is_finite() { self.size.clamp(0.1, 1.0) } else { 0.4 }
-    }
-
-    /// animation_duration を安全な範囲（0.0〜2.0）にクランプする。
-    ///
-    /// NaN や Inf が渡された場合はデフォルト値 0.2 を返す。
-    pub fn clamped_animation_duration(&self) -> f32 {
-        if self.animation_duration.is_finite() {
-            self.animation_duration.clamp(0.0, 2.0)
-        } else {
-            0.2
-        }
-    }
-}
-
-/// カスタムリンク設定のバリデーション定数。
-const MAX_LINK_ENTRIES: usize = 32;
-const MAX_LINK_REGEX_LEN: usize = 512;
-const MAX_LINK_ACTION_LEN: usize = 1024;
+/// カスタムリンク設定のバリデーション定数（後方互換のためモジュールレベルにも残す）。
+const MAX_LINK_ENTRIES: usize = Config::MAX_LINK_ENTRIES;
+const MAX_LINK_REGEX_LEN: usize = Config::MAX_LINK_REGEX_LEN;
+const MAX_LINK_ACTION_LEN: usize = Config::MAX_LINK_ACTION_LEN;
 
 /// OSC 10/11/12 カラー問い合わせの応答形式。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -998,10 +1086,18 @@ pub struct Config {
 }
 
 impl Config {
-    /// カスタムリンク設定を最大 32 件・regex/action 文字列長を制限して返す。
+    /// カスタムリンク設定の最大エントリ数。
+    pub const MAX_LINK_ENTRIES: usize = 32;
+    /// リンク正規表現パターンの最大バイト長。
+    pub const MAX_LINK_REGEX_LEN: usize = 512;
+    /// リンクアクション文字列の最大バイト長。
+    pub const MAX_LINK_ACTION_LEN: usize = 1024;
+
+    /// カスタムリンク設定を最大 MAX_LINK_ENTRIES 件・regex/action 文字列長を制限して返す。
     pub fn clamped_links(&self) -> impl Iterator<Item = &LinkConfig> {
-        self.links.iter().take(MAX_LINK_ENTRIES).filter(|lc| {
-            lc.regex.len() <= MAX_LINK_REGEX_LEN && lc.action.len() <= MAX_LINK_ACTION_LEN
+        self.links.iter().take(Self::MAX_LINK_ENTRIES).filter(|lc| {
+            lc.regex.len() <= Self::MAX_LINK_REGEX_LEN
+                && lc.action.len() <= Self::MAX_LINK_ACTION_LEN
         })
     }
 

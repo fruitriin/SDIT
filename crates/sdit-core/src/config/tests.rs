@@ -4,34 +4,43 @@ use super::*;
 fn scrollbar_config_default() {
     let cfg = ScrollbarConfig::default();
     assert!(cfg.enabled, "enabled のデフォルトは true");
-    assert_eq!(cfg.width, 8, "width のデフォルトは 8");
+    assert_eq!(cfg.width, ScrollbarConfig::DEFAULT_WIDTH, "width のデフォルトは DEFAULT_WIDTH");
 }
 
 #[test]
 fn scrollbar_config_clamped_width() {
-    let cfg = ScrollbarConfig { enabled: true, width: 1 };
-    assert_eq!(cfg.clamped_width(), 2, "width=1 はクランプされて 2 になる");
+    let cfg = ScrollbarConfig { enabled: true, width: ScrollbarConfig::MIN_WIDTH - 1 };
+    assert_eq!(
+        cfg.clamped_width(),
+        ScrollbarConfig::MIN_WIDTH,
+        "width < MIN はクランプされて MIN になる"
+    );
 
-    let cfg = ScrollbarConfig { enabled: true, width: 8 };
-    assert_eq!(cfg.clamped_width(), 8, "width=8 はそのまま");
+    let cfg = ScrollbarConfig { enabled: true, width: ScrollbarConfig::DEFAULT_WIDTH };
+    assert_eq!(cfg.clamped_width(), ScrollbarConfig::DEFAULT_WIDTH, "DEFAULT_WIDTH はそのまま");
 
-    let cfg = ScrollbarConfig { enabled: true, width: 33 };
-    assert_eq!(cfg.clamped_width(), 32, "width=33 はクランプされて 32 になる");
+    let cfg = ScrollbarConfig { enabled: true, width: ScrollbarConfig::MAX_WIDTH + 1 };
+    assert_eq!(
+        cfg.clamped_width(),
+        ScrollbarConfig::MAX_WIDTH,
+        "width > MAX はクランプされて MAX になる"
+    );
 }
 
 #[test]
 fn scrollbar_config_deserialize() {
-    let toml_str = "[scrollbar]\nenabled = false\nwidth = 12\n";
-    let cfg: Config = toml::from_str(toml_str).unwrap();
+    let input_width = 12;
+    let toml_str = format!("[scrollbar]\nenabled = false\nwidth = {input_width}\n");
+    let cfg: Config = toml::from_str(&toml_str).unwrap();
     assert!(!cfg.scrollbar.enabled);
-    assert_eq!(cfg.scrollbar.width, 12);
+    assert_eq!(cfg.scrollbar.width, input_width);
 }
 
 #[test]
 fn scrollbar_config_default_in_full_config() {
     let cfg = Config::default();
     assert!(cfg.scrollbar.enabled);
-    assert_eq!(cfg.scrollbar.width, 8);
+    assert_eq!(cfg.scrollbar.width, ScrollbarConfig::DEFAULT_WIDTH);
 }
 
 #[test]
@@ -103,7 +112,7 @@ fn option_as_alt_serialize() {
 fn load_nonexistent_returns_default() {
     let config = Config::load(Path::new("/nonexistent/path/sdit.toml"));
     assert!(!config.font.family.is_empty());
-    assert!((config.font.size - 14.0).abs() < f32::EPSILON);
+    assert!((config.font.size - FontConfig::DEFAULT_SIZE).abs() < f32::EPSILON);
 }
 
 #[test]
@@ -124,7 +133,7 @@ line_height = 1.3
 fn deserialize_empty_uses_defaults() {
     let config: Config = toml::from_str("").unwrap();
     assert!(!config.font.family.is_empty());
-    assert!((config.font.size - 14.0).abs() < f32::EPSILON);
+    assert!((config.font.size - FontConfig::DEFAULT_SIZE).abs() < f32::EPSILON);
 }
 
 #[test]
@@ -155,38 +164,41 @@ fn bell_config_default() {
     let bell = BellConfig::default();
     assert!(bell.visual);
     assert!(bell.dock_bounce);
-    assert_eq!(bell.duration_ms, 150);
+    assert_eq!(bell.duration_ms, BellConfig::DEFAULT_DURATION_MS);
 }
 
 #[test]
 fn bell_config_deserialize() {
-    let toml_str = "[bell]\nvisual = false\ndock_bounce = false\nduration_ms = 200\n";
-    let config: Config = toml::from_str(toml_str).unwrap();
+    let input_duration = 200;
+    let toml_str =
+        format!("[bell]\nvisual = false\ndock_bounce = false\nduration_ms = {input_duration}\n");
+    let config: Config = toml::from_str(&toml_str).unwrap();
     assert!(!config.bell.visual);
     assert!(!config.bell.dock_bounce);
-    assert_eq!(config.bell.duration_ms, 200);
+    assert_eq!(config.bell.duration_ms, input_duration);
 }
 
 #[test]
 fn bell_config_partial_deserialize() {
     // 部分指定のとき残りはデフォルト補完
-    let toml_str = "[bell]\nduration_ms = 300\n";
-    let config: Config = toml::from_str(toml_str).unwrap();
+    let input_duration = 300;
+    let toml_str = format!("[bell]\nduration_ms = {input_duration}\n");
+    let config: Config = toml::from_str(&toml_str).unwrap();
     assert!(config.bell.visual); // default: true
     assert!(config.bell.dock_bounce); // default: true
-    assert_eq!(config.bell.duration_ms, 300);
+    assert_eq!(config.bell.duration_ms, input_duration);
 }
 
 #[test]
 fn bell_duration_clamp_zero() {
     let bell = BellConfig { duration_ms: 0, ..Default::default() };
-    assert_eq!(bell.clamped_duration_ms(), 1);
+    assert_eq!(bell.clamped_duration_ms(), BellConfig::MIN_DURATION_MS);
 }
 
 #[test]
 fn bell_duration_clamp_max() {
     let bell = BellConfig { duration_ms: 999_999, ..Default::default() };
-    assert_eq!(bell.clamped_duration_ms(), 5000);
+    assert_eq!(bell.clamped_duration_ms(), BellConfig::MAX_DURATION_MS);
 }
 
 #[test]
@@ -232,10 +244,14 @@ fn window_opacity_clamp() {
 
 #[test]
 fn window_padding_clamp() {
-    // 200 を超える値は 200 にクランプされる
-    let wc = WindowConfig { padding_x: 500, padding_y: 300, ..Default::default() };
-    assert_eq!(wc.clamped_padding_x(), 200);
-    assert_eq!(wc.clamped_padding_y(), 200);
+    // MAX_PADDING を超える値は MAX_PADDING にクランプされる
+    let wc = WindowConfig {
+        padding_x: WindowConfig::MAX_PADDING + 300,
+        padding_y: WindowConfig::MAX_PADDING + 100,
+        ..Default::default()
+    };
+    assert_eq!(wc.clamped_padding_x(), WindowConfig::MAX_PADDING);
+    assert_eq!(wc.clamped_padding_y(), WindowConfig::MAX_PADDING);
     // 範囲内の値はそのまま
     let wc2 = WindowConfig { padding_x: 8, padding_y: 4, ..Default::default() };
     assert_eq!(wc2.clamped_padding_x(), 8);
@@ -352,7 +368,7 @@ fn cursor_style_config_converts_to_cursor_style() {
 #[test]
 fn scrollback_config_default() {
     let sc = ScrollbackConfig::default();
-    assert_eq!(sc.lines, 10_000);
+    assert_eq!(sc.lines, ScrollbackConfig::DEFAULT_LINES);
 }
 
 #[test]
@@ -370,14 +386,14 @@ fn scrollback_clamped_lines_zero() {
 
 #[test]
 fn scrollback_clamped_lines_over_max() {
-    let sc = ScrollbackConfig { lines: 2_000_000 };
-    assert_eq!(sc.clamped_lines(), 1_000_000);
+    let sc = ScrollbackConfig { lines: ScrollbackConfig::MAX_LINES as u32 * 2 };
+    assert_eq!(sc.clamped_lines(), ScrollbackConfig::MAX_LINES);
 }
 
 #[test]
 fn scrollback_config_empty_uses_default() {
     let config: Config = toml::from_str("").unwrap();
-    assert_eq!(config.scrollback.lines, 10_000);
+    assert_eq!(config.scrollback.lines, ScrollbackConfig::DEFAULT_LINES);
 }
 
 // -----------------------------------------------------------------------
@@ -387,36 +403,38 @@ fn scrollback_config_empty_uses_default() {
 #[test]
 fn window_config_columns_rows_default() {
     let wc = WindowConfig::default();
-    assert_eq!(wc.columns, 80);
-    assert_eq!(wc.rows, 24);
+    assert_eq!(wc.columns, WindowConfig::DEFAULT_COLUMNS);
+    assert_eq!(wc.rows, WindowConfig::DEFAULT_ROWS);
 }
 
 #[test]
 fn window_config_columns_rows_deserialize() {
-    let toml_str = "[window]\ncolumns = 120\nrows = 36\n";
-    let config: Config = toml::from_str(toml_str).unwrap();
-    assert_eq!(config.window.columns, 120);
-    assert_eq!(config.window.rows, 36);
+    let input_columns = 120;
+    let input_rows = 36;
+    let toml_str = format!("[window]\ncolumns = {input_columns}\nrows = {input_rows}\n");
+    let config: Config = toml::from_str(&toml_str).unwrap();
+    assert_eq!(config.window.columns, input_columns);
+    assert_eq!(config.window.rows, input_rows);
 }
 
 #[test]
 fn window_config_columns_clamp() {
-    let wc = WindowConfig { columns: 5, ..Default::default() };
-    assert_eq!(wc.clamped_columns(), 10);
-    let wc = WindowConfig { columns: 600, ..Default::default() };
-    assert_eq!(wc.clamped_columns(), 500);
-    let wc = WindowConfig { columns: 80, ..Default::default() };
-    assert_eq!(wc.clamped_columns(), 80);
+    let wc = WindowConfig { columns: WindowConfig::MIN_COLUMNS - 1, ..Default::default() };
+    assert_eq!(wc.clamped_columns(), WindowConfig::MIN_COLUMNS);
+    let wc = WindowConfig { columns: WindowConfig::MAX_COLUMNS + 1, ..Default::default() };
+    assert_eq!(wc.clamped_columns(), WindowConfig::MAX_COLUMNS);
+    let wc = WindowConfig { columns: WindowConfig::DEFAULT_COLUMNS, ..Default::default() };
+    assert_eq!(wc.clamped_columns(), WindowConfig::DEFAULT_COLUMNS);
 }
 
 #[test]
 fn window_config_rows_clamp() {
-    let wc = WindowConfig { rows: 1, ..Default::default() };
-    assert_eq!(wc.clamped_rows(), 2);
-    let wc = WindowConfig { rows: 300, ..Default::default() };
-    assert_eq!(wc.clamped_rows(), 200);
-    let wc = WindowConfig { rows: 24, ..Default::default() };
-    assert_eq!(wc.clamped_rows(), 24);
+    let wc = WindowConfig { rows: WindowConfig::MIN_ROWS - 1, ..Default::default() };
+    assert_eq!(wc.clamped_rows(), WindowConfig::MIN_ROWS);
+    let wc = WindowConfig { rows: WindowConfig::MAX_ROWS + 1, ..Default::default() };
+    assert_eq!(wc.clamped_rows(), WindowConfig::MAX_ROWS);
+    let wc = WindowConfig { rows: WindowConfig::DEFAULT_ROWS, ..Default::default() };
+    assert_eq!(wc.clamped_rows(), WindowConfig::DEFAULT_ROWS);
 }
 
 // -----------------------------------------------------------------------
@@ -426,20 +444,20 @@ fn window_config_rows_clamp() {
 #[test]
 fn scrolling_config_default() {
     let sc = ScrollingConfig::default();
-    assert_eq!(sc.multiplier, 3);
-    assert_eq!(sc.clamped_multiplier(), 3);
+    assert_eq!(sc.multiplier, ScrollingConfig::DEFAULT_MULTIPLIER);
+    assert_eq!(sc.clamped_multiplier(), ScrollingConfig::DEFAULT_MULTIPLIER);
 }
 
 #[test]
 fn scrolling_config_clamp_min() {
     let sc = ScrollingConfig { multiplier: 0, ..Default::default() };
-    assert_eq!(sc.clamped_multiplier(), 1);
+    assert_eq!(sc.clamped_multiplier(), ScrollingConfig::MIN_MULTIPLIER);
 }
 
 #[test]
 fn scrolling_config_clamp_max() {
     let sc = ScrollingConfig { multiplier: 999, ..Default::default() };
-    assert_eq!(sc.clamped_multiplier(), 100);
+    assert_eq!(sc.clamped_multiplier(), ScrollingConfig::MAX_MULTIPLIER);
 }
 
 #[test]
@@ -528,19 +546,20 @@ fn link_config_empty_by_default() {
 
 #[test]
 fn link_config_entry_limit() {
-    // 33 エントリを設定しても clamped_links は 32 件しか返さない
-    let entries: String = (0..33)
+    // MAX_LINK_ENTRIES + 1 エントリを設定しても clamped_links は MAX_LINK_ENTRIES 件しか返さない
+    let over = Config::MAX_LINK_ENTRIES + 1;
+    let entries: String = (0..over)
         .map(|i| format!("[[links]]\nregex = \"PAT-{i}\"\naction = \"open:https://example.com\"\n"))
         .collect();
     let config: Config = toml::from_str(&entries).unwrap();
-    assert_eq!(config.links.len(), 33);
-    assert_eq!(config.clamped_links().count(), 32);
+    assert_eq!(config.links.len(), over);
+    assert_eq!(config.clamped_links().count(), Config::MAX_LINK_ENTRIES);
 }
 
 #[test]
 fn link_config_regex_length_limit() {
-    // regex が 512 文字を超えるエントリは clamped_links に含まれない
-    let long_regex = "a".repeat(513);
+    // regex が MAX_LINK_REGEX_LEN 文字を超えるエントリは clamped_links に含まれない
+    let long_regex = "a".repeat(Config::MAX_LINK_REGEX_LEN + 1);
     let toml_str =
         format!("[[links]]\nregex = \"{long_regex}\"\naction = \"open:https://example.com\"\n");
     let config: Config = toml::from_str(&toml_str).unwrap();
@@ -549,8 +568,9 @@ fn link_config_regex_length_limit() {
 
 #[test]
 fn link_config_action_length_limit() {
-    // action が 1024 文字を超えるエントリは clamped_links に含まれない
-    let long_action = format!("open:https://example.com/{}", "a".repeat(1000));
+    // action が MAX_LINK_ACTION_LEN 文字を超えるエントリは clamped_links に含まれない
+    let long_action =
+        format!("open:https://example.com/{}", "a".repeat(Config::MAX_LINK_ACTION_LEN));
     let toml_str = format!("[[links]]\nregex = \"PAT\"\naction = \"{long_action}\"\n");
     let config: Config = toml::from_str(&toml_str).unwrap();
     assert_eq!(config.clamped_links().count(), 0);
@@ -770,7 +790,10 @@ fn restore_session_missing_field_defaults_to_true() {
 fn background_image_default_is_none() {
     let window = WindowConfig::default();
     assert!(window.background_image.is_none());
-    assert!((window.background_image_opacity - 0.3).abs() < f32::EPSILON);
+    assert!(
+        (window.background_image_opacity - WindowConfig::DEFAULT_BACKGROUND_IMAGE_OPACITY).abs()
+            < f32::EPSILON
+    );
     assert_eq!(window.background_image_fit, crate::config::BackgroundImageFit::Cover);
 }
 
@@ -795,7 +818,12 @@ fn background_image_opacity_clamped() {
     let window = WindowConfig { background_image_opacity: -1.0, ..WindowConfig::default() };
     assert!((window.clamped_background_image_opacity() - 0.0).abs() < f32::EPSILON);
     let window = WindowConfig { background_image_opacity: f32::NAN, ..WindowConfig::default() };
-    assert!((window.clamped_background_image_opacity() - 0.3).abs() < f32::EPSILON);
+    assert!(
+        (window.clamped_background_image_opacity()
+            - WindowConfig::DEFAULT_BACKGROUND_IMAGE_OPACITY)
+            .abs()
+            < f32::EPSILON
+    );
 }
 
 #[test]
@@ -875,9 +903,9 @@ fn apply_codepoint_map_empty_replacement() {
 
 #[test]
 fn apply_codepoint_map_long_replacement_is_skipped() {
-    // 257 文字の replacement は除外される（warn ログのみ、エントリ自体がスキップされる）
+    // MAX_REPLACEMENT_CHARS + 1 文字の replacement は除外される（warn ログのみ、エントリ自体がスキップされる）
     let mut sel = SelectionConfig::default();
-    let long_replacement = "x".repeat(257);
+    let long_replacement = "x".repeat(SelectionConfig::MAX_REPLACEMENT_CHARS + 1);
     sel.clipboard_codepoint_map.insert("U+0041".to_owned(), long_replacement); // 'A'
     let text = "ABC";
     // replacement が除外されるため、テキストは変換されずそのまま返る
@@ -887,29 +915,31 @@ fn apply_codepoint_map_long_replacement_is_skipped() {
 
 #[test]
 fn apply_codepoint_map_256_char_replacement_is_accepted() {
-    // 256 文字の replacement は許容される
+    // MAX_REPLACEMENT_CHARS 文字の replacement は許容される
     let mut sel = SelectionConfig::default();
-    let replacement = "y".repeat(256);
+    let replacement = "y".repeat(SelectionConfig::MAX_REPLACEMENT_CHARS);
     sel.clipboard_codepoint_map.insert("U+0041".to_owned(), replacement.clone()); // 'A'
     let text = "A";
     let result = sel.apply_codepoint_map(text);
-    assert_eq!(result, replacement, "256 文字の replacement は許容される");
+    assert_eq!(result, replacement, "MAX_REPLACEMENT_CHARS 文字の replacement は許容される");
 }
 
 #[test]
 fn apply_codepoint_map_output_expansion_limit() {
-    // 入力 1 文字 → replacement 256 文字 のマップで、入力 100 文字 = 出力 25600 文字
-    // 入力 len = 100 bytes, max_output = 1000 bytes → 4 文字目付近で打ち切られる
+    // 入力 1 文字 → MAX_REPLACEMENT_CHARS 文字 のマップで大量入力を変換すると膨張制限が働く
+    let input_len = 100usize;
+    let max_untruncated = input_len * SelectionConfig::MAX_REPLACEMENT_CHARS;
     let mut sel = SelectionConfig::default();
-    let replacement = "z".repeat(256); // 256 chars = 256 bytes (ASCII)
+    let replacement = "z".repeat(SelectionConfig::MAX_REPLACEMENT_CHARS);
     sel.clipboard_codepoint_map.insert("U+0041".to_owned(), replacement); // 'A' → "zzz..."
-    // 入力: "A" * 100, len = 100 bytes, max_output = 1000 bytes
-    // 1 文字変換で 256 bytes 消費 → 4 文字目 (4*256=1024 > 1000) で打ち切り
-    let text = "A".repeat(100);
+    let text = "A".repeat(input_len);
     let result = sel.apply_codepoint_map(&text);
-    // 出力は max_output (1000 bytes) 以内に収まる（最後の文字追加前にチェックするため若干超える場合あり）
-    // 少なくとも全入力が変換されて 25600 文字にはならないことを確認
-    assert!(result.len() < 25600, "出力膨張制限が機能していない: result.len() = {}", result.len());
+    // 出力膨張制限により max_untruncated 文字には達しないことを確認
+    assert!(
+        result.len() < max_untruncated,
+        "出力膨張制限が機能していない: result.len() = {}",
+        result.len()
+    );
 }
 
 // --- M-2: parse_clipboard_codepoint バリデーションテスト ---
@@ -968,11 +998,15 @@ fn quick_terminal_default_values() {
     let cfg = QuickTerminalConfig::default();
     assert!(!cfg.enabled, "enabled のデフォルトは false");
     assert_eq!(cfg.position, QuickTerminalPosition::Top, "position のデフォルトは Top");
-    assert!((cfg.size - 0.4).abs() < f32::EPSILON, "size のデフォルトは 0.4");
+    assert!(
+        (cfg.size - QuickTerminalConfig::DEFAULT_SIZE).abs() < f32::EPSILON,
+        "size のデフォルトは DEFAULT_SIZE"
+    );
     assert_eq!(cfg.hotkey, "ctrl+`", "hotkey のデフォルトは ctrl+`");
     assert!(
-        (cfg.animation_duration - 0.2).abs() < f32::EPSILON,
-        "animation_duration のデフォルトは 0.2"
+        (cfg.animation_duration - QuickTerminalConfig::DEFAULT_ANIMATION_DURATION).abs()
+            < f32::EPSILON,
+        "animation_duration のデフォルトは DEFAULT_ANIMATION_DURATION"
     );
 }
 
@@ -987,40 +1021,66 @@ hotkey = "ctrl+shift+t"
 animation_duration = 0.3
 "#;
     let cfg: Config = toml::from_str(toml_str).unwrap();
-    assert!(cfg.quick_terminal.enabled);
-    assert_eq!(cfg.quick_terminal.position, QuickTerminalPosition::Bottom);
-    assert!((cfg.quick_terminal.size - 0.5).abs() < f32::EPSILON);
-    assert_eq!(cfg.quick_terminal.hotkey, "ctrl+shift+t");
-    assert!((cfg.quick_terminal.animation_duration - 0.3).abs() < f32::EPSILON);
+    assert!(cfg.quick_terminal.enabled, "enabled should be true");
+    assert_eq!(cfg.quick_terminal.position, QuickTerminalPosition::Bottom, "position");
+    assert!((cfg.quick_terminal.size - 0.5).abs() < f32::EPSILON, "size");
+    assert_eq!(cfg.quick_terminal.hotkey, "ctrl+shift+t", "hotkey");
+    assert!(
+        (cfg.quick_terminal.animation_duration - 0.3).abs() < f32::EPSILON,
+        "animation_duration"
+    );
 }
 
 #[test]
 fn quick_terminal_size_clamped() {
-    let cfg = QuickTerminalConfig { size: 0.05, ..Default::default() };
-    assert!((cfg.clamped_size() - 0.1).abs() < f32::EPSILON, "0.05 は 0.1 にクランプ");
+    let cfg =
+        QuickTerminalConfig { size: QuickTerminalConfig::MIN_SIZE / 2.0, ..Default::default() };
+    assert!(
+        (cfg.clamped_size() - QuickTerminalConfig::MIN_SIZE).abs() < f32::EPSILON,
+        "MIN の半分は MIN にクランプ"
+    );
 
-    let cfg = QuickTerminalConfig { size: 1.5, ..Default::default() };
-    assert!((cfg.clamped_size() - 1.0).abs() < f32::EPSILON, "1.5 は 1.0 にクランプ");
+    let cfg =
+        QuickTerminalConfig { size: QuickTerminalConfig::MAX_SIZE + 0.5, ..Default::default() };
+    assert!(
+        (cfg.clamped_size() - QuickTerminalConfig::MAX_SIZE).abs() < f32::EPSILON,
+        "MAX 超えは MAX にクランプ"
+    );
 
     let cfg = QuickTerminalConfig { size: f32::NAN, ..Default::default() };
-    assert!((cfg.clamped_size() - 0.4).abs() < f32::EPSILON, "NaN はデフォルト 0.4 を返す");
+    assert!(
+        (cfg.clamped_size() - QuickTerminalConfig::DEFAULT_SIZE).abs() < f32::EPSILON,
+        "NaN はデフォルト DEFAULT_SIZE を返す"
+    );
 }
 
 #[test]
 fn quick_terminal_animation_duration_clamped() {
-    let cfg = QuickTerminalConfig { animation_duration: -0.1, ..Default::default() };
+    let cfg = QuickTerminalConfig {
+        animation_duration: QuickTerminalConfig::MIN_ANIMATION_DURATION - 0.1,
+        ..Default::default()
+    };
     assert!(
-        (cfg.clamped_animation_duration() - 0.0).abs() < f32::EPSILON,
-        "-0.1 は 0.0 にクランプ"
+        (cfg.clamped_animation_duration() - QuickTerminalConfig::MIN_ANIMATION_DURATION).abs()
+            < f32::EPSILON,
+        "MIN 未満は MIN にクランプ"
     );
 
-    let cfg = QuickTerminalConfig { animation_duration: 3.0, ..Default::default() };
-    assert!((cfg.clamped_animation_duration() - 2.0).abs() < f32::EPSILON, "3.0 は 2.0 にクランプ");
+    let cfg = QuickTerminalConfig {
+        animation_duration: QuickTerminalConfig::MAX_ANIMATION_DURATION + 1.0,
+        ..Default::default()
+    };
+    assert!(
+        (cfg.clamped_animation_duration() - QuickTerminalConfig::MAX_ANIMATION_DURATION).abs()
+            < f32::EPSILON,
+        "MAX 超えは MAX にクランプ"
+    );
 
     let cfg = QuickTerminalConfig { animation_duration: f32::INFINITY, ..Default::default() };
     assert!(
-        (cfg.clamped_animation_duration() - 0.2).abs() < f32::EPSILON,
-        "Inf はデフォルト 0.2 を返す"
+        (cfg.clamped_animation_duration() - QuickTerminalConfig::DEFAULT_ANIMATION_DURATION).abs()
+            < f32::EPSILON,
+        "Inf はデフォルト DEFAULT_ANIMATION_DURATION を返す"
     );
 }
 
@@ -1044,7 +1104,7 @@ fn quick_terminal_default_in_full_config() {
     let cfg = Config::default();
     assert!(!cfg.quick_terminal.enabled);
     assert_eq!(cfg.quick_terminal.position, QuickTerminalPosition::Top);
-    assert!((cfg.quick_terminal.size - 0.4).abs() < f32::EPSILON);
+    assert!((cfg.quick_terminal.size - QuickTerminalConfig::DEFAULT_SIZE).abs() < f32::EPSILON);
 }
 
 // -----------------------------------------------------------------------
@@ -1121,26 +1181,48 @@ fn padding_color_deserialize() {
 #[test]
 fn click_repeat_interval_default_is_300() {
     let cfg = Config::default();
-    assert_eq!(cfg.mouse.click_repeat_interval, 300);
+    assert_eq!(cfg.mouse.click_repeat_interval, MouseConfig::DEFAULT_CLICK_REPEAT_INTERVAL);
 }
 
 #[test]
 fn click_repeat_interval_deserialize() {
-    let toml_str = "[mouse]\nclick_repeat_interval = 500\n";
-    let cfg: Config = toml::from_str(toml_str).unwrap();
-    assert_eq!(cfg.mouse.click_repeat_interval, 500);
+    let input_interval = 500;
+    let toml_str = format!("[mouse]\nclick_repeat_interval = {input_interval}\n");
+    let cfg: Config = toml::from_str(&toml_str).unwrap();
+    assert_eq!(cfg.mouse.click_repeat_interval, input_interval);
 }
 
 #[test]
 fn click_repeat_interval_clamped() {
-    let mc = MouseConfig { click_repeat_interval: 10, ..Default::default() };
-    assert_eq!(mc.clamped_click_repeat_interval(), 50, "下限は 50ms");
+    let mc = MouseConfig {
+        click_repeat_interval: MouseConfig::MIN_CLICK_REPEAT_INTERVAL - 1,
+        ..Default::default()
+    };
+    assert_eq!(
+        mc.clamped_click_repeat_interval(),
+        MouseConfig::MIN_CLICK_REPEAT_INTERVAL,
+        "下限は MIN_CLICK_REPEAT_INTERVAL"
+    );
 
-    let mc = MouseConfig { click_repeat_interval: 5000, ..Default::default() };
-    assert_eq!(mc.clamped_click_repeat_interval(), 2000, "上限は 2000ms");
+    let mc = MouseConfig {
+        click_repeat_interval: MouseConfig::MAX_CLICK_REPEAT_INTERVAL + 1,
+        ..Default::default()
+    };
+    assert_eq!(
+        mc.clamped_click_repeat_interval(),
+        MouseConfig::MAX_CLICK_REPEAT_INTERVAL,
+        "上限は MAX_CLICK_REPEAT_INTERVAL"
+    );
 
-    let mc = MouseConfig { click_repeat_interval: 300, ..Default::default() };
-    assert_eq!(mc.clamped_click_repeat_interval(), 300, "範囲内はそのまま");
+    let mc = MouseConfig {
+        click_repeat_interval: MouseConfig::DEFAULT_CLICK_REPEAT_INTERVAL,
+        ..Default::default()
+    };
+    assert_eq!(
+        mc.clamped_click_repeat_interval(),
+        MouseConfig::DEFAULT_CLICK_REPEAT_INTERVAL,
+        "デフォルト値は範囲内"
+    );
 }
 
 #[test]
@@ -1235,21 +1317,29 @@ fn window_position_clamp() {
     // 上限を超える値はクランプされる
     cfg.position_x = Some(999_999);
     cfg.position_y = Some(999_999);
-    assert_eq!(cfg.clamped_position(), Some((32000, 32000)), "上限 999999 → 32000 にクランプ");
+    assert_eq!(
+        cfg.clamped_position(),
+        Some((WindowConfig::MAX_POSITION, WindowConfig::MAX_POSITION)),
+        "上限 999999 → MAX_POSITION にクランプ"
+    );
 
     // 負方向の極端な値もクランプされる
     cfg.position_x = Some(-10_000_000);
     cfg.position_y = Some(-10_000_000);
     assert_eq!(
         cfg.clamped_position(),
-        Some((-16000, -16000)),
-        "下限 -10000000 → -16000 にクランプ"
+        Some((WindowConfig::MIN_POSITION, WindowConfig::MIN_POSITION)),
+        "下限 -10000000 → MIN_POSITION にクランプ"
     );
 
     // 境界値はそのまま通る
-    cfg.position_x = Some(-16000);
-    cfg.position_y = Some(32000);
-    assert_eq!(cfg.clamped_position(), Some((-16000, 32000)), "境界値はそのまま");
+    cfg.position_x = Some(WindowConfig::MIN_POSITION);
+    cfg.position_y = Some(WindowConfig::MAX_POSITION);
+    assert_eq!(
+        cfg.clamped_position(),
+        Some((WindowConfig::MIN_POSITION, WindowConfig::MAX_POSITION)),
+        "境界値はそのまま"
+    );
 }
 
 // ---------------------------------------------------------------------------

@@ -105,9 +105,10 @@ mod tests {
 
     #[test]
     fn write_marks_occ() {
+        let write_col = 10;
         let mut row: Row<Cell> = Row::new(80);
-        row[Column(10)].c = 'A';
-        assert_eq!(row.occ, 11);
+        row[Column(write_col)].c = 'A';
+        assert_eq!(row.occ, write_col + 1); // occ は書き込み位置+1
     }
 
     #[test]
@@ -126,20 +127,24 @@ mod tests {
 
     #[test]
     fn shrink_returns_excess() {
+        let write_col = 60;
+        let new_width = 40;
         let mut row: Row<Cell> = Row::new(80);
-        row[Column(60)].c = 'Z';
-        let excess = row.shrink(40);
-        assert_eq!(row.len(), 40);
+        row[Column(write_col)].c = 'Z';
+        let excess = row.shrink(new_width);
+        assert_eq!(row.len(), new_width);
         // The written column was beyond the new width, so it ends up in excess.
-        assert_eq!(excess.len(), 40);
+        assert_eq!(excess.len(), 80 - new_width);
     }
 
     #[test]
     fn shrink_noop_when_wider() {
-        let mut row: Row<Cell> = Row::new(40);
-        let excess = row.shrink(80);
+        let narrow = 40;
+        let wider = 80;
+        let mut row: Row<Cell> = Row::new(narrow);
+        let excess = row.shrink(wider);
         assert!(excess.is_empty());
-        assert_eq!(row.len(), 40);
+        assert_eq!(row.len(), narrow);
     }
 
     #[test]

@@ -90,18 +90,22 @@ fn alt_screen_roundtrip() {
 
     // Switch to alt screen.
     proc.advance(&mut term, b"\x1b[?1049h");
-    assert!(term.mode().contains(TermMode::ALT_SCREEN));
+    assert!(term.mode().contains(TermMode::ALT_SCREEN), "ALT_SCREEN mode should be set");
     // Alt screen should be blank.
-    assert_eq!(term.grid()[Point::new(Line(0), Column(0))].c, ' ');
+    assert_eq!(term.grid()[Point::new(Line(0), Column(0))].c, ' ', "alt screen should be blank");
 
     // Write something on alt screen.
     proc.advance(&mut term, b"Alt");
 
     // Switch back.
     proc.advance(&mut term, b"\x1b[?1049l");
-    assert!(!term.mode().contains(TermMode::ALT_SCREEN));
+    assert!(!term.mode().contains(TermMode::ALT_SCREEN), "ALT_SCREEN should be cleared");
     // Primary content should be restored.
-    assert_eq!(term.grid()[Point::new(Line(0), Column(0))].c, 'P');
+    assert_eq!(
+        term.grid()[Point::new(Line(0), Column(0))].c,
+        'P',
+        "primary content should be restored"
+    );
 }
 
 // 8. Processor テスト: バイト列を渡して Grid 状態を確認
@@ -186,8 +190,10 @@ fn osc_title_direct_cap_at_4096() {
 #[test]
 fn decstbm_sets_scroll_region() {
     let (mut proc, mut term) = make_proc_term(24, 80);
-    proc.advance(&mut term, b"\x1b[5;20r");
-    assert_eq!(term.scroll_region, 4..20);
+    let (top_1indexed, bottom) = (5usize, 20usize);
+    let seq = format!("\x1b[{top_1indexed};{bottom}r");
+    proc.advance(&mut term, seq.as_bytes());
+    assert_eq!(term.scroll_region, (top_1indexed - 1)..bottom);
 }
 
 // Additional: IL/DL
@@ -298,16 +304,16 @@ fn decscusr_cursor_style() {
     let (mut proc, mut term) = make_proc_term(24, 80);
     // Bar (blinking)
     proc.advance(&mut term, b"\x1b[5 q");
-    assert_eq!(term.cursor_style(), CursorStyle::Bar);
-    assert!(term.cursor_blinking());
+    assert_eq!(term.cursor_style(), CursorStyle::Bar, "DECSCUSR 5 → Bar");
+    assert!(term.cursor_blinking(), "DECSCUSR 5 → blinking");
     // Underline (steady)
     proc.advance(&mut term, b"\x1b[4 q");
-    assert_eq!(term.cursor_style(), CursorStyle::Underline);
-    assert!(!term.cursor_blinking());
+    assert_eq!(term.cursor_style(), CursorStyle::Underline, "DECSCUSR 4 → Underline");
+    assert!(!term.cursor_blinking(), "DECSCUSR 4 → steady");
     // Block (blinking)
     proc.advance(&mut term, b"\x1b[1 q");
-    assert_eq!(term.cursor_style(), CursorStyle::Block);
-    assert!(term.cursor_blinking());
+    assert_eq!(term.cursor_style(), CursorStyle::Block, "DECSCUSR 1 → Block");
+    assert!(term.cursor_blinking(), "DECSCUSR 1 → blinking");
 }
 
 // マウスモード: CSI ? 1000 h で MOUSE_REPORT_CLICK がセットされる
@@ -343,15 +349,15 @@ fn mouse_mode_click_reset() {
 fn mouse_mode_variants() {
     let (mut proc, mut term) = make_proc_term(24, 80);
     proc.advance(&mut term, b"\x1b[?9h");
-    assert!(term.mode().contains(TermMode::MOUSE_REPORT_CLICK));
+    assert!(term.mode().contains(TermMode::MOUSE_REPORT_CLICK), "X10 ?9h → CLICK");
     proc.advance(&mut term, b"\x1b[?9l");
     proc.advance(&mut term, b"\x1b[?1002h");
-    assert!(term.mode().contains(TermMode::MOUSE_REPORT_DRAG));
-    assert!(term.mouse_mode_active());
+    assert!(term.mode().contains(TermMode::MOUSE_REPORT_DRAG), "?1002h → DRAG");
+    assert!(term.mouse_mode_active(), "DRAG mode should activate mouse");
     proc.advance(&mut term, b"\x1b[?1003h");
-    assert!(term.mode().contains(TermMode::MOUSE_REPORT_MOTION));
+    assert!(term.mode().contains(TermMode::MOUSE_REPORT_MOTION), "?1003h → MOTION");
     proc.advance(&mut term, b"\x1b[?1005h");
-    assert!(term.mode().contains(TermMode::UTF8_MOUSE));
+    assert!(term.mode().contains(TermMode::UTF8_MOUSE), "?1005h → UTF8_MOUSE");
 }
 
 // OSC 52: クリップボード書き込みテスト
@@ -655,11 +661,11 @@ fn osc_9_notification_sanitizes_control_chars() {
     let mut term = Terminal::new(24, 80, 1000);
     term.osc_dispatch(&[b"9", b"Hello\x00\x01\x07World"], false);
     let (_, body) = term.take_notification().unwrap();
-    assert!(!body.contains('\x00'));
-    assert!(!body.contains('\x01'));
-    assert!(!body.contains('\x07'));
-    assert!(body.contains("Hello"));
-    assert!(body.contains("World"));
+    assert!(!body.contains('\x00'), "NUL should be sanitized");
+    assert!(!body.contains('\x01'), "SOH should be sanitized");
+    assert!(!body.contains('\x07'), "BEL should be sanitized");
+    assert!(body.contains("Hello"), "text before control chars preserved");
+    assert!(body.contains("World"), "text after control chars preserved");
 }
 
 #[test]
@@ -765,13 +771,13 @@ fn osc_133_command_finished_tracking() {
     let mut term = Terminal::new(24, 80, 100);
     // CommandStart で時間計測開始
     term.osc_dispatch(&[b"133", b"B"], false);
-    assert!(term.command_start_time.is_some());
-    assert!(term.command_finished_pending.is_none());
+    assert!(term.command_start_time.is_some(), "CommandStart should set start_time");
+    assert!(term.command_finished_pending.is_none(), "no pending before CommandEnd");
     // CommandEnd で command_finished_pending がセットされる
     term.osc_dispatch(&[b"133", b"D", b"0"], false);
-    assert!(term.command_start_time.is_none());
+    assert!(term.command_start_time.is_none(), "CommandEnd should clear start_time");
     let pending = term.command_finished_pending.take();
-    assert!(pending.is_some());
+    assert!(pending.is_some(), "CommandEnd should set pending");
     let (elapsed_secs, exit_code) = pending.unwrap();
     assert_eq!(exit_code, Some(0));
     // 即座に終了したコマンドは 0 秒（elapsed < 1）
@@ -795,7 +801,7 @@ fn command_notify_config_defaults() {
     let cfg = NotificationConfig::default();
     assert!(cfg.enabled);
     assert_eq!(cfg.command_notify, CommandNotifyMode::Unfocused);
-    assert_eq!(cfg.command_notify_threshold, 10);
+    assert_eq!(cfg.command_notify_threshold, NotificationConfig::DEFAULT_COMMAND_NOTIFY_THRESHOLD);
 }
 
 // command_notify_threshold のクランプ検証
@@ -804,13 +810,24 @@ fn command_notify_config_threshold_clamp() {
     use crate::config::NotificationConfig;
     let cfg_zero =
         NotificationConfig { command_notify_threshold: 0, ..NotificationConfig::default() };
-    assert_eq!(cfg_zero.clamped_command_notify_threshold(), 1);
-    let cfg_over =
-        NotificationConfig { command_notify_threshold: 9999, ..NotificationConfig::default() };
-    assert_eq!(cfg_over.clamped_command_notify_threshold(), 3600);
-    let cfg_normal =
-        NotificationConfig { command_notify_threshold: 30, ..NotificationConfig::default() };
-    assert_eq!(cfg_normal.clamped_command_notify_threshold(), 30);
+    assert_eq!(
+        cfg_zero.clamped_command_notify_threshold(),
+        NotificationConfig::MIN_COMMAND_NOTIFY_THRESHOLD
+    );
+    let cfg_over = NotificationConfig {
+        command_notify_threshold: NotificationConfig::MAX_COMMAND_NOTIFY_THRESHOLD + 1,
+        ..NotificationConfig::default()
+    };
+    assert_eq!(
+        cfg_over.clamped_command_notify_threshold(),
+        NotificationConfig::MAX_COMMAND_NOTIFY_THRESHOLD
+    );
+    let normal_threshold = 30; // MIN〜MAX の範囲内の任意の正常値
+    let cfg_normal = NotificationConfig {
+        command_notify_threshold: normal_threshold,
+        ..NotificationConfig::default()
+    };
+    assert_eq!(cfg_normal.clamped_command_notify_threshold(), normal_threshold);
 }
 
 // CommandNotifyMode のデシリアライズ検証

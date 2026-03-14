@@ -176,14 +176,14 @@ mod tests {
             end: Point::new(Line(1), Column(5)),
         };
         // 範囲内
-        assert!(sel.contains(2, 1));
-        assert!(sel.contains(5, 1));
-        assert!(sel.contains(3, 1));
+        assert!(sel.contains(2, 1), "start col should be in range");
+        assert!(sel.contains(5, 1), "end col should be in range");
+        assert!(sel.contains(3, 1), "mid col should be in range");
         // 範囲外
-        assert!(!sel.contains(1, 1));
-        assert!(!sel.contains(6, 1));
-        assert!(!sel.contains(3, 0));
-        assert!(!sel.contains(3, 2));
+        assert!(!sel.contains(1, 1), "col before start should be out");
+        assert!(!sel.contains(6, 1), "col after end should be out");
+        assert!(!sel.contains(3, 0), "row above should be out");
+        assert!(!sel.contains(3, 2), "row below should be out");
     }
 
     #[test]
@@ -194,16 +194,16 @@ mod tests {
             end: Point::new(Line(3), Column(5)),
         };
         // 開始行: sc以降
-        assert!(sel.contains(3, 1));
-        assert!(sel.contains(9, 1));
-        assert!(!sel.contains(2, 1));
+        assert!(sel.contains(3, 1), "start col on start row");
+        assert!(sel.contains(9, 1), "col after start on start row");
+        assert!(!sel.contains(2, 1), "col before start on start row");
         // 中間行: 全列
-        assert!(sel.contains(0, 2));
-        assert!(sel.contains(99, 2));
+        assert!(sel.contains(0, 2), "first col on middle row");
+        assert!(sel.contains(99, 2), "far col on middle row");
         // 終了行: ec以前
-        assert!(sel.contains(0, 3));
-        assert!(sel.contains(5, 3));
-        assert!(!sel.contains(6, 3));
+        assert!(sel.contains(0, 3), "first col on end row");
+        assert!(sel.contains(5, 3), "end col on end row");
+        assert!(!sel.contains(6, 3), "col after end on end row");
     }
 
     #[test]
@@ -227,11 +227,11 @@ mod tests {
             end: Point::new(Line(4), Column(79)),
         };
         // 行全体が選択される
-        assert!(sel.contains(0, 2));
-        assert!(sel.contains(79, 2));
-        assert!(sel.contains(0, 4));
-        assert!(!sel.contains(0, 1));
-        assert!(!sel.contains(0, 5));
+        assert!(sel.contains(0, 2), "first col on start row");
+        assert!(sel.contains(79, 2), "last col on start row");
+        assert!(sel.contains(0, 4), "first col on end row");
+        assert!(!sel.contains(0, 1), "row before selection");
+        assert!(!sel.contains(0, 5), "row after selection");
     }
 
     // --- selected_text テスト ---

@@ -31,6 +31,11 @@ const MAX_WINDOW_POS: i32 = 65536;
 const MIN_WINDOW_POS: i32 = -16384;
 
 impl WindowGeometry {
+    /// デフォルトの論理幅。
+    pub const DEFAULT_WIDTH: f64 = 800.0;
+    /// デフォルトの論理高さ。
+    pub const DEFAULT_HEIGHT: f64 = 600.0;
+
     /// 不正値をデフォルトにクランプしたジオメトリを返す。
     ///
     /// - NaN / Infinity / 極小値 / 極大値はデフォルト（800×600）にフォールバック
@@ -40,12 +45,12 @@ impl WindowGeometry {
         let width = if self.width.is_finite() && self.width >= MIN_WINDOW_SIZE {
             self.width.min(MAX_WINDOW_SIZE)
         } else {
-            800.0
+            Self::DEFAULT_WIDTH
         };
         let height = if self.height.is_finite() && self.height >= MIN_WINDOW_SIZE {
             self.height.min(MAX_WINDOW_SIZE)
         } else {
-            600.0
+            Self::DEFAULT_HEIGHT
         };
         let x = self.x.clamp(MIN_WINDOW_POS, MAX_WINDOW_POS);
         let y = self.y.clamp(MIN_WINDOW_POS, MAX_WINDOW_POS);
@@ -261,27 +266,26 @@ mod tests {
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("session.toml");
 
+        let win1 = WindowGeometry { width: 800.0, height: 600.0, x: 100, y: 200 };
+        let win2 = WindowGeometry { width: 1024.0, height: 768.0, x: 300, y: 400 };
         let snap = AppSnapshot {
             sessions: vec![SessionSnapshot { cwd: PathBuf::from("/home/user"), custom_name: None }],
-            windows: vec![
-                WindowGeometry { width: 800.0, height: 600.0, x: 100, y: 200 },
-                WindowGeometry { width: 1024.0, height: 768.0, x: 300, y: 400 },
-            ],
+            windows: vec![win1.clone(), win2.clone()],
             ..Default::default()
         };
 
         snap.save(&path).expect("save failed");
         let loaded = AppSnapshot::load(&path);
 
-        assert_eq!(loaded.windows.len(), 2);
-        assert!((loaded.windows[0].width - 800.0).abs() < f64::EPSILON);
-        assert!((loaded.windows[0].height - 600.0).abs() < f64::EPSILON);
-        assert_eq!(loaded.windows[0].x, 100);
-        assert_eq!(loaded.windows[0].y, 200);
-        assert!((loaded.windows[1].width - 1024.0).abs() < f64::EPSILON);
-        assert!((loaded.windows[1].height - 768.0).abs() < f64::EPSILON);
-        assert_eq!(loaded.windows[1].x, 300);
-        assert_eq!(loaded.windows[1].y, 400);
+        assert_eq!(loaded.windows.len(), 2, "should load 2 windows");
+        assert!((loaded.windows[0].width - win1.width).abs() < f64::EPSILON, "win1 width");
+        assert!((loaded.windows[0].height - win1.height).abs() < f64::EPSILON, "win1 height");
+        assert_eq!(loaded.windows[0].x, win1.x, "win1 x");
+        assert_eq!(loaded.windows[0].y, win1.y, "win1 y");
+        assert!((loaded.windows[1].width - win2.width).abs() < f64::EPSILON, "win2 width");
+        assert!((loaded.windows[1].height - win2.height).abs() < f64::EPSILON, "win2 height");
+        assert_eq!(loaded.windows[1].x, win2.x, "win2 x");
+        assert_eq!(loaded.windows[1].y, win2.y, "win2 y");
 
         // クリーンアップ
         let _ = std::fs::remove_file(&path);
@@ -317,36 +321,74 @@ cwd = "/home/user"
     fn validated_clamps_invalid_geometry() {
         // ゼロサイズ → デフォルト
         let geom = WindowGeometry { width: 0.0, height: 0.0, x: 0, y: 0 }.validated();
-        assert!((geom.width - 800.0).abs() < f64::EPSILON);
-        assert!((geom.height - 600.0).abs() < f64::EPSILON);
+        assert!(
+            (geom.width - WindowGeometry::DEFAULT_WIDTH).abs() < f64::EPSILON,
+            "zero width → default"
+        );
+        assert!(
+            (geom.height - WindowGeometry::DEFAULT_HEIGHT).abs() < f64::EPSILON,
+            "zero height → default"
+        );
 
-        // 負値 → デフォルト
-        let geom = WindowGeometry { width: -100.0, height: -50.0, x: 0, y: 0 }.validated();
-        assert!((geom.width - 800.0).abs() < f64::EPSILON);
-        assert!((geom.height - 600.0).abs() < f64::EPSILON);
+        // 負値 → デフォルト（MIN_WINDOW_SIZE 未満なのでフォールバック）
+        let invalid_w = -100.0_f64;
+        let invalid_h = -50.0_f64;
+        let geom = WindowGeometry { width: invalid_w, height: invalid_h, x: 0, y: 0 }.validated();
+        assert!(
+            (geom.width - WindowGeometry::DEFAULT_WIDTH).abs() < f64::EPSILON,
+            "negative width → default"
+        );
+        assert!(
+            (geom.height - WindowGeometry::DEFAULT_HEIGHT).abs() < f64::EPSILON,
+            "negative height → default"
+        );
 
         // NaN / Infinity → デフォルト
         let geom =
             WindowGeometry { width: f64::NAN, height: f64::INFINITY, x: 0, y: 0 }.validated();
-        assert!((geom.width - 800.0).abs() < f64::EPSILON);
-        assert!((geom.height - 600.0).abs() < f64::EPSILON);
+        assert!(
+            (geom.width - WindowGeometry::DEFAULT_WIDTH).abs() < f64::EPSILON,
+            "NaN width → default"
+        );
+        assert!(
+            (geom.height - WindowGeometry::DEFAULT_HEIGHT).abs() < f64::EPSILON,
+            "Inf height → default"
+        );
 
-        // 極大値 → クランプ
-        let geom = WindowGeometry { width: 99999.0, height: 99999.0, x: 0, y: 0 }.validated();
-        assert!((geom.width - 16384.0).abs() < f64::EPSILON);
-        assert!((geom.height - 16384.0).abs() < f64::EPSILON);
+        // MAX_WINDOW_SIZE 超 → クランプ
+        let over_max = MAX_WINDOW_SIZE + 1.0;
+        let geom = WindowGeometry { width: over_max, height: over_max, x: 0, y: 0 }.validated();
+        assert!(
+            (geom.width - MAX_WINDOW_SIZE).abs() < f64::EPSILON,
+            "over-max width should clamp to MAX_WINDOW_SIZE"
+        );
+        assert!(
+            (geom.height - MAX_WINDOW_SIZE).abs() < f64::EPSILON,
+            "over-max height should clamp to MAX_WINDOW_SIZE"
+        );
 
         // 極端な座標 → クランプ
-        let geom = WindowGeometry { width: 800.0, height: 600.0, x: -99999, y: 99999 }.validated();
-        assert_eq!(geom.x, -16384);
-        assert_eq!(geom.y, 65536);
+        let geom = WindowGeometry {
+            width: WindowGeometry::DEFAULT_WIDTH,
+            height: WindowGeometry::DEFAULT_HEIGHT,
+            x: MIN_WINDOW_POS - 1,
+            y: MAX_WINDOW_POS + 1,
+        }
+        .validated();
+        assert_eq!(geom.x, MIN_WINDOW_POS, "x below MIN should clamp");
+        assert_eq!(geom.y, MAX_WINDOW_POS, "y above MAX should clamp");
 
-        // 正常値はそのまま
-        let geom = WindowGeometry { width: 1024.0, height: 768.0, x: 100, y: 200 }.validated();
-        assert!((geom.width - 1024.0).abs() < f64::EPSILON);
-        assert!((geom.height - 768.0).abs() < f64::EPSILON);
-        assert_eq!(geom.x, 100);
-        assert_eq!(geom.y, 200);
+        // 正常値はそのまま（valid_w, valid_h は MIN/MAX の範囲内の代表値）
+        let valid_w = 1024.0_f64;
+        let valid_h = 768.0_f64;
+        let valid_x = 100_i32;
+        let valid_y = 200_i32;
+        let geom =
+            WindowGeometry { width: valid_w, height: valid_h, x: valid_x, y: valid_y }.validated();
+        assert!((geom.width - valid_w).abs() < f64::EPSILON, "valid width should pass through");
+        assert!((geom.height - valid_h).abs() < f64::EPSILON, "valid height should pass through");
+        assert_eq!(geom.x, valid_x, "valid x should pass through");
+        assert_eq!(geom.y, valid_y, "valid y should pass through");
     }
 
     #[test]

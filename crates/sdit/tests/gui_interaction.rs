@@ -107,6 +107,8 @@ fn wait_for_window(process_name: &str, timeout: Duration) -> bool {
 
 /// SDIT を起動してウィンドウが表示されることを確認し、
 /// キー入力とスクリーンショット取得を行う。
+// smell-allow: silent-skip, conditional-test-logic, sleepy-test — GUI テストは権限・環境依存。プロセス起動待ちに sleep が必要
+// smell-allow: redundant-print — #[ignore] 手動実行テスト。eprintln! はオペレーター向け診断出力として意図的に残している
 #[test]
 #[ignore = "Screen Recording 権限 + GUI 環境が必要。tools/test-utils/build.sh を先に実行すること"]
 fn window_appears_and_captures_screenshot() {

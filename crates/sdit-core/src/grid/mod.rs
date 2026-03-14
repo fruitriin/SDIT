@@ -497,22 +497,28 @@ mod tests {
 
     #[test]
     fn resize_taller() {
-        let mut g = make_grid(10, 40);
-        g.resize(20, 40);
-        assert_eq!(g.screen_lines(), 20);
-        assert_eq!(g.total_lines(), 20);
+        let initial_rows = 10;
+        let cols = 40;
+        let taller_rows = 20;
+        let mut g = make_grid(initial_rows, cols);
+        g.resize(taller_rows, cols);
+        assert_eq!(g.screen_lines(), taller_rows);
+        assert_eq!(g.total_lines(), taller_rows);
     }
 
     #[test]
     fn resize_smaller() {
-        let mut g = make_grid(20, 80);
-        g.cursor.point = Point::new(Line(19), Column(79));
-        g.resize(10, 40);
-        assert_eq!(g.screen_lines(), 10);
-        assert_eq!(g.columns(), 40);
+        let initial_rows = 20;
+        let smaller_rows = 10;
+        let smaller_cols = 40;
+        let mut g = make_grid(initial_rows, 80);
+        g.cursor.point = Point::new(Line(initial_rows as i32 - 1), Column(79));
+        g.resize(smaller_rows, smaller_cols);
+        assert_eq!(g.screen_lines(), smaller_rows);
+        assert_eq!(g.columns(), smaller_cols);
         // Cursor must be clamped inside the new bounds.
-        assert!(g.cursor.point.line.0 < 10);
-        assert!(g.cursor.point.column.0 < 40);
+        assert!(g.cursor.point.line.0 < smaller_rows as i32);
+        assert!(g.cursor.point.column.0 < smaller_cols);
     }
 
     // --- Clear ---

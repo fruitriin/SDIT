@@ -45,6 +45,8 @@ fn count_lines(path: &Path) -> io::Result<usize> {
     Ok(content.lines().count())
 }
 
+// smell-allow: conditional-test-logic — 全ソースファイルを走査して行数超過を集計するメタテスト
+// smell-allow: redundant-print — 警告閾値超過ファイルのレポート出力は、テスト合格時でも注意喚起として意図的に残している
 #[test]
 fn source_files_within_line_limits() {
     let root = workspace_root();

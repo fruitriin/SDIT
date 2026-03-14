@@ -293,6 +293,7 @@ mod tests {
         assert!(region2.is_some(), "クリア後に reserve が失敗した");
     }
 
+    // smell-allow: magic-number, assertion-roulette — ピクセルデータは連番パターンで意図が明確。コメントで各ピクセル位置を説明済み
     #[test]
     fn write_stores_rgba_pixels_correctly() {
         let mut atlas = InMemAtlas::new(16);
