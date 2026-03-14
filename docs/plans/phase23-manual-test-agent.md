@@ -106,6 +106,17 @@
 
 外部入力なし・読み取り専用の検証エージェントであるため、セキュリティリスクは低い。
 
+## 実装結果（2026-03-15 完了）
+
+`/manual-test` スキルを `~/.config/claude/commands/manual-test/SKILL.md` に作成し、パッケージ化済み。
+skill-creator の標準プロセスで作成。`/manual-test` または `/manual-test keybinds` で呼び出せる。
+
+完了条件:
+- [x] `/manual-test` スキルが動作する
+- [x] `docs/manuals/basic-usage.md` と `docs/manuals/keybinds.md` の主要操作を検証できる
+- [x] レポートが `tmp/manual-test-YYYY-MM-DD.md` に生成される（スキル内で定義）
+- [x] スキップ対象の操作が明示される
+
 ## 実装メモ
 
 - スキルファイルの作成方法は `/skill-creator` を参考にする

@@ -23,7 +23,7 @@
 | done | 21.6 | `docs/plans/phase21.6-menu-click-crash.md` | **完了** |
 | done | 22.1 | `docs/plans/phase22.1-tab-drag-detach.md` | **完了** |
 | done | 22.2 | `docs/plans/phase22.2-test-smell-fixes.md` | **完了** |
-| 低 | 23 | `docs/plans/phase23-manual-test-agent.md` | 未着手 |
+| done | 23 | `docs/plans/phase23-manual-test-agent.md` | **完了** |
 | done | 24 | `docs/plans/phase24-image-tools.md` | **完了** |
 
 
