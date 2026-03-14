@@ -17,6 +17,8 @@
 
 ## 改善アクション
 
+- `.claude/settings.local.json` のフックコマンドは**絶対パス**で書くこと。相対パス `python3 .claude/hooks/check-tmp.py` は、Claude Code セッション内で `cd tools/test-utils/` 等のサブディレクトリ移動が起きると解決できなくなり、Bash/Edit/Write がすべてブロックされる。修正済み（絶対パスに変更）。
+
 - `list-menus.sh` の `joinList` AppleScript ハンドラが `tell application "System Events"` ブロック内で呼び出すと機能せず、空のメニューリストを返す問題がある。手動ループに置き換えることで修正可能（Phase 21.5 統合テストで発見）
 
 - `annotate-grid` の画像反転バグ（Phase 24 統合テストで発見、2026-03-14）:
