@@ -6,6 +6,9 @@
 # Usage: ./send-keys.sh <process-name> <text>
 # Example: ./send-keys.sh sdit "hello world"
 #
+# スペースと改行は key code（49/36）で送信するため IME を経由しない。
+# CJK 文字は keystroke で送ると IME 変換が起動するため PTY 直接書き込みを推奨。
+#
 # 前提条件:
 #   - System Settings → Privacy & Security → Accessibility で
 #     このスクリプトを実行するターミナルに権限が必要
@@ -31,10 +34,6 @@ if [[ ! "$PROCESS_NAME" =~ ^[a-zA-Z0-9._-]+$ ]]; then
     exit 1
 fi
 
-# AppleScript インジェクション防止: バックスラッシュと二重引用符をエスケープ
-ESCAPED_TEXT="${TEXT//\\/\\\\}"
-ESCAPED_TEXT="${ESCAPED_TEXT//\"/\\\"}"
-
 # M-3: PID ベースでプロセスを特定（basename なりすまし防止）
 PID=$(pgrep -x "$PROCESS_NAME" | head -1)
 if [[ -z "$PID" ]]; then
@@ -42,13 +41,46 @@ if [[ -z "$PID" ]]; then
     exit 2
 fi
 
+# テキストを文字単位に分解し、スペース・改行は key code で送る AppleScript を生成する。
+# スペース: key code 49、改行/CR: key code 36
+# これにより IME がスペースを変換トリガーとして吸うのを防ぐ。
+APPLESCRIPT_BODY=$(python3 - "$TEXT" <<'PYEOF'
+import sys
+
+text = sys.argv[1]
+lines = []
+buf = ""
+
+def flush(buf):
+    if buf:
+        escaped = buf.replace('\\', '\\\\').replace('"', '\\"')
+        return [f'    keystroke "{escaped}"']
+    return []
+
+for ch in text:
+    if ch == ' ':
+        lines.extend(flush(buf))
+        buf = ""
+        lines.append('    key code 49')   # スペース（IME を通らない）
+    elif ch in ('\n', '\r'):
+        lines.extend(flush(buf))
+        buf = ""
+        lines.append('    key code 36')   # Enter（IME を通らない）
+    else:
+        buf += ch
+
+lines.extend(flush(buf))
+print('\n'.join(lines))
+PYEOF
+)
+
 # osascript でキーストローク送信（PID ベースのプロセス指定）
-osascript <<APPLESCRIPT
+osascript << APPLESCRIPT
 tell application "System Events"
     set targetApp to first process whose unix id is $PID
     set frontmost of targetApp to true
     delay 0.1
-    keystroke "$ESCAPED_TEXT"
+$APPLESCRIPT_BODY
 end tell
 APPLESCRIPT
 
