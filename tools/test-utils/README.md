@@ -9,6 +9,10 @@ SDIT の `crates/sdit/tests/gui_interaction.rs` から呼び出される。
 |---|---|---|
 | `window-info` | Swift | AXUIElement でウィンドウ属性を JSON 出力 |
 | `capture-window` | Swift | ScreenCaptureKit でウィンドウを PNG キャプチャ |
+| `render-text` | Swift | CoreText で対照群テキスト画像を生成 |
+| `verify-text` | Swift | OCR + 輝度 + SSIM でテキスト描画品質を検証 |
+| `annotate-grid` | Swift | PNG にグリッド線・座標ラベルを描画 |
+| `clip-image` | Swift | PNG の指定領域（矩形・グリッドセル）を切り出す |
 | `send-keys.sh` | bash | osascript でキーストロークを送信 |
 | `build.sh` | bash | Swift スクリプトをコンパイル |
 
@@ -110,6 +114,57 @@ tccutil reset ScreenCapture
 
 - プロセスが見つからない場合は `exit 2`
 - Accessibility 権限がない場合は `exit 2`
+
+### annotate-grid
+
+```bash
+# 4×4 グリッドを描画（各セルに "col,row" ラベル）
+./annotate-grid ../../tmp/capture.png ../../tmp/annotated.png --divide 4
+
+# 100px ごとに線を引く
+./annotate-grid ../../tmp/capture.png ../../tmp/annotated.png --every 100
+
+# スタイル指定
+./annotate-grid ../../tmp/capture.png ../../tmp/annotated.png \
+    --divide 8 --font-size 20 --line-color 0000FF80
+```
+
+- `--divide N` モード: 各セル左上に `col,row`（0-origin）を描画
+- `--every N` モード: 各垂直線上端に `x=N`、各水平線左端に `y=N` を描画
+- `--divide 0` / `--every 0` は `exit 1`
+
+### clip-image
+
+```bash
+# annotate-grid --divide 4 で確認したセル (1,1) を切り出す
+./clip-image ../../tmp/capture.png ../../tmp/clip.png --grid-cell 1 1 4
+
+# ピクセル座標で切り出す
+./clip-image ../../tmp/capture.png ../../tmp/clip.png --rect 100 200 400 300
+
+# 成功時の出力:
+# Clipped: ../../tmp/clip.png (400x300px)
+```
+
+- `col >= N` / `row >= N` は `exit 1`
+- cropping が失敗した場合（範囲外等）は `exit 1`
+- 出力先ディレクトリが存在しない場合は自動作成
+
+### 典型的な連携フロー
+
+```bash
+# 1. スクリーンショット撮影
+./capture-window sdit ../../tmp/capture.png
+
+# 2. グリッドを描画して座標系を確認
+./annotate-grid ../../tmp/capture.png ../../tmp/annotated.png --divide 8
+
+# 3. 注目セル (3,2) を切り出す
+./clip-image ../../tmp/capture.png ../../tmp/clip.png --grid-cell 3 2 8
+
+# 4. OCR で検証
+./verify-text ../../tmp/clip.png "期待テキスト"
+```
 
 ---
 

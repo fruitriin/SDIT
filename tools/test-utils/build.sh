@@ -51,6 +51,16 @@ echo "==> Setting execute permission on send-keys.sh..."
 chmod +x "$SCRIPT_DIR/send-keys.sh"
 echo "    OK: $SCRIPT_DIR/send-keys.sh"
 
+echo "==> Building annotate-grid..."
+swiftc "$SCRIPT_DIR/annotate-grid.swift" -o "$SCRIPT_DIR/annotate-grid" \
+    -framework CoreGraphics -framework CoreText -framework Foundation -framework ImageIO
+echo "    OK: $SCRIPT_DIR/annotate-grid"
+
+echo "==> Building clip-image..."
+swiftc "$SCRIPT_DIR/clip-image.swift" -o "$SCRIPT_DIR/clip-image" \
+    -framework CoreGraphics -framework Foundation -framework ImageIO
+echo "    OK: $SCRIPT_DIR/clip-image"
+
 echo ""
 echo "Build complete. 次のステップ:"
 echo "  1. System Settings → Privacy & Security → Screen Recording"
