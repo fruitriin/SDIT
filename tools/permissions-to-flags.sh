@@ -32,7 +32,8 @@ BASELINE='{"permissions":{"allow":[
   "Bash(git fetch:*)", "Bash(git rev-parse:*)", "Bash(git stash list:*)",
   "Bash(ls:*)", "Bash(cat:*)", "Bash(grep:*)", "Bash(find:*)",
   "Bash(tree:*)", "Bash(wc:*)", "Bash(diff:*)", "Bash(tail:*)",
-  "Bash(echo:*)", "Bash(which:*)", "Bash(test:*)", "Bash(ps:*)"
+  "Bash(echo:*)", "Bash(which:*)", "Bash(test:*)", "Bash(ps:*)",
+  "Bash(timeout:*)"
 ]}}'
 
 # jq で全処理: マージ → 変換 → 重複排除 → フラグ出力

@@ -167,6 +167,21 @@ cargo test
 cargo test --workspace
 ```
 
+### PTY テストはスキップして構わない
+
+`is_tty()` ガード付きのテスト（PTY スポーン系）は、Copilot の非TTY環境では
+自動スキップされる。これは**権限の問題ではなく環境の問題**であり、
+`--allow-tool` で解決できない。
+
+- `script -q /dev/null copilot ...` で PTY に包む方法もあるが出力が乱れやすい
+- CI（GitHub Actions）でも同様にスキップされる設計なので実害なし
+- **採用方針（B案）**: プロンプトで明示的にスキップ許可を伝える
+
+```
+検証コマンド: cargo test -p sdit-core && cargo test -p sdit --lib
+※ is_tty() ガード付きの PTY テストはスキップして構わない
+```
+
 ## 参考リンク
 
 - [Codex Prompting Guide](https://developers.openai.com/cookbook/examples/gpt-5/codex_prompting_guide/)
