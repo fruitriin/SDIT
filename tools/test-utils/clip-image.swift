@@ -37,6 +37,10 @@ func parseArgs() -> Options {
                   let w = Int(args[i + 3]), let h = Int(args[i + 4]) else {
                 fputs("Error: --rect requires x y width height\n", stderr); exit(1)
             }
+            guard x >= 0, y >= 0, w > 0, h > 0 else {
+                fputs("Error: --rect x, y は >= 0、width, height は > 0 である必要があります\n", stderr)
+                exit(1)
+            }
             opts.rect = (x, y, w, h)
             i += 4
         case "--grid-cell":
@@ -137,22 +141,31 @@ if let (x, y, w, h) = opts.rect {
     guard n >= 1 else {
         fputs("Error: N は 1 以上が必要です\n", stderr); exit(1)
     }
-    guard col < n else {
-        fputs("Error: col (\(col)) は N (\(n)) 未満でなければなりません\n", stderr); exit(1)
+    guard col >= 0, col < n else {
+        fputs("Error: col (\(col)) は 0 以上 N (\(n)) 未満でなければなりません\n", stderr); exit(1)
     }
-    guard row < n else {
-        fputs("Error: row (\(row)) は N (\(n)) 未満でなければなりません\n", stderr); exit(1)
+    guard row >= 0, row < n else {
+        fputs("Error: row (\(row)) は 0 以上 N (\(n)) 未満でなければなりません\n", stderr); exit(1)
     }
 
     let cellW = imgW / n
     let cellH = imgH / n
     clipX = col * cellW
     clipY = row * cellH
-    // 最終列・行は余りピクセルを吸収
-    clipW = (col == n - 1) ? imgW - clipX : cellW
-    clipH = (row == n - 1) ? imgH - clipY : cellH
+    // 最終列・行は余りピクセルを吸収（整数除算の丸め誤差を補正）
+    clipW = (col == n - 1) ? (imgW - col * cellW) : cellW
+    clipH = (row == n - 1) ? (imgH - row * cellH) : cellH
 } else {
     fputs("Error: --rect または --grid-cell が必要です\n", stderr)
+    exit(1)
+}
+
+// クロップ矩形の範囲外チェック
+guard clipX >= 0, clipY >= 0,
+      clipX + clipW <= imgW, clipY + clipH <= imgH else {
+    fputs("Error: クロップ矩形が画像サイズを超えています\n", stderr)
+    fputs("  矩形: x=\(clipX) y=\(clipY) w=\(clipW) h=\(clipH)\n", stderr)
+    fputs("  画像: \(imgW)x\(imgH)\n", stderr)
     exit(1)
 }
 

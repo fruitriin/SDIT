@@ -29,7 +29,8 @@ struct RGBA {
 
 func parseRGBA(_ hex: String) -> RGBA? {
     let h = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
-    guard h.count == 8, let val = UInt64(h, radix: 16) else { return nil }
+    guard h.count == 8, h.allSatisfy({ $0.isHexDigit }),
+          let val = UInt64(h, radix: 16) else { return nil }
     return RGBA(
         r: CGFloat((val >> 24) & 0xFF) / 255.0,
         g: CGFloat((val >> 16) & 0xFF) / 255.0,
@@ -64,11 +65,17 @@ func parseArgs() -> Options {
             guard i < args.count, let n = Int(args[i]) else {
                 fputs("Error: --divide requires integer\n", stderr); exit(1)
             }
+            guard n >= 1, n <= 65536 else {
+                fputs("Error: N は 1..65536 の範囲で指定してください\n", stderr); exit(1)
+            }
             opts.divideN = n
         case "--every":
             i += 1
             guard i < args.count, let n = Int(args[i]) else {
                 fputs("Error: --every requires integer\n", stderr); exit(1)
+            }
+            guard n >= 1, n <= 65536 else {
+                fputs("Error: N は 1..65536 の範囲で指定してください\n", stderr); exit(1)
             }
             opts.everyN = n
         case "--line-color":
@@ -277,6 +284,7 @@ func drawEveryGrid(ctx: CGContext, image: CGImage, opts: Options) {
         let cx = CGFloat(xi)
         segs.append(CGPoint(x: cx, y: 0))
         segs.append(CGPoint(x: cx, y: CGFloat(H)))
+        if xi > Int.max - n { break }
         xi += n
     }
 
@@ -286,6 +294,7 @@ func drawEveryGrid(ctx: CGContext, image: CGImage, opts: Options) {
         let cgY = CGFloat(H) - CGFloat(yi)
         segs.append(CGPoint(x: 0, y: cgY))
         segs.append(CGPoint(x: CGFloat(W), y: cgY))
+        if yi > Int.max - n { break }
         yi += n
     }
 
@@ -300,6 +309,7 @@ func drawEveryGrid(ctx: CGContext, image: CGImage, opts: Options) {
     while xi < W {
         drawLabel("x=\(xi)", at: CGFloat(xi) + 2, imageY: 2,
                   in: ctx, imageHeight: H, opts: opts, ctFont: ctFont)
+        if xi > Int.max - n { break }
         xi += n
     }
 
@@ -308,6 +318,7 @@ func drawEveryGrid(ctx: CGContext, image: CGImage, opts: Options) {
     while yi < H {
         drawLabel("y=\(yi)", at: 2, imageY: CGFloat(yi) + 2,
                   in: ctx, imageHeight: H, opts: opts, ctFont: ctFont)
+        if yi > Int.max - n { break }
         yi += n
     }
 }
