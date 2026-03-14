@@ -59,11 +59,17 @@ impl UrlDetector {
 
         let custom_patterns = links
             .iter()
-            .filter_map(|lc| match RegexBuilder::new(&lc.regex).size_limit(1 << 20).build() {
-                Ok(re) => Some((re, lc.action.clone())),
-                Err(e) => {
-                    log::warn!("Custom link regex compile error '{}': {e}", lc.regex);
-                    None
+            .filter_map(|lc| {
+                match RegexBuilder::new(&lc.regex)
+                    .size_limit(1 << 20)
+                    .dfa_size_limit(1 << 20)
+                    .build()
+                {
+                    Ok(re) => Some((re, lc.action.clone())),
+                    Err(e) => {
+                        log::warn!("Custom link regex compile error '{}': {e}", lc.regex);
+                        None
+                    }
                 }
             })
             .collect();
@@ -143,9 +149,9 @@ pub fn extract_url_from_action(action: &str, captures: &Captures<'_>) -> Option<
     let url_template = action.strip_prefix("open:")?;
     let expanded = expand_template(url_template, captures);
 
-    // javascript: / data: スキームは XSS 防止のため拒否
+    // 危険なスキームは拒否（XSS・ローカルファイルアクセス・スクリプト実行防止）
     let lower = expanded.to_ascii_lowercase();
-    if lower.starts_with("javascript:") || lower.starts_with("data:") {
+    if is_dangerous_scheme(&lower) {
         log::warn!(
             "Custom link rejected dangerous scheme: {}",
             &expanded[..expanded.len().min(64)]
@@ -154,6 +160,17 @@ pub fn extract_url_from_action(action: &str, captures: &Captures<'_>) -> Option<
     }
 
     Some(expanded)
+}
+
+/// 危険なスキームかどうかを判定する。
+///
+/// `lower_url` は小文字に変換済みの URL 文字列。
+/// `file:` はローカルファイルアクセスを、`vbscript:` はスクリプト実行を可能にするため拒否する。
+fn is_dangerous_scheme(lower_url: &str) -> bool {
+    lower_url.starts_with("javascript:")
+        || lower_url.starts_with("data:")
+        || lower_url.starts_with("file:")
+        || lower_url.starts_with("vbscript:")
 }
 
 /// テンプレート文字列を展開する。
@@ -525,6 +542,22 @@ mod tests {
         let caps = re.captures("PAT-123").unwrap();
         let result = extract_url_from_action("https://example.com/$0", &caps);
         assert!(result.is_none(), "open: プレフィックスがない場合は None");
+    }
+
+    #[test]
+    fn extract_url_rejects_file_scheme() {
+        let re = regex::Regex::new(r"evil").unwrap();
+        let caps = re.captures("evil").unwrap();
+        let result = extract_url_from_action("open:file:///etc/passwd", &caps);
+        assert!(result.is_none(), "file: スキームは拒否されるべき");
+    }
+
+    #[test]
+    fn extract_url_rejects_vbscript_scheme() {
+        let re = regex::Regex::new(r"evil").unwrap();
+        let caps = re.captures("evil").unwrap();
+        let result = extract_url_from_action("open:vbscript:MsgBox(1)", &caps);
+        assert!(result.is_none(), "vbscript: スキームは拒否されるべき");
     }
 
     #[test]

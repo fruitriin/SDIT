@@ -415,10 +415,13 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                 if let Some(url) = url {
                                     // セキュリティ: 危険なスキームを拒否 + 制御文字なしを確認
                                     // カスタムリンク（vscode:// 等）も許可するが
-                                    // javascript: / data: は拒否（extract_url_from_action 内でも拒否済み）
+                                    // javascript: / data: / file: / vbscript: は拒否
+                                    // （extract_url_from_action 内でも拒否済み。多層防御）
                                     let lower_url = url.to_ascii_lowercase();
                                     let is_safe = !lower_url.starts_with("javascript:")
                                         && !lower_url.starts_with("data:")
+                                        && !lower_url.starts_with("file:")
+                                        && !lower_url.starts_with("vbscript:")
                                         && url.bytes().all(|b| b >= 0x20 && b != 0x7F);
                                     if is_safe {
                                         #[cfg(target_os = "macos")]
