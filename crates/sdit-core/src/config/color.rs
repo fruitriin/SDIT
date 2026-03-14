@@ -14,6 +14,10 @@ pub struct ColorConfig {
     /// 1.0 = 無効（デフォルト）、最大 21.0。
     /// コントラスト比が不足する場合は fg の明度を自動調整する。
     pub minimum_contrast: f32,
+    /// 検索ハイライトの前景色（hex 文字列 "#RRGGBB"）。None = デフォルト色を使用。
+    pub search_foreground: Option<String>,
+    /// 検索ハイライトの背景色（hex 文字列 "#RRGGBB"）。None = デフォルト色を使用。
+    pub search_background: Option<String>,
 }
 
 impl Default for ColorConfig {
@@ -23,6 +27,8 @@ impl Default for ColorConfig {
             selection_foreground: None,
             selection_background: None,
             minimum_contrast: 1.0,
+            search_foreground: None,
+            search_background: None,
         }
     }
 }

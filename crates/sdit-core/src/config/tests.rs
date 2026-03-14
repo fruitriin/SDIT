@@ -1046,3 +1046,140 @@ fn quick_terminal_default_in_full_config() {
     assert_eq!(cfg.quick_terminal.position, QuickTerminalPosition::Top);
     assert!((cfg.quick_terminal.size - 0.4).abs() < f32::EPSILON);
 }
+
+// -----------------------------------------------------------------------
+// Phase 19.1: env + working_directory のテスト
+// -----------------------------------------------------------------------
+
+#[test]
+fn env_default_is_empty() {
+    let cfg = Config::default();
+    assert!(cfg.env.is_empty(), "env のデフォルトは空 HashMap");
+}
+
+#[test]
+fn env_deserialize() {
+    let toml_str = r#"
+[env]
+TERM_PROGRAM = "sdit"
+COLORTERM = "truecolor"
+"#;
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(cfg.env.get("TERM_PROGRAM").map(String::as_str), Some("sdit"));
+    assert_eq!(cfg.env.get("COLORTERM").map(String::as_str), Some("truecolor"));
+}
+
+#[test]
+fn working_directory_default_is_none() {
+    let cfg = Config::default();
+    assert!(cfg.window.working_directory.is_none());
+}
+
+#[test]
+fn working_directory_deserialize() {
+    let toml_str = "[window]\nworking_directory = \"~/Projects\"\n";
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(cfg.window.working_directory.as_deref(), Some("~/Projects"));
+}
+
+// -----------------------------------------------------------------------
+// Phase 19.2: 検索色 + padding_color のテスト
+// -----------------------------------------------------------------------
+
+#[test]
+fn search_colors_default_is_none() {
+    let cfg = Config::default();
+    assert!(cfg.colors.search_foreground.is_none());
+    assert!(cfg.colors.search_background.is_none());
+}
+
+#[test]
+fn search_colors_deserialize() {
+    let toml_str = "[colors]\nsearch_foreground = \"#ffffff\"\nsearch_background = \"#ff8800\"\n";
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(cfg.colors.search_foreground.as_deref(), Some("#ffffff"));
+    assert_eq!(cfg.colors.search_background.as_deref(), Some("#ff8800"));
+}
+
+#[test]
+fn padding_color_default_is_background() {
+    let cfg = Config::default();
+    assert_eq!(cfg.window.padding_color, PaddingColor::Background);
+}
+
+#[test]
+fn padding_color_deserialize() {
+    let toml_str = "[window]\npadding_color = \"background\"\n";
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(cfg.window.padding_color, PaddingColor::Background);
+}
+
+// -----------------------------------------------------------------------
+// Phase 19.4: click_repeat_interval + grapheme_width_method のテスト
+// -----------------------------------------------------------------------
+
+#[test]
+fn click_repeat_interval_default_is_300() {
+    let cfg = Config::default();
+    assert_eq!(cfg.mouse.click_repeat_interval, 300);
+}
+
+#[test]
+fn click_repeat_interval_deserialize() {
+    let toml_str = "[mouse]\nclick_repeat_interval = 500\n";
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(cfg.mouse.click_repeat_interval, 500);
+}
+
+#[test]
+fn click_repeat_interval_clamped() {
+    let mc = MouseConfig { click_repeat_interval: 10, ..Default::default() };
+    assert_eq!(mc.clamped_click_repeat_interval(), 50, "下限は 50ms");
+
+    let mc = MouseConfig { click_repeat_interval: 5000, ..Default::default() };
+    assert_eq!(mc.clamped_click_repeat_interval(), 2000, "上限は 2000ms");
+
+    let mc = MouseConfig { click_repeat_interval: 300, ..Default::default() };
+    assert_eq!(mc.clamped_click_repeat_interval(), 300, "範囲内はそのまま");
+}
+
+#[test]
+fn grapheme_width_method_default_is_unicode() {
+    let cfg = Config::default();
+    assert_eq!(cfg.terminal.grapheme_width_method, GraphemeWidthMethod::Unicode);
+}
+
+#[test]
+fn grapheme_width_method_deserialize() {
+    let cases =
+        [("unicode", GraphemeWidthMethod::Unicode), ("legacy", GraphemeWidthMethod::Legacy)];
+    for (s, expected) in cases {
+        let toml_str = format!("[terminal]\ngrapheme_width_method = \"{s}\"\n");
+        let cfg: Config = toml::from_str(&toml_str).unwrap();
+        assert_eq!(cfg.terminal.grapheme_width_method, expected, "failed for {s}");
+    }
+}
+
+// -----------------------------------------------------------------------
+// Phase 19.5: window_subtitle のテスト
+// -----------------------------------------------------------------------
+
+#[test]
+fn window_subtitle_default_is_none() {
+    let cfg = Config::default();
+    assert_eq!(cfg.window.subtitle, WindowSubtitle::None);
+}
+
+#[test]
+fn window_subtitle_deserialize() {
+    let cases = [
+        ("none", WindowSubtitle::None),
+        ("working-directory", WindowSubtitle::WorkingDirectory),
+        ("session-name", WindowSubtitle::SessionName),
+    ];
+    for (s, expected) in cases {
+        let toml_str = format!("[window]\nsubtitle = \"{s}\"\n");
+        let cfg: Config = toml::from_str(&toml_str).unwrap();
+        assert_eq!(cfg.window.subtitle, expected, "failed for {s}");
+    }
+}

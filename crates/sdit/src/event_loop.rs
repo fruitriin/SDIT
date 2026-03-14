@@ -814,9 +814,12 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                     );
                                     let now = std::time::Instant::now();
                                     let is_same_pos = self.last_click_pos == Some((col, row));
+                                    let interval_ms = u128::from(
+                                        self.config.mouse.clamped_click_repeat_interval(),
+                                    );
                                     let is_fast = self
                                         .last_click_time
-                                        .is_some_and(|t| t.elapsed().as_millis() < 400);
+                                        .is_some_and(|t| t.elapsed().as_millis() < interval_ms);
                                     if is_fast && is_same_pos {
                                         self.click_count =
                                             self.click_count.saturating_add(1).min(3);
@@ -1276,8 +1279,35 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 // OSC 7 CWD を Session に記録する（file://hostname/path → PathBuf に変換）
                 if let Some(path) = parse_osc7_cwd(&cwd) {
                     if let Some(session) = self.session_mgr.get_mut(session_id) {
-                        session.cwd = Some(path);
+                        session.cwd = Some(path.clone());
                         log::debug!("Session {} cwd updated: {cwd}", session_id.0);
+                    }
+                    // subtitle 設定に応じてウィンドウタイトルを更新する
+                    use sdit_core::config::WindowSubtitle;
+                    if self.config.window.subtitle == WindowSubtitle::WorkingDirectory {
+                        if let Some(&window_id) = self.session_to_window.get(&session_id) {
+                            if let Some(ws) = self.windows.get(&window_id) {
+                                // アクティブセッションのタイトルのみ更新
+                                if ws.active_session_id() == session_id {
+                                    let display_path = path
+                                        .to_str()
+                                        .map(|p| {
+                                            // ホームディレクトリを ~ に省略
+                                            if let Some(home) = dirs::home_dir() {
+                                                if let Some(home_str) = home.to_str() {
+                                                    if let Some(rest) = p.strip_prefix(home_str) {
+                                                        return format!("~{rest}");
+                                                    }
+                                                }
+                                            }
+                                            p.to_owned()
+                                        })
+                                        .unwrap_or_default();
+                                    let new_title = format!("SDIT \u{2014} {display_path}");
+                                    ws.window.set_title(&new_title);
+                                }
+                            }
+                        }
                     }
                 }
             }

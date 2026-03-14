@@ -67,6 +67,22 @@ impl SditApp {
         let url_hover = self.hovered_url.as_ref().map(|h| (h.row, h.start_col, h.end_col));
 
         // 検索マッチをビューポート相対座標に変換
+        // 検索ハイライト色: 設定された hex 文字列をパース。パース失敗時はログ警告して None 扱い。
+        let search_fg = self.config.colors.search_foreground.as_deref().and_then(|hex| {
+            let parsed = sdit_core::config::color::parse_selection_color(hex);
+            if parsed.is_none() {
+                log::warn!("colors.search_foreground: invalid hex color '{hex}', using default");
+            }
+            parsed
+        });
+        let search_bg = self.config.colors.search_background.as_deref().and_then(|hex| {
+            let parsed = sdit_core::config::color::parse_selection_color(hex);
+            if parsed.is_none() {
+                log::warn!("colors.search_background: invalid hex color '{hex}', using default");
+            }
+            parsed
+        });
+
         let (search_highlight, current_highlight) = if let Some(ref search) = self.search {
             use sdit_core::terminal::search::SearchEngine;
             let history = grid.history_size();
@@ -282,13 +298,16 @@ impl SditApp {
         // 検索バー描画: 最下行をオーバーレイ
         if let Some(ref search) = self.search {
             let bar_row = grid_rows.saturating_sub(1);
-            let search_bg = [
-                (self.colors.background[0] + 0.1).min(1.0),
-                (self.colors.background[1] + 0.1).min(1.0),
-                (self.colors.background[2] + 0.1).min(1.0),
-                1.0,
-            ];
-            let fg = self.colors.foreground;
+            // 設定値があればそれを使用、なければデフォルト（背景色+0.1）
+            let bar_bg: [f32; 4] = search_bg.unwrap_or_else(|| {
+                [
+                    (self.colors.background[0] + 0.1).min(1.0),
+                    (self.colors.background[1] + 0.1).min(1.0),
+                    (self.colors.background[2] + 0.1).min(1.0),
+                    1.0,
+                ]
+            });
+            let fg: [f32; 4] = search_fg.unwrap_or(self.colors.foreground);
 
             // " > " + query + " [n/m]" を構築
             let match_info = if search.matches.is_empty() {
@@ -325,7 +344,7 @@ impl SditApp {
                     };
 
                 let vertex = CellVertex {
-                    bg: search_bg,
+                    bg: bar_bg,
                     fg,
                     grid_pos: [col as f32, bar_row as f32],
                     uv,
@@ -343,7 +362,7 @@ impl SditApp {
             // 残りのセルを検索バー背景で埋める
             while col < grid_cols {
                 let vertex = CellVertex {
-                    bg: search_bg,
+                    bg: bar_bg,
                     fg: [0.0; 4],
                     grid_pos: [col as f32, bar_row as f32],
                     uv: [0.0; 4],

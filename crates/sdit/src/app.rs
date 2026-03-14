@@ -477,7 +477,32 @@ impl SditApp {
         let mut pty_config = PtyConfig::default();
         pty_config.env.insert("TERM".to_owned(), "xterm-256color".to_owned());
         pty_config.env.insert("TERM_PROGRAM".to_owned(), "sdit".to_owned());
-        pty_config.working_directory = working_dir;
+
+        // Config の env を注入（最大 64 エントリ、制御文字を含むキー/値はスキップ）
+        for (key, value) in self.config.env.iter().take(64) {
+            if key.chars().any(|c| c.is_control()) || value.chars().any(|c| c.is_control()) {
+                log::warn!("env: key or value contains control characters, skipping: key={key:?}");
+                continue;
+            }
+            if key == "PATH" {
+                log::warn!("env: overriding PATH via config is not recommended");
+            }
+            pty_config.env.insert(key.clone(), value.clone());
+        }
+
+        // working_dir の解決順: 引数 → config.window.working_directory
+        let resolved_working_dir = working_dir.or_else(|| {
+            self.config.window.working_directory.as_deref().map(|p| {
+                // `~` をホームディレクトリに展開
+                if let Some(rest) = p.strip_prefix("~/") {
+                    if let Some(home) = dirs::home_dir() {
+                        return home.join(rest);
+                    }
+                }
+                std::path::PathBuf::from(p)
+            })
+        });
+        pty_config.working_directory = resolved_working_dir;
 
         let event_proxy = self.event_proxy.clone();
         let sid = session_id;

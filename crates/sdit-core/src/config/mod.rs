@@ -2,6 +2,7 @@ pub mod color;
 pub mod font;
 pub mod keybinds;
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -120,6 +121,28 @@ impl Default for Decorations {
     }
 }
 
+/// ウィンドウパディング領域の背景色設定。
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum PaddingColor {
+    /// ターミナル背景色と同じ色を使用する（デフォルト）。
+    #[default]
+    Background,
+}
+
+/// ウィンドウタイトルバーのサブタイトル表示設定。
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum WindowSubtitle {
+    /// サブタイトルを表示しない（デフォルト）。
+    #[default]
+    None,
+    /// 現在の作業ディレクトリを表示する（OSC 7 で更新）。
+    WorkingDirectory,
+    /// セッション名を表示する。
+    SessionName,
+}
+
 /// 背景画像のフィット方法。
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -174,6 +197,21 @@ pub struct WindowConfig {
     pub background_image_opacity: f32,
     /// 背景画像のフィット方法（デフォルト: cover）。
     pub background_image_fit: BackgroundImageFit,
+    /// 初期ワーキングディレクトリ（省略時: ホームディレクトリ）。
+    ///
+    /// `~` で始まる場合はホームディレクトリに展開する。
+    /// `inherit_working_directory` より優先される。
+    pub working_directory: Option<String>,
+    /// パディング領域の背景色（デフォルト: "background" = ターミナル背景色と同じ）。
+    #[serde(default)]
+    pub padding_color: PaddingColor,
+    /// ウィンドウタイトルバーのサブタイトル表示（デフォルト: "none"）。
+    ///
+    /// `"none"`: サブタイトルなし。
+    /// `"working-directory"`: 現在の作業ディレクトリを表示（OSC 7 で更新）。
+    /// `"session-name"`: セッション名を表示。
+    #[serde(default)]
+    pub subtitle: WindowSubtitle,
 }
 
 impl Default for WindowConfig {
@@ -194,6 +232,9 @@ impl Default for WindowConfig {
             background_image: None,
             background_image_opacity: 0.3,
             background_image_fit: BackgroundImageFit::Cover,
+            working_directory: None,
+            padding_color: PaddingColor::Background,
+            subtitle: WindowSubtitle::None,
         }
     }
 }
@@ -523,6 +564,10 @@ impl Default for RightClickAction {
     }
 }
 
+fn default_click_repeat_interval() -> u32 {
+    300
+}
+
 /// マウス設定。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
@@ -531,6 +576,9 @@ pub struct MouseConfig {
     pub hide_when_typing: bool,
     /// 右クリック時の動作: "context_menu" (デフォルト), "paste", "none"。
     pub right_click_action: RightClickAction,
+    /// ダブル/トリプルクリック判定の時間間隔（ミリ秒、デフォルト: 300、範囲: 50-2000）。
+    #[serde(default = "default_click_repeat_interval")]
+    pub click_repeat_interval: u32,
 }
 
 /// スクロールバー設定。
@@ -592,7 +640,18 @@ pub struct LinkConfig {
 
 impl Default for MouseConfig {
     fn default() -> Self {
-        Self { hide_when_typing: false, right_click_action: RightClickAction::ContextMenu }
+        Self {
+            hide_when_typing: false,
+            right_click_action: RightClickAction::ContextMenu,
+            click_repeat_interval: default_click_repeat_interval(),
+        }
+    }
+}
+
+impl MouseConfig {
+    /// `click_repeat_interval` を安全な範囲（50〜2000 ミリ秒）にクランプする。
+    pub fn clamped_click_repeat_interval(&self) -> u32 {
+        self.click_repeat_interval.clamp(50, 2000)
     }
 }
 
@@ -731,6 +790,34 @@ const MAX_LINK_ENTRIES: usize = 32;
 const MAX_LINK_REGEX_LEN: usize = 512;
 const MAX_LINK_ACTION_LEN: usize = 1024;
 
+/// ターミナル設定。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct TerminalConfig {
+    /// Grapheme 幅計算方式: "unicode" (デフォルト) または "legacy"。
+    ///
+    /// `"unicode"`: Unicode 標準の幅計算を使用する（デフォルト）。
+    /// `"legacy"`: 旧来の wcswidth 互換モード（将来対応）。
+    pub grapheme_width_method: GraphemeWidthMethod,
+}
+
+impl Default for TerminalConfig {
+    fn default() -> Self {
+        Self { grapheme_width_method: GraphemeWidthMethod::Unicode }
+    }
+}
+
+/// Grapheme 幅計算方式。
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum GraphemeWidthMethod {
+    /// Unicode 標準の幅計算（デフォルト）。
+    #[default]
+    Unicode,
+    /// 旧来の wcswidth 互換モード（将来対応）。
+    Legacy,
+}
+
 /// SDIT 設定全体。
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default)]
@@ -784,6 +871,20 @@ pub struct Config {
     /// ```
     #[serde(default)]
     pub links: Vec<LinkConfig>,
+    /// PTY 起動時に注入する追加環境変数（最大 64 エントリ）。
+    ///
+    /// 親プロセスの環境変数に追加・上書きする形で設定される。
+    /// キー/値に制御文字が含まれるエントリはスキップして warn ログを出す。
+    ///
+    /// ```toml
+    /// [env]
+    /// TERM_PROGRAM = "sdit"
+    /// COLORTERM = "truecolor"
+    /// ```
+    #[serde(default)]
+    pub env: HashMap<String, String>,
+    /// ターミナル設定。
+    pub terminal: TerminalConfig,
 }
 
 impl Config {
@@ -903,6 +1004,8 @@ impl Config {
                 content.push_str("# minimum_contrast: minimum WCAG 2.0 contrast ratio for cell rendering (1.0 = disabled, max 21.0)\n");
                 content.push_str("#   fg color is auto-adjusted when the contrast ratio falls below this value\n");
                 content.push_str("#   e.g. minimum_contrast = 4.5  # WCAG AA level\n");
+                content.push_str("# search_foreground: search highlight foreground color as hex \"#RRGGBB\"; omit to use default\n");
+                content.push_str("# search_background: search highlight background color as hex \"#RRGGBB\"; omit to use default\n");
             } else if line == "[keybinds]" || line == "[[keybinds]]" {
                 content.push('\n');
                 content.push_str("# ── Keybinds ────────────────────────────────────────────\n");
@@ -966,6 +1069,13 @@ impl Config {
                 content.push_str("#   e.g. background_image = \"~/Pictures/bg.png\"\n");
                 content.push_str("# background_image_opacity: opacity of the background image (0.0-1.0, default: 0.3)\n");
                 content.push_str("# background_image_fit: how to fit the image: \"cover\" (default), \"contain\", \"fill\"\n");
+                content.push_str("# working_directory: initial working directory for new sessions (default: home directory)\n");
+                content.push_str("#   e.g. working_directory = \"~/Projects\"\n");
+                content.push_str("# padding_color: color of the padding area (default: \"background\" = same as terminal background)\n");
+                content.push_str("# subtitle: window subtitle display (default: \"none\")\n");
+                content.push_str("#   \"none\": no subtitle\n");
+                content.push_str("#   \"working-directory\": show current working directory (updated via OSC 7)\n");
+                content.push_str("#   \"session-name\": show session name\n");
             } else if line == "[paste]" {
                 content.push('\n');
                 content.push_str("# ── Paste ─────────────────────────────────────────────\n");
@@ -1027,6 +1137,7 @@ impl Config {
                 content.push_str("#   \"context_menu\": show context menu\n");
                 content.push_str("#   \"paste\": paste from clipboard\n");
                 content.push_str("#   \"none\": do nothing\n");
+                content.push_str("# click_repeat_interval: double/triple click detection interval in milliseconds (50-2000, default: 300)\n");
             } else if line == "[scrollbar]" {
                 content.push('\n');
                 content.push_str("# ── Scrollbar ──────────────────────────────────────────────\n");
@@ -1066,6 +1177,24 @@ impl Config {
                 content.push_str("#   [[links]]\n");
                 content.push_str("#   regex = \"JIRA-\\\\d+\"\n");
                 content.push_str("#   action = \"open:https://jira.example.com/browse/$0\"\n");
+            } else if line == "[env]" {
+                content.push('\n');
+                content.push_str("# ── Environment Variables ─────────────────────────────────\n");
+                content.push_str("# Extra environment variables injected into each PTY session (max 64 entries).\n");
+                content.push_str(
+                    "# Keys/values containing control characters are skipped with a warning.\n",
+                );
+                content.push_str("# Example:\n");
+                content.push_str("#   [env]\n");
+                content.push_str("#   TERM_PROGRAM = \"sdit\"\n");
+                content.push_str("#   COLORTERM = \"truecolor\"\n");
+            } else if line == "[terminal]" {
+                content.push('\n');
+                content.push_str("# ── Terminal ───────────────────────────────────────────────\n");
+                content.push_str("# grapheme_width_method: grapheme width calculation method (default: \"unicode\")\n");
+                content.push_str("#   \"unicode\": standard Unicode width calculation\n");
+                content
+                    .push_str("#   \"legacy\": legacy wcswidth-compatible mode (future support)\n");
             }
             content.push_str(line);
             content.push('\n');
