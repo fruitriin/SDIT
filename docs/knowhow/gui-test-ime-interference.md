@@ -23,6 +23,28 @@ key code 102 で英数切り替え後でも…
 **ASCII 文字（`echo` 等）は英数切り替え後に `keystroke` で送れる。**
 **CJK 文字は `keystroke` では送れない。PTY 直接書き込みを使うこと。**
 
+## keystroke vs key code の違い（重要）
+
+| 方法 | IME 経由 | 用途 |
+|---|---|---|
+| `keystroke "text"` | **経由する** | ASCII 文字は英数モード後に使える。CJK 文字は IME 変換が起動する |
+| `key code N` | **経由しない** | 物理キー相当。スペース・Enter・英数切り替え等に使う |
+
+**スペースは `keystroke " "` ではなく `key code 49` を使うこと。**
+`keystroke " "` は IME を経由するため変換トリガーになる。
+`key code 49`（スペースキー）は IME を通らず直接送れる。
+
+```applescript
+-- ✅ 正しい: key code でスペース
+keystroke "echo"
+key code 49    -- スペース（IME を通らない）
+keystroke "hello"
+key code 36    -- Enter（IME を通らない）
+
+-- ❌ 誤り: keystroke でスペース
+keystroke "echo "  -- スペースが IME の変換トリガーになる
+```
+
 ## 英数切り替えの方法と注意点
 
 ### key code 102（英数キー）
