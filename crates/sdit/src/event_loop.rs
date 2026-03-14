@@ -671,11 +671,11 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         if y > 0.0 {
                             #[allow(clippy::cast_possible_truncation)]
                             let base = -(y.ceil() as isize);
-                            base * multiplier
+                            base.saturating_mul(multiplier)
                         } else {
                             #[allow(clippy::cast_possible_truncation)]
                             let base = (-y).ceil() as isize;
-                            base * multiplier
+                            base.saturating_mul(multiplier)
                         }
                     }
                     MouseScrollDelta::PixelDelta(pos) => {
