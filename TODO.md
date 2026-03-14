@@ -3,7 +3,7 @@
 `docs/plans/` の完了状態・優先度をトラックする。
 `docs/plans/` と TODO が一致しなければ TODO を編集する。
 
-## 現在のフェーズ: （バックログ完了 — 機能発見フロー実行）
+## 現在のフェーズ: Phase 20.1（次に着手）
 
 ## バックログ
 
@@ -76,6 +76,12 @@
 | done | 19.3 | `docs/plans/phase19.3-command-notify.md` | **完了** |
 | done | 19.4 | `docs/plans/phase19.4-click-grapheme.md` | **完了** |
 | done | 19.5 | `docs/plans/phase19.5-window-subtitle.md` | **完了** |
+| 高 | 20.1 | `docs/plans/phase20.1-bold-faint.md` | 未着手 |
+| 中高 | 20.2 | `docs/plans/phase20.2-window-position.md` | 未着手 |
+| 中 | 20.3 | `docs/plans/phase20.3-focus-follows-mouse.md` | 未着手 |
+| 中 | 20.4 | `docs/plans/phase20.4-osc-color-report.md` | 未着手 |
+| 中 | 20.5 | `docs/plans/phase20.5-title-report.md` | 未着手 |
+| 中 | 20.6 | `docs/plans/phase20.6-enquiry-response.md` | 未着手 |
 
 
 オーナーリクエスト:

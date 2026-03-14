@@ -215,6 +215,29 @@
 - キーリマップ — キーシムレベル変換
 - デバッグインスペクター — 開発者向けツール
 
+### 2026-03-14: Phase 20 策定（品質・カスタマイズ向上 第2弾）
+
+**調査対象リファレンス:**
+- Ghostty: `src/config/Config.zig`（全設定項目再スキャン — bold-is-bright, faint-opacity, window-position, focus-follows-mouse, osc-color-report-format, title-report, enquiry-response, palette-generate, alpha-blending 等）
+- WezTerm: `config/src/config.rs`（font_rasterizer, font_locator 詳細設定）
+- Alacritty: `alacritty/src/config/`（再スキャン）
+
+**発見した機能ギャップ（Phase 20 Plan に反映済み）:**
+- Bold as Bright + Faint Opacity → Phase 20.1
+- ウィンドウ座標保存 → Phase 20.2
+- Focus Follows Mouse → Phase 20.3
+- OSC Color Report Format → Phase 20.4
+- Title Report Flag → Phase 20.5
+- Enquiry Response → Phase 20.6
+
+**将来検討（Phase 21+）:**
+- Kitty グラフィクスプロトコル — 実装規模大
+- カスタムシェーダー（Shadertoy 互換）— wgpu post-process パス
+- Palette Generation / Harmonious — 配色自動生成
+- Alpha Blending Mode — sRGB/Linear 切り替え
+- Font Locator/Rasterizer 詳細設定 — FreeType/CoreText hinting 等
+
 **未調査領域（次回の候補）:**
 - Ghostty: `src/terminal/kitty/graphics_exec.zig`（Kitty グラフィクス実行詳細）
+- Ghostty: `src/renderer/shadertoy.zig`（カスタムシェーダー実装詳細）
 - WezTerm: `wezterm-mux/src/`（Mux 層の詳細セッション管理）
