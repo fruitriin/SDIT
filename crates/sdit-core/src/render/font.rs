@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use crate::config::font::FontConfig;
+use crate::config::font::{CodepointRange, FontConfig};
 use cosmic_text::{
     Attrs, Buffer, Family, FontSystem, Metrics, Placement, Shaping, SwashCache, SwashContent,
     fontdb,
@@ -75,6 +75,17 @@ pub struct FontContext {
     line_height_factor: f32,
     /// シェーピング時に使うフォントファミリ名。
     font_family: String,
+    /// フォールバックフォントファミリ名リスト（cosmic-text はシステムフォールバックを自動処理するため検証用途）。
+    #[allow(dead_code)]
+    fallback_families: Vec<String>,
+    /// コードポイントレンジ別フォント指定。
+    codepoint_map: Vec<CodepointRange>,
+    /// セル幅加算値（ピクセル）。set_font_size 時に再適用するために保持。
+    adjust_cell_width: f32,
+    /// セル高さ加算値（ピクセル）。set_font_size 時に再適用するために保持。
+    adjust_cell_height: f32,
+    /// ベースライン加算値（ピクセル）。set_font_size 時に再適用するために保持。
+    adjust_baseline: f32,
 }
 
 impl FontContext {
@@ -82,6 +93,7 @@ impl FontContext {
     ///
     /// `font_size`: フォントサイズ（ピクセル）
     /// `line_height_factor`: 行の高さの倍率（例: 1.2）
+    #[allow(dead_code)]
     pub fn new(font_size: f32, line_height_factor: f32) -> Self {
         Self::from_config(&FontConfig {
             size: font_size,
@@ -97,12 +109,18 @@ impl FontContext {
         let line_height = font_size * config.clamped_line_height();
 
         // モノスペースフォントの em 幅からセル幅を計算する。
-        let cell_width = compute_cell_width(&mut font_system, font_size);
+        let raw_cell_width = compute_cell_width(&mut font_system, font_size);
 
         // ベースラインはフォントサイズの 80% 程度を目安にする（近似値）。
-        let baseline = font_size * 0.8;
+        let raw_baseline = font_size * 0.8;
 
-        let metrics = CellMetrics { cell_width, cell_height: line_height, baseline, font_size };
+        // FontAdjust を適用する。
+        let adj = &config.adjust;
+        let cell_width = (raw_cell_width + adj.clamped_cell_width()).max(1.0);
+        let cell_height = (line_height + adj.clamped_cell_height()).max(1.0);
+        let baseline = (raw_baseline + adj.clamped_baseline()).max(0.0);
+
+        let metrics = CellMetrics { cell_width, cell_height, baseline, font_size };
 
         Self {
             font_system,
@@ -112,12 +130,30 @@ impl FontContext {
             font_size,
             line_height_factor: config.clamped_line_height(),
             font_family: config.family.clone(),
+            fallback_families: config.fallback_families.clone(),
+            codepoint_map: config.parsed_codepoint_map(),
+            adjust_cell_width: adj.clamped_cell_width(),
+            adjust_cell_height: adj.clamped_cell_height(),
+            adjust_baseline: adj.clamped_baseline(),
         }
     }
 
     /// セルメトリクスを返す。
     pub fn metrics(&self) -> &CellMetrics {
         &self.metrics
+    }
+
+    /// 文字 `c` に対して使うべきフォントファミリ名を返す。
+    ///
+    /// `codepoint_map` にヒットした場合はそのファミリ名を返す。
+    /// ヒットしない場合はデフォルトの `font_family` を返す。
+    fn resolve_family_for_char(&self, c: char) -> &str {
+        for range in &self.codepoint_map {
+            if range.contains(c) {
+                return &range.family;
+            }
+        }
+        &self.font_family
     }
 
     /// フォントサイズを変更してメトリクスを再計算する。グリフキャッシュはクリアされる。
@@ -128,10 +164,13 @@ impl FontContext {
     pub fn set_font_size(&mut self, font_size: f32) {
         let font_size = if font_size.is_finite() { font_size.clamp(1.0, 200.0) } else { 14.0 };
         self.font_size = font_size;
-        let line_height = font_size * self.line_height_factor;
-        let cell_width = compute_cell_width(&mut self.font_system, font_size);
-        let baseline = font_size * 0.8;
-        self.metrics = CellMetrics { cell_width, cell_height: line_height, baseline, font_size };
+        let raw_line_height = font_size * self.line_height_factor;
+        let raw_cell_width = compute_cell_width(&mut self.font_system, font_size);
+        let raw_baseline = font_size * 0.8;
+        let cell_width = (raw_cell_width + self.adjust_cell_width).max(1.0);
+        let cell_height = (raw_line_height + self.adjust_cell_height).max(1.0);
+        let baseline = (raw_baseline + self.adjust_baseline).max(0.0);
+        self.metrics = CellMetrics { cell_width, cell_height, baseline, font_size };
         self.glyph_cache.clear();
     }
 
@@ -152,7 +191,10 @@ impl FontContext {
         buf.set_size(&mut self.font_system, Some(f32::MAX), Some(line_height * 2.0));
         let mut s = [0u8; 4];
         let text = c.encode_utf8(&mut s);
-        let attrs = Attrs::new().family(Family::Name(&self.font_family));
+        // resolve_family_for_char は &self を借用するため、先に String にコピーして
+        // その後 font_system の可変借用を取る。
+        let family_name = self.resolve_family_for_char(c).to_owned();
+        let attrs = Attrs::new().family(Family::Name(&family_name));
         buf.set_text(&mut self.font_system, text, attrs, Shaping::Advanced);
         buf.shape_until_scroll(&mut self.font_system, false);
 
@@ -202,8 +244,27 @@ impl FontContext {
         // set_size() を呼ばないと shape_until_scroll() がレイアウトを実行しないため
         // 幅は f32::MAX（折り返しなし）、高さは 2 行分を確保する。
         buf.set_size(&mut self.font_system, Some(f32::MAX), Some(line_height * 2.0));
-        let attrs = Attrs::new().family(Family::Name(&self.font_family));
-        buf.set_text(&mut self.font_system, line_text, attrs, Shaping::Advanced);
+
+        if self.codepoint_map.is_empty() {
+            // codepoint_map が空なら単一 Attrs でシェーピング（高速パス）。
+            let attrs = Attrs::new().family(Family::Name(&self.font_family));
+            buf.set_text(&mut self.font_system, line_text, attrs, Shaping::Advanced);
+        } else {
+            // codepoint_map が設定されている場合、連続する同ファミリのスパンにまとめて
+            // set_rich_text でシェーピングする。
+            let spans = build_rich_text_spans(line_text, &self.codepoint_map, &self.font_family);
+            let default_attrs = Attrs::new().family(Family::Name(&self.font_family));
+            // set_rich_text は (&str, Attrs) のイテレータを取るが、Attrs が Family::Name の
+            // 参照を持つため、spans を直接渡すとライフタイムが問題になる。
+            // ここでは build_rich_text_spans の結果（String + family str）を用いて
+            // set_rich_text に渡す。
+            buf.set_rich_text(
+                &mut self.font_system,
+                spans.iter().map(|(s, f)| (s.as_str(), Attrs::new().family(Family::Name(f)))),
+                default_attrs,
+                Shaping::Advanced,
+            );
+        }
         buf.shape_until_scroll(&mut self.font_system, false);
 
         // 入力テキストの各バイト位置をセルカラムにマッピング。
@@ -279,6 +340,30 @@ impl FontContext {
 // ---------------------------------------------------------------------------
 // 内部ヘルパー
 // ---------------------------------------------------------------------------
+
+/// テキストを codepoint_map に基づいてスパン（`(String, &str)`）に分割する。
+///
+/// 返却値: `(テキスト断片, フォントファミリ名)` のベクタ。
+/// 連続する同ファミリの文字は一つのスパンにまとめる。
+fn build_rich_text_spans<'a>(
+    text: &str,
+    codepoint_map: &'a [CodepointRange],
+    default_family: &'a str,
+) -> Vec<(String, &'a str)> {
+    let mut spans: Vec<(String, &'a str)> = Vec::new();
+    for c in text.chars() {
+        let family =
+            codepoint_map.iter().find(|r| r.contains(c)).map_or(default_family, |r| &r.family);
+        if let Some(last) = spans.last_mut() {
+            if last.1 == family {
+                last.0.push(c);
+                continue;
+            }
+        }
+        spans.push((c.to_string(), family));
+    }
+    spans
+}
 
 /// `PhysicalGlyph` のキャッシュキーからグリフをラスタライズしてアトラスに書き込む。
 ///

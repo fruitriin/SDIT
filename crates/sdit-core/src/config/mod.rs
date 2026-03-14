@@ -352,6 +352,7 @@ impl Config {
             Ok(contents) => match toml::from_str::<Config>(&contents) {
                 Ok(mut config) => {
                     config.keybinds.validate();
+                    config.font.validate();
                     log::info!("Loaded config from {}", path.display());
                     config
                 }
@@ -415,6 +416,26 @@ impl Config {
                     .push_str("# line_height: line height multiplier (0.5 - 5.0, default: 1.2)\n");
                 content.push_str(
                     "# fallback_families: list of fallback font families (e.g. for CJK)\n",
+                );
+                content.push_str(
+                    "# codepoint_map: per-codepoint-range font override (max 64 entries)\n",
+                );
+                content.push_str(
+                    "#   e.g. [font.codepoint_map] \"U+3000-U+9FFF\" = \"Noto Sans CJK\"\n",
+                );
+                content.push_str(
+                    "# variation: OpenType font variation (max 16 entries, future support)\n",
+                );
+                content.push_str("#   e.g. [font.variation] wght = 700.0\n");
+                content.push_str(
+                    "# feature: OpenType font feature on/off (max 32 entries, future support)\n",
+                );
+                content.push_str("#   e.g. [font.feature] calt = true\n");
+                content.push_str(
+                    "# adjust: fine-tune cell metrics (cell_width, cell_height, baseline in pixels)\n",
+                );
+                content.push_str(
+                    "#   e.g. [font.adjust] cell_width = 1.0  cell_height = 0.0  baseline = -1.0\n",
                 );
             } else if line == "[colors]" {
                 content.push('\n');
