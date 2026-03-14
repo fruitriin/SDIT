@@ -7,18 +7,25 @@ SDIT では severity 1（最厳格）で CI ゲートに組み込み済み。
 
 ## CI 設定
 
+`.savanna.toml` をプロジェクトルートに配置。CLI引数不要で設定が自動適用される。
+
+```toml
+# .savanna.toml
+min-severity = 1
+fail-on-smell = true
+magic-number-whitelist = [24, 80, 0, 1, 255, 256, 4096]
+assertion-roulette-threshold = 5
+```
+
 ```bash
-# scripts/check.sh
-SMELL_MAGIC_WHITELIST="24,80,0,1,255,256,4096"
-savanna-smell-detector --min-severity 1 --fail-on-smell \
-  --magic-number-whitelist "$SMELL_MAGIC_WHITELIST" \
-  --assertion-roulette-threshold 5 crates/
+# scripts/check.sh — 設定は .savanna.toml から自動読み込み
+savanna-smell-detector crates/
 ```
 
 ### オプションの意味
 
-- `--magic-number-whitelist "24,80,0,1,255,256,4096"`: ターミナル業界の標準値（24行80桁）、境界値（0,1）、8bit境界（255,256）、バッファ上限（4096）を除外
-- `--assertion-roulette-threshold 5`: メッセージなし assert が5個以上あるテストのみ検出。Rust は `file:line` がパニック時に表示されるため、少数なら問題にならない
+- `magic-number-whitelist`: ターミナル業界の標準値（24行80桁）、境界値（0,1）、8bit境界（255,256）、バッファ上限（4096）を除外
+- `assertion-roulette-threshold = 5`: メッセージなし assert が5個以上あるテストのみ検出。Rust は `file:line` がパニック時に表示されるため、少数なら問題にならない
 
 ## severity 段階的引き下げ戦略
 
@@ -40,10 +47,6 @@ fn test_pty_spawn() { ... }
 #[test]
 #[ignore = "GUI 環境が必要"]
 fn gui_test() { ... }
-
-// smell-allow: fragile-test — sleep ではなく時刻算術で未来の時点を生成
-#[test]
-fn visual_bell_fades() { ... }
 
 // smell-allow: magic-number — ピクセルデータは連番パターンで意図が明確
 #[test]
@@ -123,5 +126,5 @@ fn default_shell_unset() {
 ## SDIT での統計
 
 - テスト数: 575
-- smell-allow サプレス: 27件
+- smell-allow サプレス: 25件
 - 検出: 0件（severity 1）

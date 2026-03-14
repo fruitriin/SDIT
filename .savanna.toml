@@ -1,0 +1,4 @@
+min-severity = 1
+fail-on-smell = true
+magic-number-whitelist = [24, 80, 0, 1, 255, 256, 4096]
+assertion-roulette-threshold = 5
