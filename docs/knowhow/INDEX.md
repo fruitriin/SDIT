@@ -47,6 +47,7 @@
 | ファイル | 要約 | キーワード |
 |---|---|---|
 | [context-menu-macos.md](context-menu-macos.md) | macOS 右クリックコンテキストメニューの muda 統合、MenuEvent 共有マップ、unsafe スコープ限定パターン | `show_context_menu_for_nsview`, `#![allow(unsafe_code)]`, `SharedMenuActions`, `Arc<Mutex<HashMap<MenuId, Action>>>`, `extend()`, `MouseButton::Right`, `dead_code` |
+| [muda-menubar-integration.md](muda-menubar-integration.md) | muda ネイティブメニューバー統合: init_for_nsapp を resumed() 後に呼ぶパターン、メニュークリック時クラッシュ（ZeroWidth アイコン）、list-menus.sh joinList バグ | `init_for_nsapp`, `resumed()`, `Option<Menu>`, `take()`, `PlatformIcon::to_png`, `ZeroWidth`, `joinList`, `list-menus.sh`, `muda 0.17.1` |
 
 ## UI インタラクション
 

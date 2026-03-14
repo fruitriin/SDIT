@@ -10,12 +10,14 @@
 
 ## 問題の記録
 
-ビルド破壊の未コミット残留
+- ビルド破壊の未コミット残留
 前セッションのエージェントが `session/persistence.rs`（SessionRestoreInfo, WindowSnapshot, window_sessions）と `config/keybinds.rs`（ToggleCommandPalette, all_with_names）および `command_palette.rs` を作成・変更したが、これらをコミットせずにセッションを終了した。一方でこれらを参照する `event_loop.rs` や `window_ops.rs` の変更はコミットされており、main ブランチが壊れた状態になっていた。
+
+- アプリケーションのアイコンがないとクラッシュするようなので、ダミーpngを作成する
 
 ## 改善アクション
 
-（なし）
+- `list-menus.sh` の `joinList` AppleScript ハンドラが `tell application "System Events"` ブロック内で呼び出すと機能せず、空のメニューリストを返す問題がある。手動ループに置き換えることで修正可能（Phase 21.5 統合テストで発見）
 
 ## 完了済み
 
