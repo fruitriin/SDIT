@@ -19,6 +19,14 @@
 
 - `list-menus.sh` の `joinList` AppleScript ハンドラが `tell application "System Events"` ブロック内で呼び出すと機能せず、空のメニューリストを返す問題がある。手動ループに置き換えることで修正可能（Phase 21.5 統合テストで発見）
 
+- `annotate-grid` の画像反転バグ（Phase 24 統合テストで発見、2026-03-14）:
+  `screencapture` フォールバック経由のPNGを入力すると、出力画像の元画像コンテンツが上下反転する。
+  根本原因: `screencapture` 生成PNGは既に正立（上が上）だが、`annotate-grid.swift` のL350-352の
+  `translateBy(x:0, y:H) + scaleBy(x:1, y:-1)` flip変換が余分に適用されている。
+  ラベル座標（0,0が左上）は正しいが、元画像コンテンツが逆さまになるため LLM の判定に混乱を招く。
+  修正案: CGImageの向きを確認して条件分岐するか、flip変換を削除してCGContextのY軸を直接扱う。
+  影響範囲: `tools/test-utils/annotate-grid.swift` のみ。シナリオ 029 に既知の注意事項として記録済み。
+
 ## 完了済み
 
 - 依存パッケージ提案ルール → CLAUDE.md 依存クレート方針に反映（Plan 段階でクレート名・用途・代替手段を明記）

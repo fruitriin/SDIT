@@ -62,7 +62,20 @@ project_doc_fallback_filenames = ["CLAUDE.md"]
 - 対話的: `medium`（速度と品質のバランス）
 - 自律実行: `high` or `xhigh`（難しいタスク向け）
 
-### GPT-5 mini（Copilot CLI デフォルト・premium request 消費なし）
+### Copilot CLI のモデル自動選択（実測）
+
+**`-m` 指定なしでも Claude が選ばれる場合がある。**
+
+Phase 24 の実測（Swift 実装タスク）:
+- モデル: `claude-sonnet-4.6`（3.4M tokens in、31.9k out）
+- 消費: 1 premium request
+- 所要: 8分5秒
+
+Copilot が内部でタスク複雑度を判定し、GPT-5 mini では難しいと判断すると
+自動で Claude Sonnet などの高性能モデルに切り替える模様。
+明示的に無料モデルに固定したい場合は `-m gpt-4o-mini` などを指定すること。
+
+### GPT-5 mini（Copilot CLI の軽量選択肢・premium request 消費なし）
 
 **得意:**
 - 軽量タスク（テスト追加、フォーマット修正、単純なリファクタ）

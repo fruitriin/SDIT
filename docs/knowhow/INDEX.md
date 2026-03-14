@@ -70,6 +70,7 @@
 | [gui-test-ime-interference.md](gui-test-ime-interference.md) | macOS GUI テストで日本語 IME が有効だと AppleScript keystroke が文字化けする問題。英数キー送信またはクリップボード経由で回避 | `keystroke`, `key code 102`, `英数キー`, `pbcopy`, `Cmd+V`, `set_ime_allowed`, `AppleScript`, `IME バイパス`, `クリップボード経由` |
 | [gui-test-process-identification.md](gui-test-process-identification.md) | 同名プロセス複数存在時にテストツールが意図しないプロセスを操作する問題と回避策 | `pgrep -x`, `ps -eo pid,comm`, `window-info`, `send-keys.sh`, `capture-window`, `--pid`, `pkill`, `trap cleanup EXIT` |
 | [gui-test-screen-recording-permission.md](gui-test-screen-recording-permission.md) | capture-window の CGS_REQUIRE_INIT アサーション失敗・ディスプレイスリープ中の黒画像問題と対処法 | `CGS_REQUIRE_INIT`, `ScreenCaptureKit`, `exit code 134`, `SIGABRT`, `screencapture -R`, `画面収録権限`, `VSCode 再起動`, `Display Asleep`, `黒画像`, `window size 0` |
+| [gui-test-image-tools.md](gui-test-image-tools.md) | annotate-grid（--divide/--every）と clip-image（--grid-cell/--rect）の動作・バリデーション・画像反転バグと Workaround | `annotate-grid`, `clip-image`, `--divide`, `--every`, `--grid-cell`, `--rect`, `CGContext flip`, `screencapture 反転バグ`, `ラベル座標`, `最終列余りピクセル` |
 
 ## 開発プロセス・ツール
 
