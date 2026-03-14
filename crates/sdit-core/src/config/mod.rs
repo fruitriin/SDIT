@@ -297,6 +297,33 @@ pub struct MouseConfig {
     pub hide_when_typing: bool,
 }
 
+/// スクロールバー設定。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ScrollbarConfig {
+    /// スクロールバーを表示するかどうか（デフォルト: true）。
+    ///
+    /// `history_size == 0`（スクロールバックなし）の場合は常に非表示。
+    pub enabled: bool,
+    /// スクロールバーの幅（ピクセル単位、デフォルト: 8、範囲: 2-32）。
+    ///
+    /// 実際の描画はセル1列単位のため、視覚的なヒントとして保持する。
+    pub width: u8,
+}
+
+impl Default for ScrollbarConfig {
+    fn default() -> Self {
+        Self { enabled: true, width: 8 }
+    }
+}
+
+impl ScrollbarConfig {
+    /// width を安全な範囲（2〜32）にクランプする。
+    pub fn clamped_width(&self) -> u8 {
+        self.width.clamp(2, 32)
+    }
+}
+
 /// セキュリティ設定。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
@@ -417,6 +444,8 @@ pub struct Config {
     pub selection: SelectionConfig,
     /// マウス設定。
     pub mouse: MouseConfig,
+    /// スクロールバー設定。
+    pub scrollbar: ScrollbarConfig,
     /// セキュリティ設定。
     pub security: SecurityConfig,
     /// カスタムリンク設定。最大 32 エントリ。
@@ -647,6 +676,13 @@ impl Config {
                 content.push_str(
                     "# hide_when_typing: hide mouse cursor while typing (default: false)\n",
                 );
+            } else if line == "[scrollbar]" {
+                content.push('\n');
+                content.push_str("# ── Scrollbar ──────────────────────────────────────────────\n");
+                content.push_str(
+                    "# enabled: show scrollbar when scrollback history exists (default: true)\n",
+                );
+                content.push_str("# width: scrollbar width hint in pixels (2-32, default: 8)\n");
             } else if line == "[security]" {
                 content.push('\n');
                 content.push_str("# ── Security ───────────────────────────────────────────────\n");
@@ -687,6 +723,40 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scrollbar_config_default() {
+        let cfg = ScrollbarConfig::default();
+        assert!(cfg.enabled, "enabled のデフォルトは true");
+        assert_eq!(cfg.width, 8, "width のデフォルトは 8");
+    }
+
+    #[test]
+    fn scrollbar_config_clamped_width() {
+        let cfg = ScrollbarConfig { enabled: true, width: 1 };
+        assert_eq!(cfg.clamped_width(), 2, "width=1 はクランプされて 2 になる");
+
+        let cfg = ScrollbarConfig { enabled: true, width: 8 };
+        assert_eq!(cfg.clamped_width(), 8, "width=8 はそのまま");
+
+        let cfg = ScrollbarConfig { enabled: true, width: 33 };
+        assert_eq!(cfg.clamped_width(), 32, "width=33 はクランプされて 32 になる");
+    }
+
+    #[test]
+    fn scrollbar_config_deserialize() {
+        let toml_str = "[scrollbar]\nenabled = false\nwidth = 12\n";
+        let cfg: Config = toml::from_str(toml_str).unwrap();
+        assert!(!cfg.scrollbar.enabled);
+        assert_eq!(cfg.scrollbar.width, 12);
+    }
+
+    #[test]
+    fn scrollbar_config_default_in_full_config() {
+        let cfg = Config::default();
+        assert!(cfg.scrollbar.enabled);
+        assert_eq!(cfg.scrollbar.width, 8);
+    }
 
     #[test]
     fn security_config_default() {

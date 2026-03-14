@@ -345,6 +345,8 @@ pub(crate) struct SditApp {
     pub(crate) notification_in_flight: Arc<AtomicBool>,
     /// セッションリネームモードの状態。`Some((SessionId, 入力中テキスト))` のとき編集中。
     pub(crate) renaming_session: Option<(sdit_core::session::SessionId, String)>,
+    /// スクロールバーをドラッグ中かどうか。
+    pub(crate) scrollbar_dragging: bool,
     /// Secure Keyboard Entry が現在有効かどうか（macOS のみ有効）。
     #[cfg(target_os = "macos")]
     pub(crate) secure_input_enabled: bool,
@@ -407,6 +409,7 @@ impl SditApp {
             compiled_quick_select_patterns: compile_quick_select_patterns(config),
             notification_in_flight: Arc::new(AtomicBool::new(false)),
             renaming_session: None,
+            scrollbar_dragging: false,
             #[cfg(target_os = "macos")]
             secure_input_enabled: false,
             #[cfg(target_os = "macos")]

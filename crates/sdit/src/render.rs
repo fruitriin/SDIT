@@ -481,6 +481,78 @@ impl SditApp {
             }
         }
 
+        // スクロールバー描画（vi モード後、request_redraw の直前）
+        if self.config.scrollbar.enabled {
+            let session_ref = self.session_mgr.get(session_id);
+            if let Some(s) = session_ref {
+                let state = s.term_state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                let grid = state.terminal.grid();
+                let history_size = grid.history_size();
+                let screen_lines = grid.screen_lines();
+                let display_offset = grid.display_offset();
+                let cols = grid.columns();
+
+                if history_size > 0 && cols > 0 {
+                    // スクロールバー位置計算
+                    let total_lines = history_size + screen_lines;
+                    let thumb_ratio = (screen_lines as f32 / total_lines as f32).clamp(0.0, 1.0);
+                    let scroll_ratio = display_offset as f32 / history_size as f32;
+                    // scroll_ratio: 0.0 = 最下部（最新）, 1.0 = 最上部（最古）
+
+                    let scrollbar_col = cols.saturating_sub(1);
+
+                    // thumb_rows: サムが占める行数（最低1行）
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    let thumb_rows = ((thumb_ratio * screen_lines as f32).ceil() as usize).max(1);
+
+                    // thumb_top_row: サムの先頭行（0=ビューポート先頭, screen_lines-1=末尾）
+                    // scroll_ratio=1.0(最上部)のとき thumb_top=0,
+                    // scroll_ratio=0.0(最下部)のとき thumb_top=screen_lines-thumb_rows
+                    let available = screen_lines.saturating_sub(thumb_rows);
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    let thumb_top =
+                        (((1.0 - scroll_ratio) * available as f32).round() as usize).min(available);
+
+                    // トラック色（背景より少し明るく半透明）
+                    let bg = self.colors.background;
+                    let track_bg = [
+                        (bg[0] + 0.08).min(1.0),
+                        (bg[1] + 0.08).min(1.0),
+                        (bg[2] + 0.08).min(1.0),
+                        1.0,
+                    ];
+                    // サム色（前景色を50%透明度で表現: bg と blend）
+                    let fg = self.colors.foreground;
+                    let thumb_bg = [
+                        bg[0] * 0.5 + fg[0] * 0.5,
+                        bg[1] * 0.5 + fg[1] * 0.5,
+                        bg[2] * 0.5 + fg[2] * 0.5,
+                        1.0,
+                    ];
+
+                    // スクロールバーセルを上書き
+                    for row in 0..screen_lines {
+                        let is_thumb = row >= thumb_top && row < thumb_top + thumb_rows;
+                        let cell_bg = if is_thumb { thumb_bg } else { track_bg };
+                        let vertex = CellVertex {
+                            bg: cell_bg,
+                            fg: [0.0; 4],
+                            grid_pos: [scrollbar_col as f32, row as f32],
+                            uv: [0.0; 4],
+                            glyph_offset: [0.0; 2],
+                            glyph_size: [0.0; 2],
+                            cell_width_scale: 1.0,
+                            is_color_glyph: 0.0,
+                        };
+                        let cell_index = row * cols + scrollbar_col;
+                        ws.cell_pipeline.overwrite_cell(&ws.gpu.queue, cell_index, &vertex);
+                    }
+                    drop(state);
+                    ws.atlas.upload_if_dirty(&ws.gpu.queue);
+                }
+            }
+        }
+
         ws.window.request_redraw();
     }
 

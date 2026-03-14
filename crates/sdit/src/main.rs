@@ -9,6 +9,7 @@ mod menu;
 mod quick_select;
 mod rename;
 mod render;
+mod scrollbar;
 mod secure_input;
 mod selection_utils;
 mod url_hover;
