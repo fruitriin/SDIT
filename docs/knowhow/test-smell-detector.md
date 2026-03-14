@@ -11,6 +11,7 @@ SDIT では severity 1（最厳格）で CI ゲートに組み込み済み。
 
 ```toml
 # .savanna.toml
+target = "crates/"
 min-severity = 1
 fail-on-smell = true
 magic-number-whitelist = [24, 80, 0, 1, 255, 256, 4096]
@@ -19,7 +20,7 @@ assertion-roulette-threshold = 5
 
 ```bash
 # scripts/check.sh — 設定は .savanna.toml から自動読み込み
-savanna-smell-detector crates/
+savanna-smell-detector
 ```
 
 ### オプションの意味

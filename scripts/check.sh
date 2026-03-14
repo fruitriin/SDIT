@@ -18,7 +18,7 @@ echo "==> cargo test"
 cargo test
 
 echo "==> savanna-smell-detector (.savanna.toml)"
-savanna-smell-detector crates/
+savanna-smell-detector
 
 echo ""
 echo "All checks passed."
