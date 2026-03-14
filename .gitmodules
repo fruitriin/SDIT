@@ -20,3 +20,9 @@
 [submodule "refs/rust-clippy"]
 	path = refs/rust-clippy
 	url = https://github.com/rust-lang/rust-clippy.git
+[submodule "refs/waveterm"]
+	path = refs/waveterm
+	url = https://github.com/wavetermdev/waveterm.git
+[submodule "refs/domterm"]
+	path = refs/domterm
+	url = https://github.com/PerBothner/DomTerm.git
