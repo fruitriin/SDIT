@@ -21,6 +21,7 @@ Thumbs.db
 
 # Claude Code (local settings)
 .claude/settings.local.json
+.claude/*.lock
 CLAUDE.local.md
 
 # Test output (GUI interaction tests) - compiled binaries and screenshots
