@@ -3,12 +3,15 @@
 `docs/plans/` の完了状態・優先度をトラックする。
 `docs/plans/` と TODO が一致しなければ TODO を編集する。
 
-## 現在のフェーズ: Phase 25（次に着手）
+## 現在のフェーズ: Phase 26（次に着手）
 
 ## バックログ
 
 | 優先度 | Phase | 計画ファイル | 状態 |
 |---|---|---|---|
+| 高 | 26.1 | `docs/plans/phase26.1-unconsumed-keybind.md` | 未着手 |
+| 中 | 26.2 | `docs/plans/phase26.2-palette-generation.md` | 未着手 |
+| 低 | 26.3 | `docs/plans/phase26.3-global-hotkey-actions.md` | 未着手 |
 | done | 25.1 | `docs/plans/phase25.1-resize-increments.md` | **完了** |
 | done | 25.2 | `docs/plans/phase25.2-east-asian-ambiguous-width.md` | **完了** |
 | done | 25.3 | `docs/plans/phase25.3-window-colorspace.md` | **完了** |

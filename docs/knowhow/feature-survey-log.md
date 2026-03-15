@@ -260,3 +260,21 @@
 - Bidi テキストサポート — アラビア語・ヘブライ語
 - macOS Dock ドロップ挙動設定 (`macos-dock-drop-behavior`)
 - macOS ウィンドウボタン表示制御 (`macos-window-buttons`)
+
+### 2026-03-15: Phase 26 策定（キーバインド高度化・パレット生成・グローバルホットキー）
+
+**調査対象リファレンス:**
+- Ghostty: `refs/ghostty/src/config/Config.zig`（全体スキャン — palette-generate/harmonious, unconsumed:/performable:, key tables, global: prefix, undo-timeout）
+- WezTerm: `refs/wezterm/config/src/config.rs`（bidi, FreeType 設定）
+- Alacritty: `refs/alacritty/alacritty/src/config/` (一般・デバッグ設定)
+
+**発見した機能ギャップ（Phase 26 Plan に反映済み）:**
+- `unconsumed:` キーバインドプレフィックス → Phase 26.1
+- パレット自動生成（palette-generate/harmonious） → Phase 26.2
+- グローバルホットキー追加アクション設定 → Phase 26.3
+
+**将来検討（Plan 未作成）:**
+- Chained Keybinds（複数アクション連鎖）— 複雑、独立フェーズ
+- Key Tables（モーダルキーバインド）— vi-mode の延長線
+- Performable keybind prefix（実行可能時のみ消費）— Phase 26.1 の延長
+- Undo timeout（macOS 操作取り消し）— macOS 限定、ニッチ
