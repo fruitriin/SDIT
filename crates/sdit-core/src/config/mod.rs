@@ -1253,7 +1253,7 @@ impl Config {
                 content.push_str("# ── Colors ─────────────────────────────────────────────\n");
                 content.push_str("# theme: built-in color theme name\n");
                 content.push_str(
-                    "#   available: \"catppuccin-mocha\", \"catppuccin-latte\", \"gruvbox-dark\",\n",
+                    "#   available: \"clear-dark\", \"catppuccin-mocha\", \"catppuccin-latte\", \"gruvbox-dark\",\n",
                 );
                 content.push_str(
                     "#              \"solarized-dark\", \"solarized-light\", \"dracula\", \"nord\", \"one-dark\", \"tokyo-night\"\n",

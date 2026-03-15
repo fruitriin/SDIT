@@ -61,22 +61,34 @@ impl GpuContext<'_> {
 
         let size = window.inner_size();
         let caps = surface.get_capabilities(&adapter);
-        // prefer_wide_color: Bgra8UnormSrgb を優先（Display P3 の近似）、なければ先頭フォーマットを使用
+        // サーフェスフォーマット選択:
+        // シェーダに渡す色は sRGB 空間の値をそのまま 0.0-1.0 にマッピングしているため、
+        // *Srgb フォーマットを使うとガンマ補正が二重にかかり色が薄くなる。
+        // 非 sRGB フォーマット（Bgra8Unorm 等）を優先し、sRGB 値をそのまま書き込む。
         let format = if prefer_wide_color {
+            // 広色域: 非 sRGB の Bgra8Unorm を優先
             let wide = caps
                 .formats
                 .iter()
                 .copied()
-                .find(|&f| matches!(f, wgpu::TextureFormat::Bgra8UnormSrgb));
+                .find(|&f| matches!(f, wgpu::TextureFormat::Bgra8Unorm));
             if wide.is_none() {
                 log::debug!(
-                    "display-p3: Bgra8UnormSrgb not available, falling back to default surface format"
+                    "display-p3: Bgra8Unorm not available, falling back to default surface format"
                 );
             }
             wide.or_else(|| caps.formats.first().copied())
                 .context("対応サーフェスフォーマットなし")?
         } else {
-            caps.formats.first().copied().context("対応サーフェスフォーマットなし")?
+            // 非 sRGB フォーマットを優先して選択
+            let non_srgb = caps
+                .formats
+                .iter()
+                .copied()
+                .find(|f| !f.is_srgb());
+            non_srgb
+                .or_else(|| caps.formats.first().copied())
+                .context("対応サーフェスフォーマットなし")?
         };
 
         let surface_config = wgpu::SurfaceConfiguration {

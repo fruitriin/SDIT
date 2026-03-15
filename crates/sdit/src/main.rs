@@ -9,6 +9,7 @@ mod headless;
 mod input;
 #[cfg(target_os = "macos")]
 mod menu;
+mod mouse_handler;
 mod quick_select;
 mod quick_terminal;
 mod rename;

@@ -511,6 +511,7 @@ impl SditApp {
         let pty_size = PtySize::new(rows.try_into().unwrap_or(24), cols.try_into().unwrap_or(80));
         let mut pty_config = PtyConfig::default();
         pty_config.env.insert("TERM".to_owned(), "xterm-256color".to_owned());
+        pty_config.env.insert("COLORTERM".to_owned(), "truecolor".to_owned());
         pty_config.env.insert("TERM_PROGRAM".to_owned(), "sdit".to_owned());
 
         // Config の env を注入（最大 64 エントリ、制御文字を含むキー/値はスキップ）

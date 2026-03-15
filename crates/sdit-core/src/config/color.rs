@@ -43,7 +43,7 @@ pub struct ColorConfig {
 impl Default for ColorConfig {
     fn default() -> Self {
         Self {
-            theme: ThemeName::CatppuccinMocha,
+            theme: ThemeName::ClearDark,
             selection_foreground: None,
             selection_background: None,
             minimum_contrast: 1.0,
@@ -107,6 +107,8 @@ pub enum ThemeName {
     OneDark,
     #[serde(rename = "tokyo-night")]
     TokyoNight,
+    #[serde(rename = "clear-dark")]
+    ClearDark,
 }
 
 impl ThemeName {
@@ -122,6 +124,7 @@ impl ThemeName {
             ThemeName::Nord,
             ThemeName::OneDark,
             ThemeName::TokyoNight,
+            ThemeName::ClearDark,
         ]
     }
 
@@ -173,6 +176,7 @@ impl ResolvedColors {
             ThemeName::Nord => Self::nord(),
             ThemeName::OneDark => Self::one_dark(),
             ThemeName::TokyoNight => Self::tokyo_night(),
+            ThemeName::ClearDark => Self::clear_dark(),
         }
     }
 
@@ -451,11 +455,41 @@ impl ResolvedColors {
             ],
         }
     }
+
+    /// macOS Terminal.app "Clear Dark" テーマ準拠。
+    fn clear_dark() -> Self {
+        Self {
+            background: hex_to_rgba(0x21, 0x27, 0x33),        // bg (a=0.95 in Terminal.app)
+            foreground: hex_to_rgba(0xe5, 0xe5, 0xe5),        // text
+            sidebar_bg: hex_to_rgba(0x1a, 0x1f, 0x29),        // bg より暗め
+            sidebar_active_bg: hex_to_rgba(0x33, 0x4d, 0x5e), // selection color
+            sidebar_fg: hex_to_rgba(0xe5, 0xe5, 0xe5),        // text
+            sidebar_dim_fg: hex_to_rgba(0x80, 0x90, 0xa0),    // dim text
+            ansi_palette: [
+                hex_to_rgba(0x35, 0x42, 0x4b), // 0=Black
+                hex_to_rgba(0xb3, 0x55, 0x47), // 1=Red
+                hex_to_rgba(0x6c, 0xaa, 0x70), // 2=Green
+                hex_to_rgba(0xc4, 0xab, 0x62), // 3=Yellow
+                hex_to_rgba(0x6d, 0x95, 0xb3), // 4=Blue
+                hex_to_rgba(0xbd, 0x7b, 0xcc), // 5=Magenta
+                hex_to_rgba(0x7b, 0xca, 0xcd), // 6=Cyan
+                hex_to_rgba(0xdd, 0xe5, 0xeb), // 7=White
+                hex_to_rgba(0x46, 0x5c, 0x6c), // 8=BrightBlack
+                hex_to_rgba(0xdf, 0x6c, 0x59), // 9=BrightRed
+                hex_to_rgba(0x78, 0xbd, 0x7d), // 10=BrightGreen
+                hex_to_rgba(0xe5, 0xc8, 0x71), // 11=BrightYellow
+                hex_to_rgba(0x66, 0xb5, 0xec), // 12=BrightBlue
+                hex_to_rgba(0xd3, 0x89, 0xe5), // 13=BrightMagenta
+                hex_to_rgba(0x84, 0xdd, 0xe0), // 14=BrightCyan
+                hex_to_rgba(0xe5, 0xee, 0xf5), // 15=BrightWhite
+            ],
+        }
+    }
 }
 
 impl Default for ResolvedColors {
     fn default() -> Self {
-        Self::catppuccin_mocha()
+        Self::clear_dark()
     }
 }
 
@@ -732,10 +766,10 @@ mod tests {
 
     #[test]
     #[allow(clippy::float_cmp)]
-    fn default_is_catppuccin_mocha() {
+    fn default_is_clear_dark() {
         let colors = ResolvedColors::default();
-        let mocha = ResolvedColors::catppuccin_mocha();
-        assert_eq!(colors.background, mocha.background);
+        let clear_dark = ResolvedColors::clear_dark();
+        assert_eq!(colors.background, clear_dark.background);
     }
 
     #[test]
