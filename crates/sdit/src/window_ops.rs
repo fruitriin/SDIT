@@ -366,6 +366,7 @@ impl SditApp {
             1.0,
             false, // bold_is_bright: Quick Terminal ではデフォルト
             0.5,   // faint_opacity: Quick Terminal ではデフォルト
+            &self.colors.ansi_palette,
         );
         drop(state_lock);
         atlas.upload_if_dirty(&gpu.queue);
@@ -547,6 +548,7 @@ impl SditApp {
             1.0,   // minimum_contrast: 初期描画ではデフォルト（無効）
             false, // bold_is_bright: 初期描画ではデフォルト
             0.5,   // faint_opacity: 初期描画ではデフォルト
+            &self.colors.ansi_palette,
         );
         drop(state_lock);
 

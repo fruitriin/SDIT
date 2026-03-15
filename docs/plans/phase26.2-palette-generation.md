@@ -35,6 +35,17 @@ background / foreground から 256 色パレットの補間値を自動計算す
 - `crates/sdit-core/src/config/color.rs` — `ResolvedColors` 生成時のパレット補間ロジック
 - `crates/sdit-core/src/config/mod.rs` — `palette_generate / palette_harmonious` 設定追加
 
+## 実装結果（2026-03-15 完了）
+
+- `ResolvedColors.ansi_palette: [[f32; 4]; 16]` を追加（全9テーマに正確な ANSI 16色）
+- `palette_generate: bool` / `palette_harmonious: bool` 設定を追加
+- `generate_ansi_palette(bg, fg)` で HSL 補間による自動生成を実装
+- `apply_harmonious()` で明暗を入れ替える harmonious 適応を実装
+- `color_to_rgba(color, palette)` をパレット対応に変更し各テーマの正しい色を使用
+- `update_from_grid` に ansi_palette パラメータを追加
+- `from_color_config(&ColorConfig)` でパレット生成を統合
+- テスト 448 件 PASS（4件追加）
+
 ## セキュリティ影響
 
 なし

@@ -424,7 +424,7 @@ impl SditApp {
             session_to_window: HashMap::new(),
             session_mgr: SessionManager::new(),
             font_ctx: FontContext::from_config(&config.font),
-            colors: sdit_core::config::color::ResolvedColors::from_theme(&config.colors.theme),
+            colors: sdit_core::config::color::ResolvedColors::from_color_config(&config.colors),
             modifiers: ModifiersState::empty(),
             event_proxy,
             smoke_test,
@@ -679,10 +679,13 @@ impl SditApp {
             }
         }
 
-        // 2. カラー変更チェック
-        if self.config.colors.theme != new_config.colors.theme {
+        // 2. カラー変更チェック（テーマ変更またはパレット生成設定変更）
+        if self.config.colors.theme != new_config.colors.theme
+            || self.config.colors.palette_generate != new_config.colors.palette_generate
+            || self.config.colors.palette_harmonious != new_config.colors.palette_harmonious
+        {
             self.colors =
-                sdit_core::config::color::ResolvedColors::from_theme(&new_config.colors.theme);
+                sdit_core::config::color::ResolvedColors::from_color_config(&new_config.colors);
         }
 
         // 3. キーバインド更新（常に置換）
@@ -839,8 +842,9 @@ impl SditApp {
             self.config.colors.theme.prev().clone()
         };
         log::info!("Theme changed to: {new_theme:?}");
-        self.colors = sdit_core::config::color::ResolvedColors::from_theme(&new_theme);
         self.config.colors.theme = new_theme;
+        self.colors =
+            sdit_core::config::color::ResolvedColors::from_color_config(&self.config.colors);
         // 設定ファイルに保存する
         let path = sdit_core::config::Config::default_path();
         if let Err(e) = self.config.save(&path) {

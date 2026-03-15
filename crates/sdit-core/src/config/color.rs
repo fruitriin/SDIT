@@ -28,6 +28,16 @@ pub struct ColorConfig {
     /// `CellFlags::DIM` が立っているセルの fg アルファをこの値で乗算する。
     /// 有効範囲: 0.0〜1.0。NaN は 0.5 として扱う。
     pub faint_opacity: f32,
+    /// bg/fg から ANSI 16色パレットを自動生成する（デフォルト: false）。
+    ///
+    /// `true` の場合、HSL 補間により背景色・前景色からパレットを生成する。
+    /// テーマ固有のパレットより優先される。
+    pub palette_generate: bool,
+    /// `palette_generate = true` のときに暗・明テーマを自動適応する（デフォルト: false）。
+    ///
+    /// `true` の場合、生成パレットの normal と bright の lightness を入れ替えて
+    /// ライトテーマ向けに適応する。`palette_generate` と組み合わせて使用する。
+    pub palette_harmonious: bool,
 }
 
 impl Default for ColorConfig {
@@ -41,6 +51,8 @@ impl Default for ColorConfig {
             search_background: None,
             bold_is_bright: false,
             faint_opacity: 0.5,
+            palette_generate: false,
+            palette_harmonious: false,
         }
     }
 }
@@ -143,6 +155,9 @@ pub struct ResolvedColors {
     pub sidebar_fg: [f32; 4],
     /// サイドバー非アクティブ行の前景色（dim）。
     pub sidebar_dim_fg: [f32; 4],
+    /// ANSI 16色パレット。インデックス: [0]=Black, [1]=Red, ..., [7]=White,
+    /// [8]=BrightBlack, ..., [15]=BrightWhite。
+    pub ansi_palette: [[f32; 4]; 16],
 }
 
 impl ResolvedColors {
@@ -161,6 +176,21 @@ impl ResolvedColors {
         }
     }
 
+    /// `ColorConfig` から解決済みカラーを生成する。
+    ///
+    /// `palette_generate = true` の場合、bg/fg から ANSI 16色パレットを HSL 補間で生成する。
+    /// `palette_harmonious = true` の場合、normal と bright の lightness を入れ替える。
+    pub fn from_color_config(config: &ColorConfig) -> Self {
+        let mut resolved = Self::from_theme(&config.theme);
+        if config.palette_generate {
+            resolved.ansi_palette = generate_ansi_palette(resolved.background, resolved.foreground);
+            if config.palette_harmonious {
+                apply_harmonious(&mut resolved.ansi_palette);
+            }
+        }
+        resolved
+    }
+
     fn catppuccin_mocha() -> Self {
         Self {
             background: hex_to_rgba(0x1e, 0x1e, 0x2e),        // Base
@@ -169,6 +199,24 @@ impl ResolvedColors {
             sidebar_active_bg: hex_to_rgba(0x45, 0x47, 0x5a), // Surface1
             sidebar_fg: hex_to_rgba(0xcd, 0xd6, 0xf4),        // Text
             sidebar_dim_fg: hex_to_rgba(0x7f, 0x84, 0x9c),    // Overlay1（AA準拠に調整）
+            ansi_palette: [
+                hex_to_rgba(0x45, 0x47, 0x5a), // 0=Black (Surface0)
+                hex_to_rgba(0xf3, 0x8b, 0xa8), // 1=Red
+                hex_to_rgba(0xa6, 0xe3, 0xa1), // 2=Green
+                hex_to_rgba(0xf9, 0xe2, 0xaf), // 3=Yellow
+                hex_to_rgba(0x89, 0xb4, 0xfa), // 4=Blue
+                hex_to_rgba(0xcb, 0xa6, 0xf7), // 5=Magenta
+                hex_to_rgba(0x89, 0xdc, 0xeb), // 6=Cyan
+                hex_to_rgba(0xba, 0xc2, 0xde), // 7=White
+                hex_to_rgba(0x58, 0x5b, 0x70), // 8=BrightBlack (Surface2)
+                hex_to_rgba(0xf3, 0x8b, 0xa8), // 9=BrightRed
+                hex_to_rgba(0xa6, 0xe3, 0xa1), // 10=BrightGreen
+                hex_to_rgba(0xf9, 0xe2, 0xaf), // 11=BrightYellow
+                hex_to_rgba(0x89, 0xb4, 0xfa), // 12=BrightBlue
+                hex_to_rgba(0xcb, 0xa6, 0xf7), // 13=BrightMagenta
+                hex_to_rgba(0x89, 0xdc, 0xeb), // 14=BrightCyan
+                hex_to_rgba(0xa6, 0xad, 0xc8), // 15=BrightWhite (Subtext0)
+            ],
         }
     }
 
@@ -180,6 +228,24 @@ impl ResolvedColors {
             sidebar_active_bg: hex_to_rgba(0xbc, 0xc0, 0xcc), // Surface1
             sidebar_fg: hex_to_rgba(0x4c, 0x4f, 0x69),        // Text
             sidebar_dim_fg: hex_to_rgba(0x6c, 0x6f, 0x85),    // Overlay0
+            ansi_palette: [
+                hex_to_rgba(0x5c, 0x5f, 0x77), // 0=Black
+                hex_to_rgba(0xd2, 0x0f, 0x39), // 1=Red
+                hex_to_rgba(0x40, 0xa0, 0x2b), // 2=Green
+                hex_to_rgba(0xdf, 0x8e, 0x1d), // 3=Yellow
+                hex_to_rgba(0x1e, 0x66, 0xf5), // 4=Blue
+                hex_to_rgba(0x88, 0x39, 0xef), // 5=Magenta
+                hex_to_rgba(0x04, 0xa5, 0xe5), // 6=Cyan
+                hex_to_rgba(0xac, 0xb0, 0xbe), // 7=White
+                hex_to_rgba(0x6c, 0x6f, 0x85), // 8=BrightBlack
+                hex_to_rgba(0xd2, 0x0f, 0x39), // 9=BrightRed
+                hex_to_rgba(0x40, 0xa0, 0x2b), // 10=BrightGreen
+                hex_to_rgba(0xdf, 0x8e, 0x1d), // 11=BrightYellow
+                hex_to_rgba(0x1e, 0x66, 0xf5), // 12=BrightBlue
+                hex_to_rgba(0x88, 0x39, 0xef), // 13=BrightMagenta
+                hex_to_rgba(0x04, 0xa5, 0xe5), // 14=BrightCyan
+                hex_to_rgba(0xbc, 0xc0, 0xcc), // 15=BrightWhite
+            ],
         }
     }
 
@@ -191,6 +257,24 @@ impl ResolvedColors {
             sidebar_active_bg: hex_to_rgba(0x50, 0x49, 0x45), // bg2
             sidebar_fg: hex_to_rgba(0xeb, 0xdb, 0xb2),        // fg
             sidebar_dim_fg: hex_to_rgba(0xa8, 0x99, 0x84),    // fg4
+            ansi_palette: [
+                hex_to_rgba(0x28, 0x28, 0x28), // 0=Black
+                hex_to_rgba(0xcc, 0x24, 0x1d), // 1=Red
+                hex_to_rgba(0x98, 0x97, 0x1a), // 2=Green
+                hex_to_rgba(0xd7, 0x99, 0x21), // 3=Yellow
+                hex_to_rgba(0x45, 0x85, 0x88), // 4=Blue
+                hex_to_rgba(0xb1, 0x62, 0x86), // 5=Magenta
+                hex_to_rgba(0x68, 0x9d, 0x6a), // 6=Cyan
+                hex_to_rgba(0xa8, 0x99, 0x84), // 7=White
+                hex_to_rgba(0x92, 0x83, 0x74), // 8=BrightBlack
+                hex_to_rgba(0xfb, 0x49, 0x34), // 9=BrightRed
+                hex_to_rgba(0xb8, 0xbb, 0x26), // 10=BrightGreen
+                hex_to_rgba(0xfa, 0xbd, 0x2f), // 11=BrightYellow
+                hex_to_rgba(0x83, 0xa5, 0x98), // 12=BrightBlue
+                hex_to_rgba(0xd3, 0x86, 0x9b), // 13=BrightMagenta
+                hex_to_rgba(0x8e, 0xc0, 0x7c), // 14=BrightCyan
+                hex_to_rgba(0xeb, 0xdb, 0xb2), // 15=BrightWhite
+            ],
         }
     }
 
@@ -202,6 +286,24 @@ impl ResolvedColors {
             sidebar_active_bg: hex_to_rgba(0x58, 0x6e, 0x75), // base01
             sidebar_fg: hex_to_rgba(0x93, 0xa1, 0xa1),        // base1（contrast 4.86 on base02）
             sidebar_dim_fg: hex_to_rgba(0x70, 0x7e, 0x80),    // adjusted（contrast 3.09 on base02）
+            ansi_palette: [
+                hex_to_rgba(0x07, 0x36, 0x42), // 0=Black (base02)
+                hex_to_rgba(0xdc, 0x32, 0x2f), // 1=Red
+                hex_to_rgba(0x85, 0x99, 0x00), // 2=Green
+                hex_to_rgba(0xb5, 0x89, 0x00), // 3=Yellow
+                hex_to_rgba(0x26, 0x8b, 0xd2), // 4=Blue
+                hex_to_rgba(0xd3, 0x36, 0x82), // 5=Magenta
+                hex_to_rgba(0x2a, 0xa1, 0x98), // 6=Cyan
+                hex_to_rgba(0xee, 0xe8, 0xd5), // 7=White (base2)
+                hex_to_rgba(0x00, 0x2b, 0x36), // 8=BrightBlack (base03)
+                hex_to_rgba(0xcb, 0x4b, 0x16), // 9=BrightRed (orange)
+                hex_to_rgba(0x58, 0x6e, 0x75), // 10=BrightGreen (base01)
+                hex_to_rgba(0x65, 0x7b, 0x83), // 11=BrightYellow (base00)
+                hex_to_rgba(0x83, 0x94, 0x96), // 12=BrightBlue (base0)
+                hex_to_rgba(0x6c, 0x71, 0xc4), // 13=BrightMagenta (violet)
+                hex_to_rgba(0x93, 0xa1, 0xa1), // 14=BrightCyan (base1)
+                hex_to_rgba(0xfd, 0xf6, 0xe3), // 15=BrightWhite (base3)
+            ],
         }
     }
 
@@ -213,6 +315,24 @@ impl ResolvedColors {
             sidebar_active_bg: hex_to_rgba(0x93, 0xa1, 0xa1), // base1
             sidebar_fg: hex_to_rgba(0x48, 0x6e, 0x72),        // adjusted（contrast 4.57 on base2）
             sidebar_dim_fg: hex_to_rgba(0x65, 0x7b, 0x83),    // base00（contrast 3.64 on base2）
+            ansi_palette: [
+                hex_to_rgba(0xee, 0xe8, 0xd5), // 0=Black (base2)
+                hex_to_rgba(0xdc, 0x32, 0x2f), // 1=Red
+                hex_to_rgba(0x85, 0x99, 0x00), // 2=Green
+                hex_to_rgba(0xb5, 0x89, 0x00), // 3=Yellow
+                hex_to_rgba(0x26, 0x8b, 0xd2), // 4=Blue
+                hex_to_rgba(0xd3, 0x36, 0x82), // 5=Magenta
+                hex_to_rgba(0x2a, 0xa1, 0x98), // 6=Cyan
+                hex_to_rgba(0x07, 0x36, 0x42), // 7=White (base02)
+                hex_to_rgba(0xfd, 0xf6, 0xe3), // 8=BrightBlack (base3)
+                hex_to_rgba(0xcb, 0x4b, 0x16), // 9=BrightRed (orange)
+                hex_to_rgba(0x93, 0xa1, 0xa1), // 10=BrightGreen (base1)
+                hex_to_rgba(0x83, 0x94, 0x96), // 11=BrightYellow (base0)
+                hex_to_rgba(0x65, 0x7b, 0x83), // 12=BrightBlue (base00)
+                hex_to_rgba(0x6c, 0x71, 0xc4), // 13=BrightMagenta (violet)
+                hex_to_rgba(0x58, 0x6e, 0x75), // 14=BrightCyan (base01)
+                hex_to_rgba(0x00, 0x2b, 0x36), // 15=BrightWhite (base03)
+            ],
         }
     }
 
@@ -224,6 +344,24 @@ impl ResolvedColors {
             sidebar_active_bg: hex_to_rgba(0x6e, 0x72, 0x82), // Comment（少し明るめ）
             sidebar_fg: hex_to_rgba(0xf8, 0xf8, 0xf2), // Foreground
             sidebar_dim_fg: hex_to_rgba(0xbd, 0xc3, 0xd0), // dimmed foreground（AA準拠）
+            ansi_palette: [
+                hex_to_rgba(0x21, 0x22, 0x2c), // 0=Black
+                hex_to_rgba(0xff, 0x55, 0x55), // 1=Red
+                hex_to_rgba(0x50, 0xfa, 0x7b), // 2=Green
+                hex_to_rgba(0xf1, 0xfa, 0x8c), // 3=Yellow
+                hex_to_rgba(0xbd, 0x93, 0xf9), // 4=Blue
+                hex_to_rgba(0xff, 0x79, 0xc6), // 5=Magenta
+                hex_to_rgba(0x8b, 0xe9, 0xfd), // 6=Cyan
+                hex_to_rgba(0xf8, 0xf8, 0xf2), // 7=White
+                hex_to_rgba(0x62, 0x72, 0xa4), // 8=BrightBlack (comment)
+                hex_to_rgba(0xff, 0x6e, 0x6e), // 9=BrightRed
+                hex_to_rgba(0x69, 0xff, 0x94), // 10=BrightGreen
+                hex_to_rgba(0xff, 0xff, 0xa5), // 11=BrightYellow
+                hex_to_rgba(0xd6, 0xac, 0xff), // 12=BrightBlue
+                hex_to_rgba(0xff, 0x92, 0xdf), // 13=BrightMagenta
+                hex_to_rgba(0xa4, 0xff, 0xff), // 14=BrightCyan
+                hex_to_rgba(0xff, 0xff, 0xff), // 15=BrightWhite
+            ],
         }
     }
 
@@ -235,6 +373,24 @@ impl ResolvedColors {
             sidebar_active_bg: hex_to_rgba(0x43, 0x4c, 0x5e), // nord2
             sidebar_fg: hex_to_rgba(0xd8, 0xde, 0xe9),        // nord4
             sidebar_dim_fg: hex_to_rgba(0xa0, 0xa8, 0xb8),    // nord3 adjusted for AA
+            ansi_palette: [
+                hex_to_rgba(0x3b, 0x42, 0x52), // 0=Black (nord1)
+                hex_to_rgba(0xbf, 0x61, 0x6a), // 1=Red (nord11)
+                hex_to_rgba(0xa3, 0xbe, 0x8c), // 2=Green (nord14)
+                hex_to_rgba(0xeb, 0xcb, 0x8b), // 3=Yellow (nord13)
+                hex_to_rgba(0x81, 0xa1, 0xc1), // 4=Blue (nord9)
+                hex_to_rgba(0xb4, 0x8e, 0xad), // 5=Magenta (nord15)
+                hex_to_rgba(0x88, 0xc0, 0xd0), // 6=Cyan (nord8)
+                hex_to_rgba(0xe5, 0xe9, 0xf0), // 7=White (nord5)
+                hex_to_rgba(0x4c, 0x56, 0x6a), // 8=BrightBlack (nord3)
+                hex_to_rgba(0xbf, 0x61, 0x6a), // 9=BrightRed
+                hex_to_rgba(0xa3, 0xbe, 0x8c), // 10=BrightGreen
+                hex_to_rgba(0xeb, 0xcb, 0x8b), // 11=BrightYellow
+                hex_to_rgba(0x81, 0xa1, 0xc1), // 12=BrightBlue
+                hex_to_rgba(0xb4, 0x8e, 0xad), // 13=BrightMagenta
+                hex_to_rgba(0x8f, 0xbc, 0xbb), // 14=BrightCyan (nord7)
+                hex_to_rgba(0xec, 0xef, 0xf4), // 15=BrightWhite (nord6)
+            ],
         }
     }
 
@@ -246,6 +402,24 @@ impl ResolvedColors {
             sidebar_active_bg: hex_to_rgba(0x3e, 0x44, 0x51), // selection bg
             sidebar_fg: hex_to_rgba(0xab, 0xb2, 0xbf), // fg
             sidebar_dim_fg: hex_to_rgba(0x7f, 0x84, 0x8e), // comment
+            ansi_palette: [
+                hex_to_rgba(0x28, 0x2c, 0x34), // 0=Black
+                hex_to_rgba(0xe0, 0x6c, 0x75), // 1=Red
+                hex_to_rgba(0x98, 0xc3, 0x79), // 2=Green
+                hex_to_rgba(0xe5, 0xc0, 0x7b), // 3=Yellow
+                hex_to_rgba(0x61, 0xaf, 0xef), // 4=Blue
+                hex_to_rgba(0xc6, 0x78, 0xdd), // 5=Magenta
+                hex_to_rgba(0x56, 0xb6, 0xc2), // 6=Cyan
+                hex_to_rgba(0xab, 0xb2, 0xbf), // 7=White
+                hex_to_rgba(0x5c, 0x63, 0x70), // 8=BrightBlack (comment)
+                hex_to_rgba(0xe0, 0x6c, 0x75), // 9=BrightRed
+                hex_to_rgba(0x98, 0xc3, 0x79), // 10=BrightGreen
+                hex_to_rgba(0xe5, 0xc0, 0x7b), // 11=BrightYellow
+                hex_to_rgba(0x61, 0xaf, 0xef), // 12=BrightBlue
+                hex_to_rgba(0xc6, 0x78, 0xdd), // 13=BrightMagenta
+                hex_to_rgba(0x56, 0xb6, 0xc2), // 14=BrightCyan
+                hex_to_rgba(0xc8, 0xcd, 0xd7), // 15=BrightWhite
+            ],
         }
     }
 
@@ -257,6 +431,24 @@ impl ResolvedColors {
             sidebar_active_bg: hex_to_rgba(0x29, 0x2e, 0x42), // bg_highlight
             sidebar_fg: hex_to_rgba(0xc0, 0xca, 0xf5),        // fg
             sidebar_dim_fg: hex_to_rgba(0x70, 0x82, 0xa4), // adjusted（contrast 4.60 on bg_dark）
+            ansi_palette: [
+                hex_to_rgba(0x15, 0x16, 0x1e), // 0=Black
+                hex_to_rgba(0xf7, 0x76, 0x8e), // 1=Red
+                hex_to_rgba(0x9e, 0xce, 0x6a), // 2=Green
+                hex_to_rgba(0xe0, 0xaf, 0x68), // 3=Yellow
+                hex_to_rgba(0x7a, 0xa2, 0xf7), // 4=Blue
+                hex_to_rgba(0xbb, 0x9a, 0xf7), // 5=Magenta
+                hex_to_rgba(0x7d, 0xcf, 0xff), // 6=Cyan
+                hex_to_rgba(0xa9, 0xb1, 0xd6), // 7=White
+                hex_to_rgba(0x41, 0x48, 0x68), // 8=BrightBlack
+                hex_to_rgba(0xf7, 0x76, 0x8e), // 9=BrightRed
+                hex_to_rgba(0x9e, 0xce, 0x6a), // 10=BrightGreen
+                hex_to_rgba(0xe0, 0xaf, 0x68), // 11=BrightYellow
+                hex_to_rgba(0x7a, 0xa2, 0xf7), // 12=BrightBlue
+                hex_to_rgba(0xbb, 0x9a, 0xf7), // 13=BrightMagenta
+                hex_to_rgba(0x7d, 0xcf, 0xff), // 14=BrightCyan
+                hex_to_rgba(0xc0, 0xca, 0xf5), // 15=BrightWhite
+            ],
         }
     }
 }
@@ -270,6 +462,116 @@ impl Default for ResolvedColors {
 /// RGB バイト値を f32 RGBA に変換する（アルファは 1.0）。
 fn hex_to_rgba(r: u8, g: u8, b: u8) -> [f32; 4] {
     [f32::from(r) / 255.0, f32::from(g) / 255.0, f32::from(b) / 255.0, 1.0]
+}
+
+// ---------------------------------------------------------------------------
+// パレット生成（HSL 補間）
+// ---------------------------------------------------------------------------
+
+/// RGB を HSL に変換する。
+/// 返値: (h: 0.0..1.0, s: 0.0..1.0, l: 0.0..1.0)
+fn rgb_to_hsl(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    let l = (max + min) / 2.0;
+    if (max - min).abs() < f32::EPSILON {
+        return (0.0, 0.0, l);
+    }
+    let d = max - min;
+    let s = if l > 0.5 { d / (2.0 - max - min) } else { d / (max + min) };
+    let h = if (max - r).abs() < f32::EPSILON {
+        let seg = (g - b) / d;
+        if g < b { seg + 6.0 } else { seg }
+    } else if (max - g).abs() < f32::EPSILON {
+        (b - r) / d + 2.0
+    } else {
+        (r - g) / d + 4.0
+    };
+    (h / 6.0, s, l)
+}
+
+/// HSL を RGB に変換する。
+fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (f32, f32, f32) {
+    if s.abs() < f32::EPSILON {
+        return (l, l, l);
+    }
+    let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+    let p = 2.0 * l - q;
+    let hue_to_rgb = |t: f32| -> f32 {
+        let t = t.rem_euclid(1.0);
+        if t < 1.0 / 6.0 {
+            p + (q - p) * 6.0 * t
+        } else if t < 0.5 {
+            q
+        } else if t < 2.0 / 3.0 {
+            p + (q - p) * (2.0 / 3.0 - t) * 6.0
+        } else {
+            p
+        }
+    };
+    (hue_to_rgb(h + 1.0 / 3.0), hue_to_rgb(h), hue_to_rgb(h - 1.0 / 3.0))
+}
+
+/// bg/fg から ANSI 16色パレットを HSL 補間で生成する。
+fn generate_ansi_palette(bg: [f32; 4], fg: [f32; 4]) -> [[f32; 4]; 16] {
+    // apply_minimum_contrast と同じ相対輝度計算を使用（ITU-R BT.709 準拠）
+    let bg_lum = relative_luminance([bg[0], bg[1], bg[2]]);
+    let is_dark = bg_lum < 0.5;
+    let sat = 0.75_f32;
+    let lum = if is_dark { 0.60 } else { 0.40 };
+    let bright_lum = if is_dark { 0.72 } else { 0.30 };
+
+    let make = |h: f32, l: f32| -> [f32; 4] {
+        let (r, g, b) = hsl_to_rgb(h, sat, l);
+        [r, g, b, 1.0]
+    };
+    let lerp = |a: [f32; 4], b: [f32; 4], t: f32| -> [f32; 4] {
+        [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, 1.0]
+    };
+
+    let dark_factor = if is_dark { 0.15 } else { 0.20 };
+    [
+        lerp(bg, fg, dark_factor),                       // 0=Black
+        make(0.0, lum),                                  // 1=Red
+        make(1.0 / 3.0, lum),                            // 2=Green
+        make(1.0 / 6.0, lum),                            // 3=Yellow
+        make(2.0 / 3.0, lum),                            // 4=Blue
+        make(5.0 / 6.0, lum),                            // 5=Magenta
+        make(0.5, lum),                                  // 6=Cyan
+        lerp(bg, fg, if is_dark { 0.75 } else { 0.85 }), // 7=White
+        lerp(bg, fg, dark_factor * 2.0),                 // 8=BrightBlack
+        make(0.0, bright_lum),                           // 9=BrightRed
+        make(1.0 / 3.0, bright_lum),                     // 10=BrightGreen
+        make(1.0 / 6.0, bright_lum),                     // 11=BrightYellow
+        make(2.0 / 3.0, bright_lum),                     // 12=BrightBlue
+        make(5.0 / 6.0, bright_lum),                     // 13=BrightMagenta
+        make(0.5, bright_lum),                           // 14=BrightCyan
+        fg,                                              // 15=BrightWhite
+    ]
+}
+
+/// palette_harmonious: normal と bright の lightness を入れ替えてライトテーマ適応する。
+fn apply_harmonious(palette: &mut [[f32; 4]; 16]) {
+    // インデックス 1-6 (normal) と 9-14 (bright) の間で lightness を入れ替える
+    for i in 1..=6 {
+        let n = palette[i];
+        let b = palette[i + 8];
+        let (hn, sn, ln) = rgb_to_hsl(n[0], n[1], n[2]);
+        let (hb, sb, lb) = rgb_to_hsl(b[0], b[1], b[2]);
+        let (rn, gn, bn) = hsl_to_rgb(hn, sn, lb); // normal に bright の lightness を使用
+        let (rb, gb, bb) = hsl_to_rgb(hb, sb, ln); // bright に normal の lightness を使用
+        palette[i] = [rn, gn, bn, 1.0];
+        palette[i + 8] = [rb, gb, bb, 1.0];
+    }
+    // 7=White と 15=BrightWhite も入れ替え
+    let w = palette[7];
+    let bw = palette[15];
+    let (hw, sw, lw) = rgb_to_hsl(w[0], w[1], w[2]);
+    let (hbw, sbw, lbw) = rgb_to_hsl(bw[0], bw[1], bw[2]);
+    let (rw, gw, bw_rgb) = hsl_to_rgb(hw, sw, lbw);
+    let (rbw, gbw, bbw) = hsl_to_rgb(hbw, sbw, lw);
+    palette[7] = [rw, gw, bw_rgb, 1.0];
+    palette[15] = [rbw, gbw, bbw, 1.0];
 }
 
 /// WCAG 2.1 コントラスト比を計算する。
@@ -618,6 +920,70 @@ mod tests {
             let bg = [c.sidebar_bg[0], c.sidebar_bg[1], c.sidebar_bg[2]];
             let ratio = wcag_contrast_ratio(fg, bg);
             assert!(ratio >= 3.0, "{theme:?}: dim contrast = {ratio:.2}, expected >= 3.0");
+        }
+    }
+
+    /// 全テーマで ansi_palette が 16 要素あり、alpha=1.0 であることを検証。
+    #[test]
+    fn all_themes_ansi_palette_len_and_alpha() {
+        for theme in ThemeName::all() {
+            let c = ResolvedColors::from_theme(theme);
+            assert_eq!(c.ansi_palette.len(), 16, "{theme:?}: ansi_palette.len()");
+            for (i, color) in c.ansi_palette.iter().enumerate() {
+                assert!(
+                    (color[3] - 1.0).abs() < f32::EPSILON,
+                    "{theme:?}: ansi_palette[{i}].alpha != 1.0"
+                );
+            }
+        }
+    }
+
+    /// palette_generate = false のとき from_color_config は from_theme と同じ結果を返す。
+    #[test]
+    fn from_color_config_without_generate_equals_from_theme() {
+        for theme in ThemeName::all() {
+            let config = ColorConfig { theme: theme.clone(), ..ColorConfig::default() };
+            let from_config = ResolvedColors::from_color_config(&config);
+            let from_theme = ResolvedColors::from_theme(theme);
+            assert_eq!(
+                from_config.background, from_theme.background,
+                "{theme:?}: background mismatch"
+            );
+            assert_eq!(
+                from_config.ansi_palette, from_theme.ansi_palette,
+                "{theme:?}: ansi_palette mismatch"
+            );
+        }
+    }
+
+    /// palette_generate = true のとき 16色が生成され、[0] と [15] が bg/fg に近い。
+    #[test]
+    fn palette_generate_produces_16_colors() {
+        let config = ColorConfig {
+            theme: ThemeName::CatppuccinMocha,
+            palette_generate: true,
+            ..ColorConfig::default()
+        };
+        let resolved = ResolvedColors::from_color_config(&config);
+        assert_eq!(resolved.ansi_palette.len(), 16);
+        // [15] は fg に等しい
+        assert_eq!(resolved.ansi_palette[15], resolved.foreground);
+        // alpha がすべて 1.0
+        for (i, color) in resolved.ansi_palette.iter().enumerate() {
+            assert!((color[3] - 1.0).abs() < f32::EPSILON, "generated palette[{i}].alpha != 1.0");
+        }
+    }
+
+    /// hsl_to_rgb(rgb_to_hsl(r,g,b)) がほぼ元の値を返すことを検証（ラウンドトリップ）。
+    #[test]
+    fn hsl_roundtrip() {
+        let cases = [(0.5, 0.2, 0.8), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)];
+        for (r, g, b) in cases {
+            let (h, s, l) = rgb_to_hsl(r, g, b);
+            let (r2, g2, b2) = hsl_to_rgb(h, s, l);
+            assert!((r - r2).abs() < 0.001, "r: {r} → {r2}");
+            assert!((g - g2).abs() < 0.001, "g: {g} → {g2}");
+            assert!((b - b2).abs() < 0.001, "b: {b} → {b2}");
         }
     }
 }

@@ -158,6 +158,7 @@ impl SditApp {
             minimum_contrast,
             bold_is_bright,
             faint_opacity,
+            &self.colors.ansi_palette,
         );
         drop(state_lock);
 

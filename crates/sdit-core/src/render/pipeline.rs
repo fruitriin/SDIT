@@ -465,6 +465,7 @@ impl CellPipeline {
         minimum_contrast: f32,
         bold_is_bright: bool,
         faint_opacity: f32,
+        ansi_palette: &[[f32; 4]; 16],
     ) {
         let rows = grid.screen_lines();
         let cols = grid.columns();
@@ -551,24 +552,29 @@ impl CellPipeline {
                 let (bg, fg) = if is_cursor {
                     // カーソル色が設定されていればそれを使用し、なければ反転
                     if let Some(c) = cursor_color {
-                        (c, color_to_rgba(effective_bg))
+                        (c, color_to_rgba(effective_bg, ansi_palette))
                     } else {
-                        (color_to_rgba(effective_fg), color_to_rgba(effective_bg))
+                        (
+                            color_to_rgba(effective_fg, ansi_palette),
+                            color_to_rgba(effective_bg, ansi_palette),
+                        )
                     }
                 } else if is_selected {
                     // 選択色: 設定があればそれを使用し、なければ fg/bg 反転
-                    let sel_bg = selection_bg.unwrap_or_else(|| color_to_rgba(effective_fg));
-                    let sel_fg = selection_fg.unwrap_or_else(|| color_to_rgba(effective_bg));
+                    let sel_bg =
+                        selection_bg.unwrap_or_else(|| color_to_rgba(effective_fg, ansi_palette));
+                    let sel_fg =
+                        selection_fg.unwrap_or_else(|| color_to_rgba(effective_bg, ansi_palette));
                     (sel_bg, sel_fg)
                 } else if is_current_match {
                     (hex_rgba(0xfa, 0xb3, 0x87), [0.0, 0.0, 0.0, 1.0])
                 } else if is_search_match {
                     (hex_rgba(0xf9, 0xe2, 0xaf), [0.0, 0.0, 0.0, 1.0])
                 } else if is_url_hovered {
-                    (color_to_rgba(effective_bg), [0.4, 0.6, 1.0, 1.0])
+                    (color_to_rgba(effective_bg, ansi_palette), [0.4, 0.6, 1.0, 1.0])
                 } else {
-                    let raw_bg = color_to_rgba(effective_bg);
-                    let mut raw_fg = color_to_rgba(effective_fg);
+                    let raw_bg = color_to_rgba(effective_bg, ansi_palette);
+                    let mut raw_fg = color_to_rgba(effective_fg, ansi_palette);
                     // faint_opacity: DIM フラグがあれば fg アルファを乗算
                     if cell.flags.contains(CellFlags::DIM) {
                         raw_fg[3] *= faint_opacity;
@@ -760,33 +766,37 @@ fn is_in_selection(col: usize, row: usize, selection: ((usize, usize), (usize, u
     true
 }
 
-/// `Color` を RGBA `[f32; 4]` に変換する。
-/// Named カラーは Catppuccin Mocha パレットにマッピングする。
-fn color_to_rgba(color: Color) -> [f32; 4] {
+/// `Color` を RGBA `[f32; 4]` に変換する（ANSI パレット使用）。
+fn color_to_rgba(color: Color, palette: &[[f32; 4]; 16]) -> [f32; 4] {
     match color {
         Color::Rgb { r, g, b } => {
             [f32::from(r) / 255.0, f32::from(g) / 255.0, f32::from(b) / 255.0, 1.0]
         }
-        Color::Indexed(idx) => xterm256_to_rgba(idx),
-        Color::Named(named) => named_color_to_rgba(named),
+        Color::Indexed(idx) => xterm256_to_rgba_with_palette(idx, palette),
+        Color::Named(named) => named_color_to_rgba_with_palette(named, palette),
     }
 }
 
-/// Named カラー → RGBA（Catppuccin Mocha 準拠）。
-fn named_color_to_rgba(named: NamedColor) -> [f32; 4] {
-    // Catppuccin Mocha カラーパレット（通常色と明色は同じ値）
+/// Named カラー → RGBA（ANSI パレット使用）。
+fn named_color_to_rgba_with_palette(named: NamedColor, palette: &[[f32; 4]; 16]) -> [f32; 4] {
     match named {
-        NamedColor::Black => hex_rgba(0x45, 0x47, 0x5a), // Surface0
-        NamedColor::Red | NamedColor::BrightRed => hex_rgba(0xf3, 0x8b, 0xa8), // Red
-        NamedColor::Green | NamedColor::BrightGreen => hex_rgba(0xa6, 0xe3, 0xa1), // Green
-        NamedColor::Yellow | NamedColor::BrightYellow => hex_rgba(0xf9, 0xe2, 0xaf), // Yellow
-        NamedColor::Blue | NamedColor::BrightBlue => hex_rgba(0x89, 0xb4, 0xfa), // Blue
-        NamedColor::Magenta | NamedColor::BrightMagenta => hex_rgba(0xcb, 0xa6, 0xf7), // Mauve
-        NamedColor::Cyan | NamedColor::BrightCyan => hex_rgba(0x89, 0xdc, 0xeb), // Sky
-        NamedColor::White => hex_rgba(0xba, 0xc2, 0xde), // Subtext1
-        NamedColor::BrightBlack => hex_rgba(0x58, 0x5b, 0x70), // Surface2
-        NamedColor::BrightWhite | NamedColor::Foreground => hex_rgba(0xcd, 0xd6, 0xf4), // Text
-        NamedColor::Background => hex_rgba(0x1e, 0x1e, 0x2e), // Base
+        NamedColor::Black => palette[0],
+        NamedColor::Red => palette[1],
+        NamedColor::Green => palette[2],
+        NamedColor::Yellow => palette[3],
+        NamedColor::Blue => palette[4],
+        NamedColor::Magenta => palette[5],
+        NamedColor::Cyan => palette[6],
+        NamedColor::White => palette[7],
+        NamedColor::BrightBlack => palette[8],
+        NamedColor::BrightRed => palette[9],
+        NamedColor::BrightGreen => palette[10],
+        NamedColor::BrightYellow => palette[11],
+        NamedColor::BrightBlue => palette[12],
+        NamedColor::BrightMagenta => palette[13],
+        NamedColor::BrightCyan => palette[14],
+        NamedColor::BrightWhite | NamedColor::Foreground => palette[15],
+        NamedColor::Background => palette[0],
     }
 }
 
@@ -1061,27 +1071,12 @@ impl BackgroundPipeline {
     }
 }
 
-/// xterm 256 色パレット → RGBA。
-/// 簡易実装: 基本16色のみマッピング、残りはグレースケール近似。
-fn xterm256_to_rgba(idx: u8) -> [f32; 4] {
-    // 0-15: 基本色（named_color_to_rgba にマッピング）
+/// xterm 256 色パレット → RGBA（ANSI パレット使用）。
+/// 0-15: ANSI パレットを使用。16-255: カラーキューブ・グレースケール。
+fn xterm256_to_rgba_with_palette(idx: u8, palette: &[[f32; 4]; 16]) -> [f32; 4] {
     match idx {
-        0 => named_color_to_rgba(NamedColor::Black),
-        1 => named_color_to_rgba(NamedColor::Red),
-        2 => named_color_to_rgba(NamedColor::Green),
-        3 => named_color_to_rgba(NamedColor::Yellow),
-        4 => named_color_to_rgba(NamedColor::Blue),
-        5 => named_color_to_rgba(NamedColor::Magenta),
-        6 => named_color_to_rgba(NamedColor::Cyan),
-        7 => named_color_to_rgba(NamedColor::White),
-        8 => named_color_to_rgba(NamedColor::BrightBlack),
-        9 => named_color_to_rgba(NamedColor::BrightRed),
-        10 => named_color_to_rgba(NamedColor::BrightGreen),
-        11 => named_color_to_rgba(NamedColor::BrightYellow),
-        12 => named_color_to_rgba(NamedColor::BrightBlue),
-        13 => named_color_to_rgba(NamedColor::BrightMagenta),
-        14 => named_color_to_rgba(NamedColor::BrightCyan),
-        15 => named_color_to_rgba(NamedColor::BrightWhite),
+        // 0-15: ANSI パレット
+        0..=15 => palette[idx as usize],
         // 16-231: 6×6×6 カラーキューブ
         16..=231 => {
             let v = idx - 16;
