@@ -757,6 +757,56 @@ impl SditApp {
         self.save_session_snapshot();
     }
 
+    /// ユーザー定義グローバルホットキーを登録し、イベントをディスパッチするスレッドを起動する（macOS のみ）。
+    #[cfg(target_os = "macos")]
+    pub(crate) fn register_user_global_hotkeys(&mut self) {
+        use crate::quick_terminal::parse_hotkey;
+        use std::collections::HashMap;
+        let bindings = self.config.global_hotkeys.clone();
+        if bindings.is_empty() {
+            return;
+        }
+        let manager = match global_hotkey::GlobalHotKeyManager::new() {
+            Ok(m) => m,
+            Err(e) => {
+                log::warn!("global_hotkeys: failed to create manager: {e}");
+                return;
+            }
+        };
+        let mut id_map: HashMap<u32, sdit_core::config::keybinds::Action> = HashMap::new();
+        for b in &bindings {
+            if let Some(hk) = parse_hotkey(&b.hotkey) {
+                let id = hk.id();
+                if manager.register(hk).is_ok() {
+                    id_map.insert(id, b.action);
+                }
+            }
+        }
+        self.user_hotkey_manager = Some(manager);
+        let proxy = self.event_proxy.clone();
+        let _ =
+            std::thread::Builder::new().name("user-global-hotkey".to_string()).spawn(move || {
+                let receiver = global_hotkey::GlobalHotKeyEvent::receiver();
+                loop {
+                    match receiver.recv() {
+                        Ok(ev) => {
+                            if ev.state == global_hotkey::HotKeyState::Pressed {
+                                if let Some(&action) = id_map.get(&ev.id) {
+                                    let _ = proxy.send_event(
+                                        crate::app::SditEvent::GlobalHotkeyAction(action),
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("user-global-hotkey: {e}");
+                            break;
+                        }
+                    }
+                }
+            });
+    }
+
     /// `WindowEvent::Focused` ハンドラの処理（Secure Input + swallow_mouse_click_on_focus）。
     pub(crate) fn handle_focused(&mut self, window_id: winit::window::WindowId, gained: bool) {
         #[cfg(target_os = "macos")]

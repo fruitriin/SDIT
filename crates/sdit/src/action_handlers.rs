@@ -337,6 +337,12 @@ impl SditApp {
                     self.redraw_session(sid);
                 }
             }
+            Action::BringToFront => {
+                // 全ウィンドウをフォアグラウンドに持ってくる
+                for ws in self.windows.values() {
+                    ws.window.focus_window();
+                }
+            }
         }
     }
 }

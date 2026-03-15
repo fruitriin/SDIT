@@ -193,6 +193,8 @@ pub(crate) enum SditEvent {
     CommandFinished { session_id: SessionId, elapsed_secs: u64, exit_code: Option<i32> },
     /// Quick Terminal グローバルホットキーが押された（macOS のみ）。
     QuickTerminalToggle,
+    /// ユーザー定義グローバルホットキーが押された（macOS のみ）。
+    GlobalHotkeyAction(sdit_core::config::keybinds::Action),
 }
 
 // ---------------------------------------------------------------------------
@@ -391,6 +393,9 @@ pub(crate) struct SditApp {
     /// Quick Terminal の状態（macOS のみ、設定が有効な場合に Some）。
     #[cfg(target_os = "macos")]
     pub(crate) quick_terminal_state: Option<crate::quick_terminal::QuickTerminalState>,
+    /// ユーザー定義グローバルホットキーマネージャー（macOS のみ）。ドロップするとホットキーが解除される。
+    #[cfg(target_os = "macos")]
+    pub(crate) user_hotkey_manager: Option<global_hotkey::GlobalHotKeyManager>,
     /// メニューバー + コンテキストメニューの共有 `MenuId` マップ。
     /// `MenuEvent` ハンドラのクロージャが `Arc` クローンを保持するため、
     /// フィールドとしては直接読まれないが、ドロップ防止のため保持する。
@@ -463,6 +468,8 @@ impl SditApp {
             secure_input_enabled: false,
             #[cfg(target_os = "macos")]
             quick_terminal_state: None,
+            #[cfg(target_os = "macos")]
+            user_hotkey_manager: None,
             #[cfg(target_os = "macos")]
             menu_actions: menu_actions.clone(),
             #[cfg(target_os = "macos")]

@@ -44,6 +44,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
         if let Some(menu_bar) = self.menu_bar.as_ref() {
             menu_bar.init_for_nsapp();
         }
+        self.register_user_global_hotkeys();
 
         let snapshot = AppSnapshot::load(&AppSnapshot::default_path());
 
@@ -1455,7 +1456,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                     }
                 }
             }
-            SditEvent::MenuAction(action) => {
+            SditEvent::MenuAction(action) | SditEvent::GlobalHotkeyAction(action) => {
                 // フォーカスがあるウィンドウ、またはウィンドウが1つだけならそれを使う。
                 let focused_window_id = self
                     .windows

@@ -36,6 +36,22 @@ global_hotkeys = [
 - `crates/sdit-core/src/config/mod.rs` — `global_hotkeys: Vec<GlobalHotkeyBinding>` 設定追加
 - `crates/sdit/src/app.rs` — 複数グローバルホットキーの登録・管理
 
+## 実装結果（2026-03-15 完了）
+
+- `GlobalHotkeyBinding { hotkey, action }` を keybinds.rs に追加
+- `Config.global_hotkeys: Vec<GlobalHotkeyBinding>` を追加
+- `Action::BringToFront` を追加（全ウィンドウをフォアグラウンドに）
+- `SditEvent::GlobalHotkeyAction(Action)` を追加し MenuAction ハンドラに合流
+- `register_user_global_hotkeys()` ヘルパーで hotkey 登録 + 専用スレッド起動
+- テスト: 448 件 PASS
+
+使用例:
+```toml
+[[global_hotkeys]]
+hotkey = "cmd+shift+alt+t"
+action = "BringToFront"
+```
+
 ## セキュリティ影響
 
 macOS のアクセシビリティ権限が必要（既存の Quick Terminal と同様）。

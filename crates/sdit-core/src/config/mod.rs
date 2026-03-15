@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use self::color::ColorConfig;
 use self::font::FontConfig;
-use self::keybinds::KeybindConfig;
+use self::keybinds::{GlobalHotkeyBinding, KeybindConfig};
 use crate::terminal::CursorStyle;
 
 /// 起動時のウィンドウ表示モード。
@@ -1138,6 +1138,9 @@ pub struct Config {
     pub env: HashMap<String, String>,
     /// ターミナル設定。
     pub terminal: TerminalConfig,
+    /// グローバルホットキー設定（macOS のみ有効）。
+    #[serde(default)]
+    pub global_hotkeys: Vec<GlobalHotkeyBinding>,
 }
 
 impl Config {
@@ -1432,6 +1435,14 @@ impl Config {
                     .push_str("# size: fraction of screen width/height (0.1-1.0, default: 0.4)\n");
                 content.push_str("# hotkey: global hotkey string (default: \"ctrl+`\")\n");
                 content.push_str("# animation_duration: slide-in/out animation in seconds (0.0-2.0, default: 0.2)\n");
+            } else if line == "[[global_hotkeys]]" {
+                content.push('\n');
+                content.push_str("# ── Global Hotkeys ─────────────────────────────────────────\n");
+                content.push_str(
+                    "# System-wide hotkeys (macOS only, requires Accessibility permission).\n",
+                );
+                content.push_str("# hotkey: key combination e.g. \"cmd+shift+alt+t\"\n");
+                content.push_str("# action: action name e.g. \"BringToFront\", \"NewWindow\"\n");
             } else if line == "[[links]]" {
                 content.push('\n');
                 content.push_str("# ── Custom Links ───────────────────────────────────────────\n");

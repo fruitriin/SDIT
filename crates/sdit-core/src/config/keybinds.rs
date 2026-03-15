@@ -56,6 +56,15 @@ pub enum Action {
     ToggleAlwaysOnTop,
     /// コマンドパレットの表示をトグルする。
     ToggleCommandPalette,
+    /// SDIT の全ウィンドウをフォアグラウンドに持ってくる（グローバルホットキー向け）。
+    BringToFront,
+}
+
+/// グローバルホットキーバインディング（macOS のみ有効）。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct GlobalHotkeyBinding {
+    pub hotkey: String,
+    pub action: Action,
 }
 
 impl Action {
@@ -92,6 +101,7 @@ impl Action {
             ("PreviousTheme", Action::PreviousTheme),
             ("ToggleDecorations", Action::ToggleDecorations),
             ("ToggleAlwaysOnTop", Action::ToggleAlwaysOnTop),
+            ("BringToFront", Action::BringToFront),
             // ToggleCommandPalette は除外
         ]
     }
