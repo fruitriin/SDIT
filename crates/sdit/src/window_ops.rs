@@ -439,7 +439,9 @@ impl SditApp {
             let padding_y = f32::from(self.config.window.clamped_padding_y());
             let cols = f32::from(self.config.window.clamped_columns());
             let rows = f32::from(self.config.window.clamped_rows());
-            let width = f64::from(cols * metrics.cell_width + 2.0 * padding_x);
+            // スクロールバーが有効な場合、最終カラムをスクロールバーが使用するため +1 カラム確保
+            let scrollbar_extra = if self.config.scrollbar.enabled { 1.0 } else { 0.0 };
+            let width = f64::from((cols + scrollbar_extra) * metrics.cell_width + 2.0 * padding_x);
             let height = f64::from(rows * metrics.cell_height + 2.0 * padding_y);
             attrs = attrs.with_inner_size(winit::dpi::LogicalSize::new(width, height));
             if let Some((x, y)) = self.config.window.clamped_position() {

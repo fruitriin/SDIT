@@ -616,8 +616,13 @@ impl SditApp {
     /// (30, 30) ピクセルずらした位置を返す。
     pub(crate) fn cascade_position(&self) -> Option<winit::dpi::PhysicalPosition<i32>> {
         const CASCADE_OFFSET: i32 = 30;
-        // 既存ウィンドウから位置を取得（最初に見つかったものを使用）
-        for ws in self.windows.values() {
+        // フォーカスがあるウィンドウを優先、なければ最後に作成されたウィンドウを使用
+        let base_window = self
+            .windows
+            .values()
+            .find(|ws| ws.window.has_focus())
+            .or_else(|| self.windows.values().last());
+        if let Some(ws) = base_window {
             if let Ok(pos) = ws.window.outer_position() {
                 return Some(winit::dpi::PhysicalPosition::new(
                     pos.x + CASCADE_OFFSET,
