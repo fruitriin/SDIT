@@ -279,6 +279,24 @@
 - Performable keybind prefix（実行可能時のみ消費）— Phase 26.1 の延長
 - Undo timeout（macOS 操作取り消し）— macOS 限定、ニッチ
 
+### 2026-03-15: Phase 28 策定（VTE プロトコル・レンダリング強化）
+
+**調査対象リファレンス:**
+- Ghostty: `refs/ghostty/src/terminal/modes.zig`（TermMode フラグ一覧）、`refs/ghostty/src/config/Config.zig`（text_blink 等）
+- WezTerm: `refs/wezterm/config/src/config.rs`（text_blink_rate, alt_scroll_speed 等）
+- Alacritty: `refs/alacritty/extra/man/alacritty-escapes.7.scd`（CSI/OSC/DCS サポート一覧）
+
+**発見した機能ギャップ（Phase 28 Plan に反映済み）:**
+- CSI ?2026 Synchronized Update Mode → Phase 28.1（当たり前品質・フリッカー防止）
+- テキスト点滅設定（SGR BLINK） → Phase 28.2（あったら便利）
+- Alt バッファのホイールスクロール速度設定 → Phase 28.3（あったら便利）
+
+**将来検討（Plan 未作成）:**
+- Bidi テキストレンダリング — 実装規模大、RTL 言語専用
+- FreeType 詳細設定 — Linux 向け、macOS では不要
+- カスタムセル幅定義 (cell_widths) — Phase 25.2 の延長
+- キャラクターパレット UI — WezTerm 固有 UI
+
 ### 2026-03-15: Phase 27 策定（キーバインド高度化 第2弾）
 
 **調査対象リファレンス:**
