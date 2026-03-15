@@ -278,3 +278,19 @@
 - Key Tables（モーダルキーバインド）— vi-mode の延長線
 - Performable keybind prefix（実行可能時のみ消費）— Phase 26.1 の延長
 - Undo timeout（macOS 操作取り消し）— macOS 限定、ニッチ
+
+### 2026-03-15: Phase 27 策定（キーバインド高度化 第2弾）
+
+**調査対象リファレンス:**
+- Ghostty: `refs/ghostty/src/input/Binding.zig`（performable フラグ、chain 構文）
+- WezTerm: `refs/wezterm/config/src/config.rs`（FreeType 詳細、bidi 設定）
+- Alacritty: `refs/alacritty/alacritty-terminal/src/term/mod.rs`（TermMode 詳細）
+
+**発見した機能ギャップ（Phase 27 Plan に反映済み）:**
+- performable: キーバインドプレフィックス（実行可能時のみ消費） → Phase 27.1
+- Chained Keybinds（複数アクション連鎖） → Phase 27.2
+
+**将来検討（Plan 未作成）:**
+- Bidi テキストレンダリング — 実装規模大、RTL 言語ユーザー向け
+- FreeType 詳細設定 — Linux/Windows 向け、macOS 優先のため低優先
+- Experimental Pixel Positioning — WezTerm 固有機能
