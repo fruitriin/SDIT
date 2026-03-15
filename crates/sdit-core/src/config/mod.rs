@@ -962,11 +962,6 @@ impl Default for QuickTerminalConfig {
     }
 }
 
-/// カスタムリンク設定のバリデーション定数（後方互換のためモジュールレベルにも残す）。
-const MAX_LINK_ENTRIES: usize = Config::MAX_LINK_ENTRIES;
-const MAX_LINK_REGEX_LEN: usize = Config::MAX_LINK_REGEX_LEN;
-const MAX_LINK_ACTION_LEN: usize = Config::MAX_LINK_ACTION_LEN;
-
 /// OSC 10/11/12 カラー問い合わせの応答形式。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]

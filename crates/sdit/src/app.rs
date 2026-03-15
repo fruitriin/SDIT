@@ -348,6 +348,8 @@ pub(crate) struct SditApp {
     pub(crate) last_click_pos: Option<(usize, usize)>,
     /// 連続クリック回数（シングル=1、ダブル=2、トリプル=3）。
     pub(crate) click_count: u8,
+    /// シングルクリック開始位置（ドラッグで1セル以上動くまで選択を遅延する）。
+    pub(crate) click_origin: Option<Point>,
     /// クリップボード操作コンテキスト。
     pub(crate) clipboard: Option<arboard::Clipboard>,
     /// マウスカーソルが非表示状態かどうか（hide_when_typing 機能用）。
@@ -441,6 +443,7 @@ impl SditApp {
             last_click_time: None,
             last_click_pos: None,
             click_count: 0,
+            click_origin: None,
             clipboard: arboard::Clipboard::new()
                 .map_err(|e| log::warn!("Clipboard init failed: {e}"))
                 .ok(),

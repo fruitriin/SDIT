@@ -606,13 +606,27 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                 padding_x,
                                 padding_y,
                             );
-                            if let Some(sel) = &mut self.selection {
-                                // row は screen_lines の範囲内なので i32 に収まる。
-                                #[allow(clippy::cast_possible_wrap)]
-                                let new_end = Point::new(Line(row as i32), Column(col));
-                                sel.end = new_end;
+                            #[allow(clippy::cast_possible_wrap)]
+                            let new_end = Point::new(Line(row as i32), Column(col));
+
+                            // click_origin がある場合: ドラッグで1セル以上動いたら選択を開始
+                            if let Some(origin) = self.click_origin {
+                                if new_end != origin {
+                                    self.selection =
+                                        Some(Selection::new(SelectionType::Simple, origin));
+                                    if let Some(sel) = &mut self.selection {
+                                        sel.end = new_end;
+                                    }
+                                    self.click_origin = None;
+                                    self.redraw_session(sid);
+                                }
+                            } else if let Some(sel) = &mut self.selection {
+                                // グリッド座標が変わった場合のみ再描画
+                                if sel.end != new_end {
+                                    sel.end = new_end;
+                                    self.redraw_session(sid);
+                                }
                             }
-                            self.redraw_session(sid);
                         }
                     }
                 }
@@ -847,45 +861,59 @@ impl ApplicationHandler<SditEvent> for SditApp {
                                         2 => SelectionType::Word,
                                         _ => SelectionType::Simple,
                                     };
-                                    let mut sel = Selection::new(sel_type, point);
 
-                                    // ダブルクリック: 単語境界まで選択を拡張
-                                    if sel_type == SelectionType::Word {
-                                        let session =
-                                            self.session_mgr.get(sid).expect("session exists");
-                                        let state = session
-                                            .term_state
-                                            .lock()
-                                            .unwrap_or_else(std::sync::PoisonError::into_inner);
-                                        let grid = state.terminal.grid();
-                                        let word_chars =
-                                            self.config.selection.clamped_word_chars().to_owned();
-                                        let (start, end) = expand_word(grid, row, col, &word_chars);
-                                        #[allow(clippy::cast_possible_wrap)]
-                                        {
-                                            sel.start = Point::new(Line(row as i32), Column(start));
-                                            sel.end = Point::new(Line(row as i32), Column(end));
+                                    if sel_type == SelectionType::Simple {
+                                        // シングルクリック: 既存の選択をクリアし、
+                                        // ドラッグで1セル以上移動してから新しい選択を開始する
+                                        self.click_origin = Some(point);
+                                        let had_selection = self.selection.is_some();
+                                        self.selection = None;
+                                        self.is_selecting = true;
+                                        if had_selection {
+                                            self.redraw_session(sid);
                                         }
-                                    }
-                                    // トリプルクリック: 行全体を選択
-                                    if sel_type == SelectionType::Lines {
-                                        #[allow(clippy::cast_possible_wrap)]
-                                        {
-                                            sel.start = Point::new(Line(row as i32), Column(0));
+                                    } else {
+                                        let mut sel = Selection::new(sel_type, point);
+
+                                        // ダブルクリック: 単語境界まで選択を拡張
+                                        if sel_type == SelectionType::Word {
                                             let session =
                                                 self.session_mgr.get(sid).expect("session exists");
                                             let state = session
                                                 .term_state
                                                 .lock()
                                                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-                                            let max_col =
-                                                state.terminal.grid().columns().saturating_sub(1);
-                                            sel.end = Point::new(Line(row as i32), Column(max_col));
+                                            let grid = state.terminal.grid();
+                                            let word_chars =
+                                                self.config.selection.clamped_word_chars().to_owned();
+                                            let (start, end) = expand_word(grid, row, col, &word_chars);
+                                            #[allow(clippy::cast_possible_wrap)]
+                                            {
+                                                sel.start = Point::new(Line(row as i32), Column(start));
+                                                sel.end = Point::new(Line(row as i32), Column(end));
+                                            }
                                         }
+                                        // トリプルクリック: 行全体を選択
+                                        if sel_type == SelectionType::Lines {
+                                            #[allow(clippy::cast_possible_wrap)]
+                                            {
+                                                sel.start = Point::new(Line(row as i32), Column(0));
+                                                let session =
+                                                    self.session_mgr.get(sid).expect("session exists");
+                                                let state = session
+                                                    .term_state
+                                                    .lock()
+                                                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                                let max_col =
+                                                    state.terminal.grid().columns().saturating_sub(1);
+                                                sel.end = Point::new(Line(row as i32), Column(max_col));
+                                            }
+                                        }
+                                        self.click_origin = None;
+                                        self.selection = Some(sel);
+                                        self.is_selecting = false;
+                                        self.redraw_session(sid);
                                     }
-                                    self.selection = Some(sel);
-                                    self.is_selecting = sel_type == SelectionType::Simple;
-                                    self.redraw_session(sid);
                                 }
                             }
                         } // if let Some(ws) 再借用の閉じ
@@ -1025,12 +1053,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 }
                 self.drag_source_row = None;
                 self.is_selecting = false;
-                // シングルクリック（ドラッグなし）の場合、選択をクリアする
-                if let Some(ref sel) = self.selection {
-                    if sel.start == sel.end {
-                        self.selection = None;
-                    }
-                }
+                self.click_origin = None;
                 self.scrollbar_dragging = false;
 
                 // selection.save_to_clipboard: 選択完了時に自動クリップボードコピー

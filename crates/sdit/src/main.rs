@@ -29,6 +29,13 @@ use app::{SditApp, SditEvent};
 fn main() {
     env_logger::init();
 
+    // SIGINT (Ctrl+C) で即座に終了する。
+    // winit の GUI イベントループがシグナルをマスクするため、明示的にハンドラを設定する。
+    ctrlc::set_handler(|| {
+        std::process::exit(130); // 128 + SIGINT(2)
+    })
+    .expect("failed to set Ctrl+C handler");
+
     if std::env::args().any(|a| a == "--headless") {
         log::info!("SDIT starting in headless mode");
         headless::run_headless();
