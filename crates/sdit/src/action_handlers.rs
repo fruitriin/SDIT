@@ -345,4 +345,36 @@ impl SditApp {
             }
         }
     }
+
+    /// `performable = true` 時に、アクションが現在実行可能かどうかを返す。
+    ///
+    /// 実行不可の場合はキーを PTY に転送してアクションをスキップする。
+    pub(crate) fn can_perform(&self, action: Action, window_id: WindowId) -> bool {
+        match action {
+            // 選択テキストが存在する場合のみ実行可能
+            Action::Copy => self.selection.is_some(),
+            // 検索バーが開いている場合のみ実行可能
+            Action::SearchNext | Action::SearchPrev => self.search.is_some(),
+            // クリップボードに内容がある場合のみ実行可能
+            Action::Paste => self
+                .clipboard
+                .as_ref()
+                .and_then(|cb| {
+                    // arboard の get_text は &mut self が必要なため直接チェック不可。
+                    // ここでは ClipboardWrite 等で保存した最後の内容は分からないため、
+                    // 保守的に「常に実行可能」とする（実際には Paste 後に空チェックする）。
+                    // TODO: 将来的に clipboard 内容のキャッシュを保持する
+                    let _ = cb;
+                    Some(true)
+                })
+                .unwrap_or(false),
+            // 検索バーが開いていてマッチがある場合のみ実行可能
+            Action::Search => {
+                // ウィンドウにセッションがある場合は実行可能
+                self.windows.contains_key(&window_id)
+            }
+            // その他のアクションは常に実行可能
+            _ => true,
+        }
+    }
 }

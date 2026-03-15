@@ -38,9 +38,17 @@ Ghostty: `Binding.Flags.performable` フラグ（Binding.zig）
 - `crates/sdit/src/event_loop.rs` — performable かつ実行不可のとき PTY 転送
 - `crates/sdit/src/action_handlers.rs` — `can_perform(action, app, window_id) -> bool` を追加
 
+## 実装結果（2026-03-15 完了）
+
+- `KeyBinding.performable: bool` を追加（デフォルト: false）
+- `resolve_action()` → `Option<(Action, bool, bool)>` (unconsumed, performable) に変更
+- `can_perform(action, window_id) -> bool` を action_handlers.rs に追加
+- `event_loop.rs`: performable かつ実行不可の場合は PTY 転送にフォールスルー
+- テスト 448 件 PASS（performable テスト 3 件追加）
+
 ## セキュリティ影響
 
-なし
+なし（セキュリティレビュー済み、Critical/High 0件）
 
 ## 参照
 

@@ -39,3 +39,4 @@
 | [035-swallow-mouse-click-on-focus](035-swallow-mouse-click-on-focus.md) | フォーカス取得クリックの抑制設定（swallow_mouse_click_on_focus = true/false）確認 | 2026-03-15 | NEW |
 | [036-unconsumed-keybind](036-unconsumed-keybind.md) | unconsumed キーバインド（アクション実行 + PTY 転送）の確認 | 2026-03-15 | NEW |
 | [037-palette-generation](037-palette-generation.md) | パレット自動生成（palette_generate/palette_harmonious）と Hot Reload 反映の確認 | 2026-03-15 | NEW |
+| [038-performable-keybind](038-performable-keybind.md) | performable キーバインド（実行可能時のみキー消費、不可時は PTY 転送）の確認 | 2026-03-15 | NEW |

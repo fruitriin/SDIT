@@ -362,7 +362,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         }
 
                         // Cmd+G / Cmd+Shift+G は設定駆動（SearchNext/SearchPrev）
-                        if let Some((action, _unconsumed)) = resolve_action(
+                        if let Some((action, _unconsumed, _performable)) = resolve_action(
                             &key_event.logical_key,
                             self.modifiers,
                             &self.config.keybinds,
@@ -399,15 +399,17 @@ impl ApplicationHandler<SditEvent> for SditApp {
                     }
 
                     // --- Action-based ショートカット dispatch ---
-                    // unconsumed = true のアクションは実行後も PTY にキーを転送する
-                    if let Some((action, unconsumed)) = resolve_action(
+                    // unconsumed = true: 実行後も PTY に転送 / performable = true: 実行可能時のみ消費
+                    if let Some((action, unconsumed, performable)) = resolve_action(
                         &key_event.logical_key,
                         self.modifiers,
                         &self.config.keybinds,
                     ) {
-                        self.handle_action(action, id, event_loop);
-                        if !unconsumed {
-                            return;
+                        if !performable || self.can_perform(action, id) {
+                            self.handle_action(action, id, event_loop);
+                            if !unconsumed {
+                                return;
+                            }
                         }
                     }
 

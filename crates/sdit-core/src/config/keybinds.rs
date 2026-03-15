@@ -127,6 +127,13 @@ pub struct KeyBinding {
     /// `false`: アクションがキーを消費し、PTY には届かない（デフォルト動作）。
     #[serde(default)]
     pub unconsumed: bool,
+    /// アクションが実行可能なときのみキーを消費する（デフォルト: false）。
+    ///
+    /// `true`: アクション実行可能（選択あり・クリップボードに内容あり等）なら消費、
+    ///         実行不可なら PTY にキーを転送する（performable）。
+    /// `false`: 常にキーを消費してアクションを実行する（デフォルト動作）。
+    #[serde(default)]
+    pub performable: bool,
     /// パース済みモディファイアのビットフィールドキャッシュ。
     /// `validate()` で設定される。0 = 未初期化 or モディファイアなし。
     /// ビット: 0=SUPER, 1=CTRL, 2=SHIFT, 3=ALT
@@ -293,6 +300,7 @@ fn bind(key: &str, mods: &str, action: Action) -> KeyBinding {
         mods: mods.to_owned(),
         action,
         unconsumed: false,
+        performable: false,
         cached_mods_bits: parse_mods_to_bits(mods),
     }
 }
