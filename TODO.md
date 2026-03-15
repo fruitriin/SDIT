@@ -12,7 +12,7 @@
 | done | 25.1 | `docs/plans/phase25.1-resize-increments.md` | **完了** |
 | done | 25.2 | `docs/plans/phase25.2-east-asian-ambiguous-width.md` | **完了** |
 | done | 25.3 | `docs/plans/phase25.3-window-colorspace.md` | **完了** |
-| 低 | 25.4 | `docs/plans/phase25.4-swallow-mouse-click-on-focus.md` | 未着手 |
+| done | 25.4 | `docs/plans/phase25.4-swallow-mouse-click-on-focus.md` | **完了** |
 | done | 20.1 | `docs/plans/phase20.1-bold-faint.md` | **完了** |
 | done | 20.2 | `docs/plans/phase20.2-window-position.md` | **完了** |
 | done | 20.3 | `docs/plans/phase20.3-focus-follows-mouse.md` | **完了** |

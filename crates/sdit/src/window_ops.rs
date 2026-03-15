@@ -755,6 +755,19 @@ impl SditApp {
         self.save_session_snapshot();
     }
 
+    /// `WindowEvent::Focused` ハンドラの処理（Secure Input + swallow_mouse_click_on_focus）。
+    pub(crate) fn handle_focused(&mut self, window_id: winit::window::WindowId, gained: bool) {
+        #[cfg(target_os = "macos")]
+        if gained {
+            self.enable_secure_input_if_configured();
+        } else {
+            self.disable_secure_input_if_auto();
+        }
+        if gained && self.config.mouse.swallow_mouse_click_on_focus {
+            self.just_focused.insert(window_id);
+        }
+    }
+
     /// CursorLeft 時にサイドバードラッグ中ならタブを切り出す（Chrome-like UX）。
     pub(crate) fn drag_detach_on_cursor_left(
         &mut self,

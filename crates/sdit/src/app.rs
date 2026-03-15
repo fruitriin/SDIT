@@ -350,6 +350,9 @@ pub(crate) struct SditApp {
     pub(crate) clipboard: Option<arboard::Clipboard>,
     /// マウスカーソルが非表示状態かどうか（hide_when_typing 機能用）。
     pub(crate) cursor_hidden: bool,
+    /// フォーカス取得直後のウィンドウセット（swallow_mouse_click_on_focus 用）。
+    /// セットにある間、次の MouseInput Press を1回スキップする。
+    pub(crate) just_focused: std::collections::HashSet<winit::window::WindowId>,
     /// カーソル点滅状態（true = 表示中）。
     pub(crate) cursor_blink_visible: bool,
     /// 最後にカーソル点滅状態を切り替えた時刻。
@@ -437,6 +440,7 @@ impl SditApp {
                 .map_err(|e| log::warn!("Clipboard init failed: {e}"))
                 .ok(),
             cursor_hidden: false,
+            just_focused: std::collections::HashSet::new(),
             cursor_blink_visible: true,
             cursor_blink_last_toggle: std::time::Instant::now(),
             preedit: None,

@@ -710,6 +710,12 @@ pub struct MouseConfig {
     pub click_repeat_interval: u32,
     /// マウスがウィンドウに乗ったとき自動フォーカスする（デフォルト: false）。
     pub focus_follows_mouse: bool,
+    /// フォーカス取得時のマウスクリックを抑制する（デフォルト: false）。
+    ///
+    /// `true`: フォーカスされていないウィンドウをクリックしたとき、
+    /// そのクリックはフォーカス取得のみに使われ、ターミナルへの入力として扱われない。
+    #[serde(default)]
+    pub swallow_mouse_click_on_focus: bool,
 }
 
 /// スクロールバー設定。
@@ -798,6 +804,7 @@ impl Default for MouseConfig {
             right_click_action: RightClickAction::ContextMenu,
             click_repeat_interval: default_click_repeat_interval(),
             focus_follows_mouse: false,
+            swallow_mouse_click_on_focus: false,
         }
     }
 }
@@ -1397,6 +1404,9 @@ impl Config {
                 content.push_str("#   \"paste\": paste from clipboard\n");
                 content.push_str("#   \"none\": do nothing\n");
                 content.push_str("# click_repeat_interval: double/triple click detection interval in milliseconds (50-2000, default: 300)\n");
+                content.push_str("# swallow_mouse_click_on_focus: absorb click when window gains focus (default: false)\n");
+                content
+                    .push_str("#   true: click only focuses the window, not passed to terminal\n");
             } else if line == "[scrollbar]" {
                 content.push('\n');
                 content.push_str("# ── Scrollbar ──────────────────────────────────────────────\n");

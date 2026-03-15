@@ -623,6 +623,9 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 button: MouseButton::Left,
                 ..
             } => {
+                if self.just_focused.remove(&id) {
+                    return;
+                }
                 if let Some((x, y)) = self.cursor_position {
                     // スクロールバー・サイドバー判定に必要な情報を先に取り出す（借用解放のため）
                     let click_area_info = self.windows.get(&id).map(|ws| {
@@ -1151,16 +1154,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                 }
             }
 
-            WindowEvent::Focused(gained) => {
-                #[cfg(target_os = "macos")]
-                if gained {
-                    self.enable_secure_input_if_configured();
-                } else {
-                    self.disable_secure_input_if_auto();
-                }
-                #[cfg(not(target_os = "macos"))]
-                let _ = gained;
-            }
+            WindowEvent::Focused(gained) => self.handle_focused(id, gained),
 
             WindowEvent::RedrawRequested => {
                 let Some(ws) = self.windows.get_mut(&id) else { return };
