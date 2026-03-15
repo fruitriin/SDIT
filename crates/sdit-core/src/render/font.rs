@@ -177,6 +177,13 @@ impl FontContext {
         self.glyph_cache.clear();
     }
 
+    /// グリフキャッシュをクリアする。
+    ///
+    /// 新しい Atlas を作成した後に呼ぶことで、古い Atlas のリージョン情報を無効化する。
+    pub fn clear_glyph_cache(&mut self) {
+        self.glyph_cache.clear();
+    }
+
     /// 文字 `c` をラスタライズしてアトラスに配置し、`GlyphEntry` を返す。
     ///
     /// キャッシュ済みの場合はキャッシュを返す。スペースや描画不要な文字は `None`。
