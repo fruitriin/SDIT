@@ -807,6 +807,53 @@ impl SditApp {
             });
     }
 
+    /// キーイベントに対応するアクションを resolve して dispatch する。
+    ///
+    /// 戻り値: `true` = キーを消費（呼び出し元は return すべき）、`false` = PTY に転送を継続
+    pub(crate) fn try_dispatch_keybind(
+        &mut self,
+        key: &winit::keyboard::Key,
+        mods: winit::keyboard::ModifiersState,
+        window_id: winit::window::WindowId,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+    ) -> bool {
+        if let Some((action, chain, unconsumed, performable)) =
+            crate::input::resolve_action(key, mods, &self.config.keybinds)
+        {
+            return self.dispatch_keybind(
+                action,
+                chain,
+                unconsumed,
+                performable,
+                window_id,
+                event_loop,
+            );
+        }
+        false
+    }
+
+    /// キーバインドのアクションを dispatch する（chain・unconsumed・performable 対応）。
+    ///
+    /// 戻り値: `true` = キーを消費（呼び出し元は return すべき）、`false` = PTY に転送を継続
+    pub(crate) fn dispatch_keybind(
+        &mut self,
+        action: sdit_core::config::keybinds::Action,
+        chain: Vec<sdit_core::config::keybinds::Action>,
+        unconsumed: bool,
+        performable: bool,
+        window_id: winit::window::WindowId,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+    ) -> bool {
+        if !performable || self.can_perform(action, window_id) {
+            self.handle_action(action, window_id, event_loop);
+            for chain_action in chain {
+                self.handle_action(chain_action, window_id, event_loop);
+            }
+            return !unconsumed; // unconsumed=false → 消費（true 返す）, unconsumed=true → 継続
+        }
+        false // performable で実行不可 → PTY 転送継続
+    }
+
     /// `WindowEvent::Focused` ハンドラの処理（Secure Input + swallow_mouse_click_on_focus）。
     pub(crate) fn handle_focused(&mut self, window_id: winit::window::WindowId, gained: bool) {
         #[cfg(target_os = "macos")]

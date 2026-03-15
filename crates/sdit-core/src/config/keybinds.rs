@@ -121,6 +121,12 @@ pub struct KeyBinding {
     pub mods: String,
     /// 起動するアクション。
     pub action: Action,
+    /// プライマリアクション実行後に続けて実行するアクションのリスト（デフォルト: 空）。
+    ///
+    /// 例: `["ScrollToBottom"]` で Search → ScrollToBottom の順に実行。
+    /// DoS 防止のため最大 16 アクションに制限される。
+    #[serde(default)]
+    pub action_chain: Vec<Action>,
     /// アクション実行後もキーイベントをターミナルに転送するか（デフォルト: false）。
     ///
     /// `true`: アクションを実行しつつ、元のキーを PTY にも送信する（unconsumed）。
@@ -172,6 +178,19 @@ impl KeybindConfig {
             }
             true
         });
+        // DoS 防止: action_chain 長を 16 に制限
+        const MAX_CHAIN_LEN: usize = 16;
+        for binding in &mut self.bindings {
+            if binding.action_chain.len() > MAX_CHAIN_LEN {
+                log::warn!(
+                    "keybind {:?}+{}: action_chain too long (>{}), truncating",
+                    binding.mods,
+                    binding.key,
+                    MAX_CHAIN_LEN
+                );
+                binding.action_chain.truncate(MAX_CHAIN_LEN);
+            }
+        }
         if self.bindings.len() > MAX_BINDINGS {
             log::warn!(
                 "Too many keybindings ({}), truncating to {MAX_BINDINGS}",
@@ -299,6 +318,7 @@ fn bind(key: &str, mods: &str, action: Action) -> KeyBinding {
         key: key.to_owned(),
         mods: mods.to_owned(),
         action,
+        action_chain: Vec::new(),
         unconsumed: false,
         performable: false,
         cached_mods_bits: parse_mods_to_bits(mods),
