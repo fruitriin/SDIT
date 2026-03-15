@@ -439,8 +439,22 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         }
                     }
 
-                    // キー入力時に選択を解除
-                    self.selection = None;
+                    // PTY に送信する通常キー入力時に選択を解除する。
+                    // Cmd/Ctrl 修飾付きはアクション（Copy 等）用なので選択を維持する。
+                    // PTY に送信する通常キー入力時に選択を解除する。
+                    // モディファイアキー自体（Cmd/Ctrl/Shift/Alt）や修飾付き入力では維持。
+                    let is_modifier_key = matches!(
+                        key_event.logical_key,
+                        winit::keyboard::Key::Named(
+                            NamedKey::Super | NamedKey::Control | NamedKey::Shift | NamedKey::Alt
+                        )
+                    );
+                    if !is_modifier_key
+                        && !self.modifiers.super_key()
+                        && !self.modifiers.control_key()
+                    {
+                        self.selection = None;
+                    }
 
                     // scroll_to_bottom_on_keystroke: キー入力時にスクロールをボトムにリセット
                     // モディファイアのみのキー押下（Cmd, Ctrl, Shift, Alt 単独）では発動しない

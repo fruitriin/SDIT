@@ -141,7 +141,7 @@ impl SditApp {
                         }
                     }
                 }
-                self.selection = None;
+                // Terminal.app 準拠: コピー後も選択を維持する
                 let sid = ws.active_session_id();
                 self.redraw_session(sid);
             }

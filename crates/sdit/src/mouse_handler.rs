@@ -319,28 +319,11 @@ impl SditApp {
                             mouse_active = state.terminal.mouse_mode_active();
                             use_sgr = state.terminal.mode().contains(TermMode::SGR_MOUSE);
                         }
-                        if mouse_active {
-                            let (col, row) = pixel_to_grid(
-                                x,
-                                y,
-                                metrics.cell_width,
-                                metrics.cell_height,
-                                sidebar_w,
-                                padding_x,
-                                padding_y,
-                            );
-                            let bytes = if use_sgr {
-                                mouse_report_sgr(0, col, row, true)
-                            } else {
-                                mouse_report_x11(0, col, row)
-                            };
-                            if let Some(session) = self.session_mgr.get(sid) {
-                                if let Err(e) = session.pty_io.write_tx.try_send(bytes) {
-                                    log::warn!("Mouse PTY write failed: {e}");
-                                }
-                            }
-                        } else {
-                            // テキスト選択開始（シングル/ダブル/トリプルクリック判定）
+                        // テキスト選択開始（シングル/ダブル/トリプルクリック判定）
+                        // マウスモード中でもクリックカウントは常に更新する。
+                        // ダブル/トリプルクリックは SDIT 側で selection を作成し、
+                        // シングルクリックはマウスモード時にアプリへ転送する。
+                        {
                             let (col, row) = pixel_to_grid(
                                 x,
                                 y,
@@ -376,12 +359,25 @@ impl SditApp {
                             };
 
                             if sel_type == SelectionType::Simple {
+                                if mouse_active {
+                                    // マウスモード中のシングルクリック: アプリに転送
+                                    let bytes = if use_sgr {
+                                        mouse_report_sgr(0, col, row, true)
+                                    } else {
+                                        mouse_report_x11(0, col, row)
+                                    };
+                                    if let Some(session) = self.session_mgr.get(sid) {
+                                        if let Err(e) = session.pty_io.write_tx.try_send(bytes) {
+                                            log::warn!("Mouse PTY write failed: {e}");
+                                        }
+                                    }
+                                }
                                 // シングルクリック: 既存の選択をクリアし、
                                 // ドラッグで1セル以上移動してから新しい選択を開始する
                                 self.click_origin = Some(point);
                                 let had_selection = self.selection.is_some();
                                 self.selection = None;
-                                self.is_selecting = true;
+                                self.is_selecting = !mouse_active; // マウスモード中はドラッグ選択しない
                                 if had_selection {
                                     self.redraw_session(sid);
                                 }
@@ -429,7 +425,7 @@ impl SditApp {
                             }
                         }
                     } // if let Some(ws) 再借用の閉じ
-                } // else ブロックの閉じ
+                } // テキスト選択ブロックの閉じ
             } // if let Some(click_area_info) の閉じ
         }
     }
