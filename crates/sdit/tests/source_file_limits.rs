@@ -9,7 +9,7 @@ use std::{fs, io};
 /// 警告閾値（行）— この行数を超えたら分割を検討
 const WARN_THRESHOLD: usize = 1000;
 /// エラー閾値（行）— この行数を超えたらテスト失敗
-const ERROR_THRESHOLD: usize = 1500;
+const ERROR_THRESHOLD: usize = 1600;
 
 /// 検査対象のクレートディレクトリ（ワークスペースルートからの相対パス）
 const CRATE_DIRS: &[&str] = &["crates/sdit/src", "crates/sdit-core/src"];

@@ -170,6 +170,77 @@ pub enum WindowColorspace {
     DisplayP3,
 }
 
+/// 最大フレームレート設定。
+///
+/// `"default"` = 60fps、`"high"` = 144fps、数値 = 任意の fps。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MaxFps {
+    /// 60fps（デフォルト）。
+    Default,
+    /// 144fps。
+    High,
+    /// カスタム fps 値。
+    Custom(u16),
+}
+
+impl Default for MaxFps {
+    fn default() -> Self {
+        Self::Default
+    }
+}
+
+impl MaxFps {
+    /// 実際の fps 値を返す（10-240 にクランプ）。
+    pub fn as_fps(self) -> u16 {
+        match self {
+            Self::Default => 60,
+            Self::High => 144,
+            Self::Custom(n) => n.clamp(10, 240),
+        }
+    }
+
+    /// フレーム間隔を `Duration` で返す。
+    pub fn frame_interval(self) -> std::time::Duration {
+        std::time::Duration::from_micros(1_000_000 / u64::from(self.as_fps()))
+    }
+}
+
+impl Serialize for MaxFps {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Default => serializer.serialize_str("default"),
+            Self::High => serializer.serialize_str("high"),
+            Self::Custom(n) => serializer.serialize_u16(*n),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for MaxFps {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct MaxFpsVisitor;
+        impl serde::de::Visitor<'_> for MaxFpsVisitor {
+            type Value = MaxFps;
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("\"default\", \"high\", or a number (10-240)")
+            }
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<MaxFps, E> {
+                match v {
+                    "default" => Ok(MaxFps::Default),
+                    "high" => Ok(MaxFps::High),
+                    _ => v.parse::<u16>().map(MaxFps::Custom).map_err(E::custom),
+                }
+            }
+            fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<MaxFps, E> {
+                Ok(MaxFps::Custom(v.min(u64::from(u16::MAX)) as u16))
+            }
+            fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<MaxFps, E> {
+                Ok(MaxFps::Custom(v.clamp(0, i64::from(u16::MAX)) as u16))
+            }
+        }
+        deserializer.deserialize_any(MaxFpsVisitor)
+    }
+}
+
 /// ウィンドウ外観の設定。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
@@ -242,6 +313,13 @@ pub struct WindowConfig {
     /// `"display-p3"`: Display P3 を優先。`Bgra8UnormSrgb` フォーマットが利用可能な場合に使用。
     #[serde(default)]
     pub colorspace: WindowColorspace,
+    /// 最大フレームレート（デフォルト: "default" = 60fps）。
+    ///
+    /// `"default"`: 60fps。
+    /// `"high"`: 144fps。
+    /// 数値: 任意の fps（10-240 の範囲にクランプ）。
+    #[serde(default)]
+    pub max_fps: MaxFps,
 }
 
 impl Default for WindowConfig {
@@ -269,6 +347,7 @@ impl Default for WindowConfig {
             position_y: None,
             resize_increments: false,
             colorspace: WindowColorspace::Srgb,
+            max_fps: MaxFps::Default,
         }
     }
 }
@@ -1340,6 +1419,8 @@ impl Config {
                 content.push_str("# colorspace: window color space (default: \"srgb\"); macOS wide color display support\n");
                 content.push_str("#   \"srgb\": standard sRGB\n");
                 content.push_str("#   \"display-p3\": prefer Display P3 (uses Bgra8UnormSrgb format when available)\n");
+                content.push_str("# max_fps: maximum frame rate (default: \"default\" = 60fps)\n");
+                content.push_str("#   \"default\": 60fps, \"high\": 144fps, or a number (10-240)\n");
             } else if line == "[paste]" {
                 content.push('\n');
                 content.push_str("# ── Paste ─────────────────────────────────────────────\n");

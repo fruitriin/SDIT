@@ -669,7 +669,8 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         }
                     }
                 }
-                self.redraw_session(session_id);
+                // フレームスロットリング: dirty フラグだけ立て、about_to_wait で一括描画
+                self.dirty_sessions.insert(session_id);
             }
             SditEvent::CwdChanged { session_id, cwd } => {
                 // OSC 7 CWD を Session に記録する（file://hostname/path → PathBuf に変換）
@@ -852,6 +853,18 @@ impl ApplicationHandler<SditEvent> for SditApp {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        // PTY 出力のフレームスロットリング: max_fps に従い dirty セッションを一括再描画
+        if !self.dirty_sessions.is_empty() {
+            let frame_interval = self.config.window.max_fps.frame_interval();
+            if self.last_pty_render.elapsed() >= frame_interval {
+                let dirty: Vec<_> = self.dirty_sessions.drain().collect();
+                for session_id in dirty {
+                    self.redraw_session(session_id);
+                }
+                self.last_pty_render = std::time::Instant::now();
+            }
+        }
+
         // カーソル点滅のチェック（500ms間隔）
         const BLINK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(500);
         if self.cursor_blink_last_toggle.elapsed() >= BLINK_INTERVAL {

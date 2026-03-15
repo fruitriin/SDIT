@@ -387,6 +387,11 @@ pub(crate) struct SditApp {
     pub(crate) renaming_session: Option<(sdit_core::session::SessionId, String)>,
     /// スクロールバーをドラッグ中かどうか。
     pub(crate) scrollbar_dragging: bool,
+    /// PTY 出力で再描画が必要なセッション（フレームスロットリング用）。
+    /// `PtyOutput` でフラグを立て、`about_to_wait` で一括描画する。
+    pub(crate) dirty_sessions: std::collections::HashSet<sdit_core::session::SessionId>,
+    /// 最後に PTY 出力を描画した時刻（フレームレート制限用）。
+    pub(crate) last_pty_render: std::time::Instant,
     /// 閉じる確認ダイアログが表示中かどうか。`Some` の場合は確認中。
     pub(crate) pending_close: Option<PendingClose>,
     /// Secure Keyboard Entry が現在有効かどうか（macOS のみ有効）。
@@ -466,6 +471,8 @@ impl SditApp {
             notification_in_flight: Arc::new(AtomicBool::new(false)),
             renaming_session: None,
             scrollbar_dragging: false,
+            dirty_sessions: std::collections::HashSet::new(),
+            last_pty_render: std::time::Instant::now(),
             pending_close: None,
             #[cfg(target_os = "macos")]
             secure_input_enabled: false,
