@@ -330,7 +330,6 @@ impl SditApp {
         };
         let session = self.session_mgr.get(session_id).unwrap();
 
-        self.font_ctx.clear_glyph_cache();
         let mut atlas = sdit_core::render::atlas::Atlas::new(&gpu.device, 512);
         let cell_size = [metrics.cell_width, metrics.cell_height];
         let surface_size = [gpu.surface_config.width as f32, gpu.surface_config.height as f32];
@@ -520,9 +519,6 @@ impl SditApp {
 
         // --- GPU パイプライン初期化 ---
         // 新しい Atlas を作成するため、既存のグリフキャッシュを無効化する。
-        // キャッシュは古い Atlas のリージョン情報を持っているため、クリアしないと
-        // 新ウィンドウでグリフが描画されない。
-        self.font_ctx.clear_glyph_cache();
         let mut atlas = Atlas::new(&gpu.device, 512);
         let cell_size = [metrics.cell_width, metrics.cell_height];
         let surface_size = [gpu.surface_config.width as f32, gpu.surface_config.height as f32];
@@ -996,7 +992,6 @@ impl SditApp {
         let metrics = *self.font_ctx.metrics();
         let detach_surface_size =
             [gpu.surface_config.width as f32, gpu.surface_config.height as f32];
-        self.font_ctx.clear_glyph_cache();
         let atlas = Atlas::new(&gpu.device, 512);
         let cell_pipeline =
             CellPipeline::new(&gpu.device, gpu.surface_config.format, &atlas, 80 * 24);

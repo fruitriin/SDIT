@@ -55,13 +55,15 @@ pub struct ShapedGlyph {
     pub entry: Option<GlyphEntry>,
 }
 
-/// グリフキャッシュのキー。
+/// グリフキャッシュのキー。Atlas ID を含めることで、異なる Atlas のエントリを区別する。
 #[derive(Hash, Eq, PartialEq, Clone)]
 struct GlyphCacheKey {
     /// フォント ID（fontdb）。
     font_id: fontdb::ID,
     /// グリフ ID。
     glyph_id: u16,
+    /// 対象 Atlas の一意識別子。
+    atlas_id: super::atlas::AtlasId,
 }
 
 /// フォントコンテキスト。グリフのラスタライズとキャッシュを管理する。
@@ -218,6 +220,7 @@ impl FontContext {
         let cache_key_raw = GlyphCacheKey {
             font_id: physical.cache_key.font_id,
             glyph_id: physical.cache_key.glyph_id,
+            atlas_id: atlas.id(),
         };
 
         // キャッシュ済みなら返す。
@@ -323,6 +326,7 @@ impl FontContext {
                     let cache_key = GlyphCacheKey {
                         font_id: physical.cache_key.font_id,
                         glyph_id: physical.cache_key.glyph_id,
+                        atlas_id: atlas.id(),
                     };
                     if let Some(existing) = self.glyph_cache.get(&cache_key) {
                         Some(existing.clone())

@@ -25,11 +25,23 @@ struct Shelf {
     cursor_x: u32,
 }
 
+/// Atlas の一意識別子。グリフキャッシュが正しい Atlas のリージョンを参照しているか検証する。
+pub type AtlasId = u64;
+
+/// 次の Atlas ID を生成する。
+fn next_atlas_id() -> AtlasId {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(1);
+    COUNTER.fetch_add(1, Ordering::Relaxed)
+}
+
 /// `Rgba8Unorm` テクスチャアトラス。
 ///
 /// CPU 側の `data` バッファに書き込み、`upload_if_dirty` で GPU テクスチャに転送する。
 /// データは RGBA 4 bytes/pixel。通常グリフ（グレースケール昇格）とカラー絵文字の両方に対応。
 pub struct Atlas {
+    /// この Atlas の一意識別子。
+    id: AtlasId,
     /// CPU ピクセルデータ（RGBA: 4 bytes/pixel）。
     data: Vec<u8>,
     /// テクスチャの一辺（正方形）。
@@ -63,6 +75,7 @@ impl Atlas {
         let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         Self {
+            id: next_atlas_id(),
             data: vec![0u8; (size * size * 4) as usize],
             size,
             shelves: Vec::new(),
@@ -151,6 +164,11 @@ impl Atlas {
             wgpu::Extent3d { width: self.size, height: self.size, depth_or_array_layers: 1 },
         );
         self.dirty = false;
+    }
+
+    /// この Atlas の一意識別子を返す。
+    pub fn id(&self) -> AtlasId {
+        self.id
     }
 
     /// GPU テクスチャビューの参照を返す。
