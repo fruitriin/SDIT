@@ -361,7 +361,7 @@ impl ApplicationHandler<SditEvent> for SditApp {
                         }
 
                         // Cmd+G / Cmd+Shift+G は設定駆動（SearchNext/SearchPrev）
-                        if let Some(action) = resolve_action(
+                        if let Some((action, _unconsumed)) = resolve_action(
                             &key_event.logical_key,
                             self.modifiers,
                             &self.config.keybinds,
@@ -398,13 +398,16 @@ impl ApplicationHandler<SditEvent> for SditApp {
                     }
 
                     // --- Action-based ショートカット dispatch ---
-                    if let Some(action) = resolve_action(
+                    // unconsumed = true のアクションは実行後も PTY にキーを転送する
+                    if let Some((action, unconsumed)) = resolve_action(
                         &key_event.logical_key,
                         self.modifiers,
                         &self.config.keybinds,
                     ) {
                         self.handle_action(action, id, event_loop);
-                        return;
+                        if !unconsumed {
+                            return;
+                        }
                     }
 
                     let Some(ws) = self.windows.get(&id) else { return };

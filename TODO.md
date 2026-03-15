@@ -9,7 +9,7 @@
 
 | 優先度 | Phase | 計画ファイル | 状態 |
 |---|---|---|---|
-| 高 | 26.1 | `docs/plans/phase26.1-unconsumed-keybind.md` | 未着手 |
+| done | 26.1 | `docs/plans/phase26.1-unconsumed-keybind.md` | **完了** |
 | 中 | 26.2 | `docs/plans/phase26.2-palette-generation.md` | 未着手 |
 | 低 | 26.3 | `docs/plans/phase26.3-global-hotkey-actions.md` | 未着手 |
 | done | 25.1 | `docs/plans/phase25.1-resize-increments.md` | **完了** |

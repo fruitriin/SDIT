@@ -93,18 +93,19 @@ fn mods_to_bits(mods: ModifiersState) -> u8 {
 /// Character キーは大文字小文字無視で比較する。
 /// winit では Shift+"=" が Character("+") + SUPER|SHIFT として届くため、
 /// デフォルトバインディングで "plus" は `super|shift` として定義する。
+/// アクションと、`unconsumed` フラグ（true = キーを PTY にも転送する）を返す。
 pub(crate) fn resolve_action(
     key: &Key,
     mods: ModifiersState,
     config: &KeybindConfig,
-) -> Option<Action> {
+) -> Option<(Action, bool)> {
     let input_bits = mods_to_bits(mods);
     for binding in &config.bindings {
         if binding.cached_mods_bits != input_bits {
             continue;
         }
         if key_matches(&binding.key, key) {
-            return Some(binding.action);
+            return Some((binding.action, binding.unconsumed));
         }
     }
     None
@@ -572,7 +573,13 @@ mod tests {
         let mut config = KeybindConfig {
             bindings: bindings
                 .into_iter()
-                .map(|(key, mods, action)| KeyBinding { key, mods, action, cached_mods_bits: 0 })
+                .map(|(key, mods, action)| KeyBinding {
+                    key,
+                    mods,
+                    action,
+                    unconsumed: false,
+                    cached_mods_bits: 0,
+                })
                 .collect(),
         };
         config.validate();
@@ -583,7 +590,7 @@ mod tests {
     fn resolve_action_basic() {
         let config = make_config(vec![("n".to_owned(), "super".to_owned(), Action::NewWindow)]);
         let result = resolve_action(&char_key("n"), ModifiersState::SUPER, &config);
-        assert_eq!(result, Some(Action::NewWindow));
+        assert_eq!(result, Some((Action::NewWindow, false)));
     }
 
     #[test]
@@ -591,7 +598,7 @@ mod tests {
         let config = make_config(vec![("n".to_owned(), "super".to_owned(), Action::NewWindow)]);
         // モディファイアが違う
         let result = resolve_action(&char_key("n"), ModifiersState::CONTROL, &config);
-        assert_eq!(result, None);
+        assert_eq!(result, None::<(Action, bool)>);
     }
 
     #[test]
@@ -604,8 +611,8 @@ mod tests {
         let new_win = resolve_action(&char_key("n"), ModifiersState::SUPER, &config);
         let detach =
             resolve_action(&char_key("N"), ModifiersState::SUPER | ModifiersState::SHIFT, &config);
-        assert_eq!(new_win, Some(Action::NewWindow));
-        assert_eq!(detach, Some(Action::DetachSession));
+        assert_eq!(new_win, Some((Action::NewWindow, false)));
+        assert_eq!(detach, Some((Action::DetachSession, false)));
     }
 
     #[test]
@@ -616,7 +623,7 @@ mod tests {
         // "+" は Shift+"=" なので SUPER|SHIFT で来る
         let result =
             resolve_action(&char_key("+"), ModifiersState::SUPER | ModifiersState::SHIFT, &config);
-        assert_eq!(result, Some(Action::ZoomIn));
+        assert_eq!(result, Some((Action::ZoomIn, false)));
     }
 
     #[test]
@@ -624,7 +631,7 @@ mod tests {
         // "=" バインディングは SUPER のみでマッチ
         let config = make_config(vec![("=".to_owned(), "super".to_owned(), Action::ZoomIn)]);
         let result = resolve_action(&char_key("="), ModifiersState::SUPER, &config);
-        assert_eq!(result, Some(Action::ZoomIn));
+        assert_eq!(result, Some((Action::ZoomIn, false)));
         // "+" (SUPER|SHIFT) は "=" バインディングにはマッチしない
         let result_plus =
             resolve_action(&char_key("+"), ModifiersState::SUPER | ModifiersState::SHIFT, &config);
@@ -635,7 +642,7 @@ mod tests {
     fn resolve_action_tab_named_key() {
         let config = make_config(vec![("Tab".to_owned(), "ctrl".to_owned(), Action::NextSession)]);
         let result = resolve_action(&Key::Named(NamedKey::Tab), ModifiersState::CONTROL, &config);
-        assert_eq!(result, Some(Action::NextSession));
+        assert_eq!(result, Some((Action::NextSession, false)));
     }
 
     #[test]
@@ -643,7 +650,7 @@ mod tests {
         let config =
             make_config(vec![("backslash".to_owned(), "super".to_owned(), Action::SidebarToggle)]);
         let result = resolve_action(&char_key("\\"), ModifiersState::SUPER, &config);
-        assert_eq!(result, Some(Action::SidebarToggle));
+        assert_eq!(result, Some((Action::SidebarToggle, false)));
     }
 
     // --- is_url_modifier ---
@@ -805,5 +812,67 @@ mod tests {
             kitty_mode(),
         );
         assert_eq!(result, Some(b"\x1b[3;5~".to_vec()));
+    }
+
+    // ---------------------------------------------------------------------------
+    // unconsumed フラグテスト
+    // ---------------------------------------------------------------------------
+
+    /// unconsumed 対応のコンフィグヘルパー
+    fn make_config_with_unconsumed(bindings: Vec<(String, String, Action, bool)>) -> KeybindConfig {
+        use sdit_core::config::keybinds::KeyBinding;
+        let mut config = KeybindConfig {
+            bindings: bindings
+                .into_iter()
+                .map(|(key, mods, action, unconsumed)| KeyBinding {
+                    key,
+                    mods,
+                    action,
+                    unconsumed,
+                    cached_mods_bits: 0,
+                })
+                .collect(),
+        };
+        config.validate();
+        config
+    }
+
+    #[test]
+    fn resolve_action_unconsumed_true() {
+        // unconsumed = true のバインディングは (action, true) を返す
+        let config = make_config_with_unconsumed(vec![(
+            "k".to_owned(),
+            "super".to_owned(),
+            Action::Search,
+            true,
+        )]);
+        let result = resolve_action(&char_key("k"), ModifiersState::SUPER, &config);
+        assert_eq!(result, Some((Action::Search, true)));
+    }
+
+    #[test]
+    fn resolve_action_unconsumed_false_default() {
+        // unconsumed = false（デフォルト）のバインディングは (action, false) を返す
+        let config = make_config_with_unconsumed(vec![(
+            "k".to_owned(),
+            "super".to_owned(),
+            Action::Search,
+            false,
+        )]);
+        let result = resolve_action(&char_key("k"), ModifiersState::SUPER, &config);
+        assert_eq!(result, Some((Action::Search, false)));
+    }
+
+    #[test]
+    fn resolve_action_unconsumed_mixed() {
+        // 同じキーで unconsumed が異なるバインディング（モディファイア違い）
+        let config = make_config_with_unconsumed(vec![
+            ("k".to_owned(), "super".to_owned(), Action::Search, true),
+            ("k".to_owned(), "ctrl".to_owned(), Action::Search, false),
+        ]);
+        let result_super = resolve_action(&char_key("k"), ModifiersState::SUPER, &config);
+        let result_ctrl = resolve_action(&char_key("k"), ModifiersState::CONTROL, &config);
+        assert_eq!(result_super, Some((Action::Search, true)));
+        assert_eq!(result_ctrl, Some((Action::Search, false)));
     }
 }

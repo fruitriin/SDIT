@@ -37,3 +37,4 @@
 | [033-resize-increments](033-resize-increments.md) | ウィンドウリサイズのセル整数倍スナップ（resize_increments = true/false）確認 | 2026-03-15 | NEW |
 | [034-window-colorspace](034-window-colorspace.md) | ウィンドウ色空間設定（sRGB / Display P3）の切り替え・フォールバック確認 | 2026-03-15 | NEW |
 | [035-swallow-mouse-click-on-focus](035-swallow-mouse-click-on-focus.md) | フォーカス取得クリックの抑制設定（swallow_mouse_click_on_focus = true/false）確認 | 2026-03-15 | NEW |
+| [036-unconsumed-keybind](036-unconsumed-keybind.md) | unconsumed キーバインド（アクション実行 + PTY 転送）の確認 | 2026-03-15 | NEW |

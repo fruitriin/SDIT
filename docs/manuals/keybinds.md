@@ -143,3 +143,19 @@ action = "NextSession"
 | `Quit` | アプリケーション終了 |
 | `About` | バージョン情報 |
 | `Preferences` | 設定ファイルを開く |
+
+### `unconsumed` オプション
+
+`unconsumed = true` を指定すると、アクションを実行しつつ元のキーイベントをターミナルにも転送します。
+
+デフォルトでは、キーバインドにマッチしたキーは SDIT が消費してターミナルには届きません。
+`unconsumed = true` を使うと両方に届けることができます。
+
+```toml
+# Cmd+K でスクロールバッファをクリアしつつ、アプリへもキーを渡す
+[[keybinds]]
+key = "k"
+mods = "super"
+action = "ScrollToBottom"
+unconsumed = true
+```

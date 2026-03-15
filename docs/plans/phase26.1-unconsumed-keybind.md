@@ -31,9 +31,21 @@ Ghostty: `unconsumed:` プレフィックス（Config.zig:1711）
 - `crates/sdit/src/input.rs` — アクション実行後の PTY 転送ロジック
 - `docs/manuals/keybinds.md` — `unconsumed:` 使用例を追加
 
+## 実装結果（2026-03-15 完了）
+
+- `KeyBinding` に `unconsumed: bool` フィールド追加（デフォルト: false）
+- `resolve_action()` → `Option<(Action, bool)>` に変更
+- `event_loop.rs`: unconsumed=true 時は handle_action() 後も PTY 転送を継続
+- `validate()`: Quit/NewWindow 等のアプリ管理系アクションへの unconsumed=true に警告（Critical 対策）
+- ユニットテスト 3 件追加
+
+セキュリティレビュー注記: 「無限ループ」懸念は SDIT アーキテクチャ上発生しない（PTY 出力はキーバインド評価パスに戻らない）。validate() の警告追加で意図しない設定をユーザーに通知。
+
+テスト: 444 件 PASS
+
 ## セキュリティ影響
 
-なし
+なし（セキュリティレビュー済み・Critical 対策として validate() に警告追加）
 
 ## 参照
 

@@ -111,6 +111,12 @@ pub struct KeyBinding {
     pub mods: String,
     /// 起動するアクション。
     pub action: Action,
+    /// アクション実行後もキーイベントをターミナルに転送するか（デフォルト: false）。
+    ///
+    /// `true`: アクションを実行しつつ、元のキーを PTY にも送信する（unconsumed）。
+    /// `false`: アクションがキーを消費し、PTY には届かない（デフォルト動作）。
+    #[serde(default)]
+    pub unconsumed: bool,
     /// パース済みモディファイアのビットフィールドキャッシュ。
     /// `validate()` で設定される。0 = 未初期化 or モディファイアなし。
     /// ビット: 0=SUPER, 1=CTRL, 2=SHIFT, 3=ALT
@@ -155,6 +161,24 @@ impl KeybindConfig {
                 self.bindings.len()
             );
             self.bindings.truncate(MAX_BINDINGS);
+        }
+        // unconsumed = true の意味チェック: アプリ/ウィンドウ管理系アクションには非推奨
+        // 注意: SDIT では PTY 出力がキーバインド評価に戻るパスは存在しないため無限ループは起きない。
+        // しかし Quit や NewWindow 等でキーを PTY に転送しても意味がないため警告する。
+        for binding in &self.bindings {
+            if binding.unconsumed
+                && matches!(
+                    binding.action,
+                    Action::Quit | Action::NewWindow | Action::AddSession | Action::DetachSession
+                )
+            {
+                log::warn!(
+                    "keybind {:?}+{}: unconsumed=true with {:?} has no effect (app action consumes the window context)",
+                    binding.mods,
+                    binding.key,
+                    binding.action
+                );
+            }
         }
         // mods キャッシュ構築（M-3: 実行時の文字列パースを排除）
         for binding in &mut self.bindings {
@@ -258,6 +282,7 @@ fn bind(key: &str, mods: &str, action: Action) -> KeyBinding {
         key: key.to_owned(),
         mods: mods.to_owned(),
         action,
+        unconsumed: false,
         cached_mods_bits: parse_mods_to_bits(mods),
     }
 }
